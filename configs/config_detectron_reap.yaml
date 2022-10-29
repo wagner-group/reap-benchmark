@@ -1,0 +1,111 @@
+# Config file for both generating and evaluating adversarial patches.
+# See argparse.py for how this file is loaded, automatically set params, and
+# detailed descriptions of params.
+
+eval:
+  seed: 0
+  num_gpus: 1  # Number of GPUs to use
+  workers: 8  # Number of CPU workers
+  config_file: './configs/faster_rcnn_R_50_FPN_3x.yaml'  # Detectron2 config
+  base_dir: './detectron_output/'
+  data_dir: '~/data/'
+  dataset: 'reap'  # dataset name: 'reap', 'synthetic', 'mapillary-no_color-SPLIT', 'mtsd-SPLIT'
+  # Sample dimension (height, width); comma-separated
+  padded_imgsz: '1536,2048'  # '1536,2048'
+  # Path to annotation file
+  tgt_csv_filepath: 'reap_annotations.csv'
+  # Custom experiment name (null for auto-generated)
+  name: null
+  obj_class: 1  # Class of object to eval/attack
+  patch_size_inch: '10x10'  # e.g., '2_10x20'
+  num_eval: null  # Number of samples to use for eval; Set to null to use all.
+  # Path to txt file containing file names to use either for generating patch or
+  # for testing.
+  split_file_path: './splits/'
+  interp: 'bilinear'  # Interpolation mode: 'nearest', 'bilinear', 'bicubic'
+  save_images: True
+  annotated_signs_only: True
+  attack_type: 'load'
+  # IoU threshold for matching predicted and grond-truth bounding boxes
+  iou_thres: 0.5
+  verbose: True
+
+  # REAP benchmark params
+  reap_transform_mode: 'perspective'  # Transform mode for patch during eval
+  reap_use_relight: True
+
+  # Synthetic benchmark params
+  syn_obj_width_px: 64
+  syn_rotate: 15
+  syn_scale: 1
+  syn_translate: 0.4
+  syn_colorjitter: 0
+  syn_3d_dist: 0
+  # Additional augmentation for background image; Can only be used with
+  # synthetic data right now.
+  img_aug_prob_geo: 0
+  
+  # Path to model weight
+  model_name: 'faster_rcnn'  # For naming purpose only
+  weights: './detectron_output/faster_rcnn_R_50_FPN_mtsd_no_color_2/model_best.pth'
+  conf_thres: 0.634  # Confidence score threshold to consider detection
+
+  # Visualization
+  num_vis: 10
+  vis_conf_thresh: null  # Set to conf_thres if not specified
+  vis_show_bbox: True
+
+# Attack algorithm params
+attack:
+  common:
+    attack_name: 'rp2'
+    patch_dim: 64
+    num_bg: 50  # Number of backgrounds attacker uses to generate patch
+    # Additional augmentation for patch
+    aug_prob_geo: 0
+    aug_rotate: 15
+    aug_translate: 0.1
+    aug_scale: 1
+    aug_3d_dist: 0
+    aug_prob_colorjitter: 0
+    aug_colorjitter: 0
+    # Additional augmentation for background image
+    img_aug_prob_geo: 0
+    # Transform params used during attack can be different from ones used during
+    # evaluation. They can also be set to null and will directly copy from the 
+    # same eval params.
+    # REAP benchmark params
+    reap_transform_mode: null
+    reap_use_relight: null
+    # Synthetic benchmark params
+    syn_obj_width_px: null
+    syn_rotate: null
+    syn_scale: null
+    syn_translate: null
+    syn_colorjitter: null
+    syn_3d_dist: null
+    
+  rp2:
+    attack_mode: ''
+    lambda: 1.0e-5
+    min_conf: 0
+    num_eot: 1
+    num_steps: 1000
+    optimizer: 'adam'  # 'adam', 'sgd', 'pgd'
+    step_size: 0.01
+    use_lr_schedule: False
+    # var_change_ab: Use variable change on alpha, beta 
+    # attack_mode: 'var_change_ab'
+    detectron:
+      obj_loss_const: 0
+      iou_thres: 0
+
+# Shapeshifter attack
+# https://github.com/shangtse/robust-physical-attack/blob/master/Makefile#L76
+# rp2:
+#   min_conf: 0
+#   augment_prob_geometric: 1
+#   augment_prob_relight: 0
+# detectron:
+#   obj_loss_const: 0
+#   iou_thres: 0

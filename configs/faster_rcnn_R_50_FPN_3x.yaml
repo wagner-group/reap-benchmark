@@ -1,0 +1,50 @@
+# This file is copied directly from
+# https://github.com/facebookresearch/detectron2/blob/main/configs/COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml
+
+_BASE_: "./Base-RCNN-FPN.yaml"  # EDIT: path to base config file
+SEED: 0   # EDIT
+CUDNN_BENCHMARK: True   # EDIT
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  MASK_ON: False
+  RESNETS:
+    DEPTH: 50
+  RPN:
+    BATCH_SIZE_PER_IMAGE: 256
+    POSITIVE_FRACTION: 0.5  # EDIT: default: 0.5
+  ROI_HEADS:
+    BATCH_SIZE_PER_IMAGE: 512
+    POSITIVE_FRACTION: 0.75  # EDIT: default: 0.25
+SOLVER:
+  # STEPS: (210000, 250000)
+  # MAX_ITER: 270000
+  BASE_LR: 0.01  # EDIT
+  STEPS: (50000, 70000, 90000)  # EDIT
+  MAX_ITER: 100000  # EDIT
+  IMS_PER_BATCH: 32
+INPUT:
+  RANDOM_FLIP: 'none'  # EDIT: traffic sign can be flipped?. Option: 'none' (orig), 'horizontal' (shape)
+  # EDIT: follow MTSD paper: no resizing during training but crop to (1000, 1000)
+  MIN_SIZE_TRAIN: (0, )  # TODO: does this disables resizing? If not working, see https://github.com/facebookresearch/detectron2/issues/2275
+  MAX_SIZE_TRAIN: 5000
+  # Only used during traning
+  CROP:
+    ENABLED: True
+    TYPE: 'absolute'
+    SIZE: (1000, 1000)
+  # EDIT: Test with max size 2048 or 4000. This is slightly different from 
+  # MTSD paper where images smaller than 2048 are not saled up.
+  # Size of the smallest side of the image during testing. Set to zero to 
+  # disable resize in testing.
+  MIN_SIZE_TEST: 4000  # This will be set by args during testing
+  # Maximum size of the side of the image during testing
+  MAX_SIZE_TEST: 4000  # This will be set by args during testing
+DATALOADER:
+  NUM_WORKERS: 48
+  SAMPLER_TRAIN: 'RepeatFactorTrainingSampler'  # EDIT: default: 'TrainingSampler'
+  REPEAT_THRESHOLD: 1.0  # EDIT: default: 0
+DATASETS:
+  TRAIN: ('mtsd_train', )  # EDIT
+  TEST: ('mtsd_val', )  # EDIT
+TEST:
+  EVAL_PERIOD: 2000
