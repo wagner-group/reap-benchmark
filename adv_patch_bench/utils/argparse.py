@@ -740,6 +740,9 @@ def _update_save_dir(
     token_list.append(config_eval["attack_type"])
 
     if config_eval["attack_type"] != "none":
+        token_list.append(config_eval["patch_size_inch"])
+
+    if config_eval["attack_type"] in ("load", "per-sign"):
 
         # Gather dataset-specific transform params
         if synthetic:
@@ -803,7 +806,11 @@ def _update_save_dir(
     # Append custom name at the end
     exp_name = "-".join(token_list)
     if config_eval["name"] is not None:
-        exp_name += "_" + str(config_eval["name"])
+        name_from_cfg: str = str(config_eval["name"])
+        if name_from_cfg.startswith("_"):
+            exp_name += name_from_cfg
+        else:
+            exp_name = name_from_cfg
     config_eval["name"] = exp_name
 
     class_name = LABEL_LIST[config_eval["dataset"]][config_eval["obj_class"]]
@@ -818,11 +825,12 @@ def _inch_to_mm(length_in_inch: Union[int, float]) -> float:
 
 def _update_patch_size(config: Dict[str, Dict[str, Any]]) -> None:
     config_eval = config["eval"]
-    patch_size_inch = config_eval["patch_size_inch"]
+    patch_size_inch: str = config_eval["patch_size_inch"]
 
     # patch_size has format <NUM_PATCH>_<HEIGHT>x<WIDTH>
+    num_patches: int
     if len(patch_size_inch.split("_")) == 2:
-        num_patches = patch_size_inch.split("_")[0]
+        num_patches = int(patch_size_inch.split("_")[0])
     else:
         num_patches = 1
     if num_patches not in (1, 2):

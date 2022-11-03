@@ -16,11 +16,21 @@ import pandas as pd
 import torch
 from adv_patch_bench.attacks import attack_util, attacks, base_attack
 from adv_patch_bench.dataloaders import reap_util
-from adv_patch_bench.transforms import (reap_object, render_image,
-                                        render_object, syn_object)
-from adv_patch_bench.utils.types import (ImageTensor, ImageTensorDet,
-                                         MaskTensor, SizeMM, SizePatch, SizePx,
-                                         Target)
+from adv_patch_bench.transforms import (
+    reap_object,
+    render_image,
+    render_object,
+    syn_object,
+)
+from adv_patch_bench.utils.types import (
+    ImageTensor,
+    ImageTensorDet,
+    MaskTensor,
+    SizeMM,
+    SizePatch,
+    SizePx,
+    Target,
+)
 from detectron2 import structures
 from detectron2.config import global_cfg
 from detectron2.data import MetadataCatalog
@@ -62,7 +72,7 @@ class DetectronEvaluator:
         self._device: Any = self._model.device
         self._dataloader = dataloader
         self._input_format: str = global_cfg.INPUT.FORMAT
-        self._metadata = MetadataCatalog.get(global_cfg.DATASETS.TEST[0])
+        self._metadata = MetadataCatalog.get(self._dataset)
         self._verbose: bool = config_eval["verbose"]
         self._debug: bool = config_eval["debug"]
 
@@ -244,7 +254,7 @@ class DetectronEvaluator:
         self.evaluator.reset()
         self._reset_syn_metrics()
 
-        for i, batch in tqdm(enumerate(self._dataloader)):
+        for batch in tqdm(self._dataloader):
 
             if total_num_images >= self._num_eval:
                 break
@@ -256,6 +266,8 @@ class DetectronEvaluator:
                 self._anno_df["filename"] == filename
             ]
             is_included: bool = False
+            vis_name: str = filename.split(".")[0]
+            obj_ids: List[int] = []
 
             if self._annotated_signs_only and img_df.empty:
                 # Skip image if there's no annotation
@@ -271,7 +283,7 @@ class DetectronEvaluator:
 
             if self._synthetic:
                 # Attacking synthetic signs
-                self._log(f"Attacking {file_name} ...")
+                self._log(f"Attacking {filename} ...")
                 rimg.create_object(None, self._robj_fn, self._robj_kwargs)
                 robj = rimg.get_object()
                 robj.load_adv_patch(adv_patch=adv_patch, patch_mask=patch_mask)
@@ -296,6 +308,7 @@ class DetectronEvaluator:
 
                     is_included = True
                     total_num_patches += 1
+                    obj_ids.append(str(obj_id))
                     if not self._use_attack:
                         continue
 
@@ -304,7 +317,7 @@ class DetectronEvaluator:
 
                     # TODO(feature): Should we put only one adversarial patch
                     # per image? i.e., attacking only one sign per image.
-                    self._log(f"Attacking {file_name} on obj {obj_idx}...")
+                    self._log(f"Attacking {filename} on obj {obj_idx}...")
 
                     if self._attack_type == "per-sign":
                         # Run attack for each sign to get a new `adv_patch`
@@ -316,6 +329,8 @@ class DetectronEvaluator:
                     robj.load_adv_patch(
                         adv_patch=adv_patch, patch_mask=patch_mask
                     )
+
+                vis_name += "_" + "-".join(obj_ids)
 
             if not is_included:
                 # Skip image without any adversarial patch when attacking
@@ -341,13 +356,15 @@ class DetectronEvaluator:
                 # Convert to coco predictions format
                 instance_dicts = self._create_instance_dicts(outputs, image_id)
                 coco_instances_results.extend(instance_dicts)
-            total_num_images += 1
-            eval_img_ids.append(image_id)
 
             # Visualization
             if num_vis < self._num_vis:
                 num_vis += 1
-                self._visualize(i, rimg, img_render_det, target_render)
+                vis_name = f"{total_num_images}_{vis_name}"
+                self._visualize(vis_name, rimg, img_render_det, target_render)
+
+            total_num_images += 1
+            eval_img_ids.append(image_id)
 
         # Compute final metrics
         if self._synthetic:
@@ -369,7 +386,7 @@ class DetectronEvaluator:
 
     def _visualize(
         self,
-        index: int,
+        name: str,
         rimg: render_image.RenderImage,
         img_render: ImageTensorDet,
         target_render: Target,
@@ -387,7 +404,7 @@ class DetectronEvaluator:
             im_gt_orig = vis_orig.draw_dataset_dict(target_orig)
         else:
             im_gt_orig = vis_orig.get_output()
-        im_gt_orig.save(str(self._vis_save_dir / f"gt_orig_{index}.png"))
+        im_gt_orig.save(str(self._vis_save_dir / f"gt_orig_{name}.png"))
 
         # Visualize prediction on original image
         instances: structures.Instances = output_orig["instances"].to("cpu")
@@ -395,7 +412,7 @@ class DetectronEvaluator:
         im_pred_orig = vis_orig.draw_instance_predictions(
             instances[instances.scores > self._vis_conf_thres]
         )
-        im_pred_orig.save(str(self._vis_save_dir / f"pred_orig_{index}.png"))
+        im_pred_orig.save(str(self._vis_save_dir / f"pred_orig_{name}.png"))
 
         if not self._use_attack and self._dataset == "reap":
             return
@@ -406,9 +423,7 @@ class DetectronEvaluator:
         if self._synthetic:
             # Visualize ground truth on perturbed image
             im_gt_render = vis_render.draw_dataset_dict(target_render)
-            im_gt_render.save(
-                str(self._vis_save_dir / f"gt_render_{index}.png")
-            )
+            im_gt_render.save(str(self._vis_save_dir / f"gt_render_{name}.png"))
 
         # Visualize prediction on perturbed image
         output_render: Dict[str, Any] = self.predict(img_render, rimg.img_size)
@@ -419,9 +434,7 @@ class DetectronEvaluator:
             )
         else:
             im_pred_render = vis_render.get_output()
-        im_pred_render.save(
-            str(self._vis_save_dir / f"pred_render_{index}.png")
-        )
+        im_pred_render.save(str(self._vis_save_dir / f"pred_render_{name}.png"))
 
     def _vis_convert_img(self, image: ImageTensorDet) -> np.ndarray:
         """Converge image in Detectron input format to the visualizer's."""

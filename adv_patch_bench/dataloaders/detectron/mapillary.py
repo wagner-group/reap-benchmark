@@ -63,7 +63,7 @@ def get_mapillary_dict(
 
     img_df: Optional[pd.DataFrame] = None
 
-    for idx, label_file in tqdm(enumerate(label_files)):
+    for idx, label_file in enumerate(tqdm(label_files)):
 
         filename: str = label_file.split(".txt")[0].split("/")[-1]
         jpg_filename: str = f"{filename}.jpg"

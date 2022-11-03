@@ -233,8 +233,8 @@ def main(config: Dict[str, Dict[str, Any]]) -> None:
         mapper=mapper.BenignMapper(cfg, is_train=False),
         batch_size=1,
         num_workers=cfg.DATALOADER.NUM_WORKERS,
-        # Used for random sampling background images from new dataset.
-        # We recommend using a pre-defined file names in split_file_path.
+        # Use sampler for random sampling background images from new dataset,
+        # but we recommend using a pre-defined file names in split_file_path.
         sampler=custom_sampler.ShuffleInferenceSampler(num_samples),
         pin_memory=True,
         split_file_names=split_file_names,

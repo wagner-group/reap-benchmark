@@ -37,13 +37,13 @@ def _gen_mask_rect(
     shift_mm = (obj_h_mm - patch_h_mm) / 2
     patch_y_shift = round(shift_mm / obj_h_mm * obj_h_px)
     patch_x_pos = mid_width
-    patch_y_pos = mid_height + patch_y_shift
     hh, hw = patch_h_px // 2, patch_w_px // 2
 
     # Bottom patch
+    patch_y_pos = mid_height + patch_y_shift
     patch_mask[
         :,
-        patch_y_pos - hh : patch_y_pos + hh,
+        max(0, patch_y_pos - hh) : patch_y_pos + hh,
         max(0, patch_x_pos - hw) : patch_x_pos + hw,
     ] = 1
 
@@ -52,7 +52,7 @@ def _gen_mask_rect(
         patch_y_pos = mid_height - patch_y_shift
         patch_mask[
             :,
-            patch_y_pos - hh : patch_y_pos + hh,
+            max(0, patch_y_pos - hh) : max(0, patch_y_pos + hh),
             max(0, patch_x_pos - hw) : patch_x_pos + hw,
         ] = 1
 

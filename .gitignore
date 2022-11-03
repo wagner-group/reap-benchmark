@@ -143,3 +143,4 @@ detectron_output
 detectron_output/
 delete_mapillaryvistas_plots_model_3_updated_optimized/
 out
+temp*

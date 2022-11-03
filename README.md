@@ -21,11 +21,12 @@ TODO: Sample images
 
 Tested with
 
-- `python >= 3.8`
-- `cuda >= 11.2`
+- `python >= 3.8`.
+- `cuda >= 11.2`.
 - `kornia == 0.6.3`: Using version `>= 0.6.4` will raise an error.
+- See `requirements.txt` for all packages' version.
 
-We recommend creating a new conda environment with python 3.8 because `kornia` and `detectron2` seem to often mess up dependencies and result in a segmentation fault.
+We recommend creating a new python environment because `kornia` and `detectron2` seem to often mess up dependencies and result in a segmentation fault.
 
 ```[bash]
 # Install from requirements.txt file OR
@@ -47,14 +48,14 @@ pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
 ### MTSD
 
-- MTSD: [link](https://www.mapillary.com/dataset/trafficsign)
+- [MTSD](https://www.mapillary.com/dataset/trafficsign) is used for training the traffic sign detection models and the classifier used to create REAP.
 - Have not found a way to automatically download the dataset.
 - `prep_mtsd_for_yolo.py`: Prepare MTSD dataset for YOLOv5.
-- YOLO expects samples and labels in `root_dir/images/*` and `root_dir/labels/*`, respectively. See [this link](https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data#13-organize-directories) for more detail.
+- YOLO expects samples and labels in `BASE_DIR/images/` and `BASE_DIR/labels/`, respectively. See [link](https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data#13-organize-directories) for more detail.
 - Training set: MTSD training. Symlink to `~/data/yolo_data/(images or labels)/train`.
 - Validation set: MTSD validation Symlink to `~/data/yolo_data/(images or labels)/val`.
-- Test set: Combine Vistas training and validation. Symlink to `~/data/yolo_data/(images or labels)/test`.
 - If you run into `Argument list too long` error, try to raise limit of argument stack size by `ulimit -S -s 100000000`. [link](https://unix.stackexchange.com/a/401797)
+<!-- - Test set: Combine Vistas training and validation. Symlink to `~/data/yolo_data/(images or labels)/test`. -->
 
 ```[bash]
 # Prepare MTSD dataset
@@ -73,9 +74,9 @@ ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/train train
 ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/val val
 ```
 
-### Mapillary
+### Mapillary Vistas
 
-- `prep_mapillary.py`: Prepare Vistas dataset for YOLOv5 using a pretrained classifier to determine classes of the signs. May require substantial memory to run. Insufficient memory can lead to the script getting killed with no error message.
+- `prep_mapillary.py`: Prepare Vistas dataset for YOLOv5 using a pre-trained classifier to determine classes of the signs. May require substantial memory to run. Insufficient memory can lead to the script getting killed with no error message.
 
 ```[bash]
 # Dataset should be extracted to ~/data/mapillary_vistas (use symlink if needed)
@@ -98,12 +99,20 @@ ln -s $BASE_DIR/validation/detectron_labels_no_color/* detectron_labels/
 
 ## Usage
 
+### Use REAP benchmark for evaluation
+
 - `reap_annotations.csv` is the REAP annotation file.
 - `configs` contains attack config files and detectron (Faster R-CNN) config files.
 
 <!-- ## Other Tips -->
 
 - To run on annotated signs only (consistent with results in the paper), use flag `--annotated-signs-only`. For Detectron2, the dataset cache has to be deleted before this option to really take effect.
+
+### Recreate REAP from Mapillary Vistas and MTSD
+
+Coming soon!
+
+- `mtsd_label_metadata.csv` is a mapping between the original MTSD classes to classes in REAP. It contains shapes and sizes for each MTSD class.
 
 ## TODOs
 
@@ -113,6 +122,14 @@ ln -s $BASE_DIR/validation/detectron_labels_no_color/* detectron_labels/
 - `enhancement`: Minor documentation or readability improvement.
   - Change interpolation (`interp`) type to `Enum` instead of `str`.
 - `feature`: New features that would benefit future attack and defense experiments.
+
+There are signs that may appear in an image but do not have an annotation. There are multiple reasons this happens:
+
+1. The sign do not belong to one of the 11 non-background classes. Most of the signs fall into this category, but there could be some that result from a mistake made by the classifier we trained.
+2. The sign is not labeled in the Mapillary Vistas dataset. If the sign is not labeled, our annotation script will not even know it exists.
+3. The sign is too small, and so it are filtered out before our annotation process since its transformation parameters would be unreliable. This type of signs likely has to be manually annotated with extra care.
+
+All of these can be fixed by adding or modifying an entry in `reap_annotations.csv`, but case 2 also requires adding the missing segmentation label to Mapillary Vistas labels.
 
 ## License
 

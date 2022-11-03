@@ -50,21 +50,21 @@ DATASETS = (
 
 # Traffic sign classes with colors
 TS_COLOR_DICT = {
-    "circle-750.0": ["white", "blue", "red"],  # (1) white+red, (2) blue+white
-    "triangle-900.0": ["white", "yellow"],  # (1) white, (2) yellow
-    "triangle_inverted-1220.0": [],  # (1) white+red
-    "diamond-600.0": [],  # (1) white+yellow
-    "diamond-915.0": [],  # (1) yellow
-    "square-600.0": [],  # (1) blue
-    "rect-458.0-610.0": [
+    "circle": ["white", "blue", "red"],  # (1) white+red, (2) blue+white
+    "triangle": ["white", "yellow"],  # (1) white, (2) yellow
+    "up-triangle": [],  # (1) white+red
+    "diamond-s": [],  # (1) white+yellow
+    "diamond-l": [],  # (1) yellow
+    "square": [],  # (1) blue
+    "rect-s": [
         "white",
         "other",
     ],  # (1) chevron (also multi-color), (2) white
-    "rect-762.0-915.0": [],  # (1) white
-    "rect-915.0-1220.0": [],  # (1) white
-    "pentagon-915.0": [],  # (1) yellow
-    "octagon-915.0": [],  # (1) red
-    "other-0.0-0.0": [],
+    "rect-m": [],  # (1) white
+    "rect-l": [],  # (1) white
+    "pentagon": [],  # (1) yellow
+    "octagon": [],  # (1) red
+    "other": [],
 }
 
 # Generate dictionary of traffic sign class offset
@@ -120,17 +120,17 @@ NUM_CLASSES["synthetic"] = NUM_CLASSES["mapillary_no_color"]
 
 # Configure dimension
 _MPL_NO_COLOR_SIZE_MM = {
-    "circle-750.0": (750.0, 750.0),
-    "triangle-900.0": (789.0, 900.0),
-    "triangle_inverted-1220.0": (1072.3, 1220.0),
-    "diamond-600.0": (600.0, 600.0),
-    "diamond-915.0": (915.0, 915.0),
-    "square-600.0": (600.0, 600.0),
-    "rect-458.0-610.0": (610.0, 458.0),
-    "rect-762.0-915.0": (915.0, 762.0),
-    "rect-915.0-1220.0": (1220.0, 915.0),
-    "pentagon-915.0": (915.0, 915.0),
-    "octagon-915.0": (915.0, 915.0),
+    "circle": (750.0, 750.0),
+    "triangle": (789.0, 900.0),
+    "up-triangle": (1072.3, 1220.0),
+    "diamond-s": (600.0, 600.0),
+    "diamond-l": (915.0, 915.0),
+    "square": (600.0, 600.0),
+    "rect-s": (610.0, 458.0),
+    "rect-m": (915.0, 762.0),
+    "rect-l": (1220.0, 915.0),
+    "pentagon": (915.0, 915.0),
+    "octagon": (915.0, 915.0),
 }
 _MPL_NO_COLOR_SIZE_MM = list(_MPL_NO_COLOR_SIZE_MM.values())
 
@@ -138,17 +138,17 @@ _MPL_NO_COLOR_SIZE_MM = list(_MPL_NO_COLOR_SIZE_MM.values())
 # This is straightforward for our traffic sign classes, but to extend to other
 # dataset in general, we need a mapping from class names to shapes.
 _MPL_NO_COLOR_SHAPE = {
-    "circle-750.0": "circle",
-    "triangle-900.0": "triangle",
-    "triangle_inverted-1220.0": "triangle_inverted",
-    "diamond-600.0": "diamond",
-    "diamond-915.0": "diamond",
-    "square-600.0": "square",
-    "rect-458.0-610.0": "rect",
-    "rect-762.0-915.0": "rect",
-    "rect-915.0-1220.0": "rect",
-    "pentagon-915.0": "pentagon",
-    "octagon-915.0": "octagon",
+    "circle": "circle",
+    "triangle": "triangle",
+    "up-triangle": "triangle_inverted",
+    "diamond-s": "diamond",
+    "diamond-l": "diamond",
+    "square": "square",
+    "rect-s": "rect",
+    "rect-m": "rect",
+    "rect-l": "rect",
+    "pentagon": "pentagon",
+    "octagon": "octagon",
 }
 _MPL_NO_COLOR_SHAPE = list(_MPL_NO_COLOR_SHAPE.values())
 
@@ -170,90 +170,90 @@ OBJ_DIM_DICT["synthetic"] = OBJ_DIM_DICT["mapillary_no_color"]
 # TODO: DEPRECATED
 
 # MTSD_VAL_LABEL_COUNTS_DICT = {
-#     "circle-750.0": 2999,
-#     "triangle-900.0": 711,
-#     "triangle_inverted-1220.0": 347,
-#     "diamond-600.0": 176,
-#     "diamond-915.0": 1278,
-#     "square-600.0": 287,
-#     "rect-458.0-610.0": 585,
-#     "rect-762.0-915.0": 117,
-#     "rect-915.0-1220.0": 135,
-#     "pentagon-915.0": 30,
-#     "octagon-915.0": 181,
-#     "other-0.0-0.0": 19241,
+#     "circle": 2999,
+#     "triangle": 711,
+#     "up-triangle": 347,
+#     "diamond-s": 176,
+#     "diamond-l": 1278,
+#     "square": 287,
+#     "rect-s": 585,
+#     "rect-m": 117,
+#     "rect-l": 135,
+#     "pentagon": 30,
+#     "octagon": 181,
+#     "other": 19241,
 # }
 # MTSD_VAL_TOTAL_LABEL_COUNTS = sum(MTSD_VAL_LABEL_COUNTS_DICT.values())
 
 # MAPILLARY_LABEL_COUNTS_DICT = {
-#     "circle-750.0": 18144,
-#     "triangle-900.0": 1473,
-#     "triangle_inverted-1220.0": 1961,
-#     "diamond-600.0": 1107,
-#     "diamond-915.0": 3539,
-#     "square-600.0": 1898,
-#     "rect-458.0-610.0": 1580,
-#     "rect-762.0-915.0": 839,
-#     "rect-915.0-1220.0": 638,
-#     "pentagon-915.0": 204,
-#     "octagon-915.0": 1001,
-#     "other-0.0-0.0": 60104,
+#     "circle": 18144,
+#     "triangle": 1473,
+#     "up-triangle": 1961,
+#     "diamond-s": 1107,
+#     "diamond-l": 3539,
+#     "square": 1898,
+#     "rect-s": 1580,
+#     "rect-m": 839,
+#     "rect-l": 638,
+#     "pentagon": 204,
+#     "octagon": 1001,
+#     "other": 60104,
 # }
 # MAPILLARY_TOTAL_LABEL_COUNTS = sum(MAPILLARY_LABEL_COUNTS_DICT.values())
 
 # Counts of images where sign is present in
 MAPILLARY_IMG_COUNTS_DICT = {
-    "circle-750.0": 5325,
-    "triangle-900.0": 548,
-    "triangle_inverted-1220.0": 706,
-    "diamond-600.0": 293,
-    "diamond-915.0": 1195,
-    "square-600.0": 729,
-    "rect-458.0-610.0": 490,
-    "rect-762.0-915.0": 401,
-    "rect-915.0-1220.0": 333,
-    "pentagon-915.0": 116,
-    "octagon-915.0": 564,
-    "other-0.0-0.0": 0,
+    "circle": 5325,
+    "triangle": 548,
+    "up-triangle": 706,
+    "diamond-s": 293,
+    "diamond-l": 1195,
+    "square": 729,
+    "rect-s": 490,
+    "rect-m": 401,
+    "rect-l": 333,
+    "pentagon": 116,
+    "octagon": 564,
+    "other": 0,
 }
 
 # Compute results
 # ANNO_LABEL_COUNTS_DICT = {
-#     "circle-750.0": 7971,
-#     "triangle-900.0": 636,
-#     "triangle_inverted-1220.0": 824,
-#     "diamond-600.0": 317,
-#     "diamond-915.0": 1435,
-#     "square-600.0": 1075,
-#     "rect-458.0-610.0": 715,
-#     "rect-762.0-915.0": 544,
-#     "rect-915.0-1220.0": 361,
-#     "pentagon-915.0": 133,
-#     "octagon-915.0": 637,
+#     "circle": 7971,
+#     "triangle": 636,
+#     "up-triangle": 824,
+#     "diamond-s": 317,
+#     "diamond-l": 1435,
+#     "square": 1075,
+#     "rect-s": 715,
+#     "rect-m": 544,
+#     "rect-l": 361,
+#     "pentagon": 133,
+#     "octagon": 637,
 # }
 # ANNO_NOBG_LABEL_COUNTS_DICT = {
-#     "circle-750.0": 7902,
-#     "triangle-900.0": 578,
-#     "triangle_inverted-1220.0": 764,
-#     "diamond-600.0": 263,
-#     "diamond-915.0": 1376,
-#     "square-600.0": 997,
-#     "rect-458.0-610.0": 646,
-#     "rect-762.0-915.0": 482,
-#     "rect-915.0-1220.0": 308,
-#     "pentagon-915.0": 78,
-#     "octagon-915.0": 585,
+#     "circle": 7902,
+#     "triangle": 578,
+#     "up-triangle": 764,
+#     "diamond-s": 263,
+#     "diamond-l": 1376,
+#     "square": 997,
+#     "rect-s": 646,
+#     "rect-m": 482,
+#     "rect-l": 308,
+#     "pentagon": 78,
+#     "octagon": 585,
 # }
 # ANNO_NOBG_LABEL_COUNTS_DICT_200 = {
-#     "circle-750.0": 7669,
-#     "triangle-900.0": 405,
-#     "triangle_inverted-1220.0": 584,
-#     "diamond-600.0": 0,
-#     "diamond-915.0": 1201,
-#     "square-600.0": 788,
-#     "rect-458.0-610.0": 412,
-#     "rect-762.0-915.0": 275,
-#     "rect-915.0-1220.0": 150,
-#     "pentagon-915.0": 0,
-#     "octagon-915.0": 405,
+#     "circle": 7669,
+#     "triangle": 405,
+#     "up-triangle": 584,
+#     "diamond-s": 0,
+#     "diamond-l": 1201,
+#     "square": 788,
+#     "rect-s": 412,
+#     "rect-m": 275,
+#     "rect-l": 150,
+#     "pentagon": 0,
+#     "octagon": 405,
 # }

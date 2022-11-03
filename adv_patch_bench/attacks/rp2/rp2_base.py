@@ -148,7 +148,6 @@ class RP2AttackModule(base_attack.DetectorAttackModule):
                 bg_idx = all_bg_idx[: self.num_eot]
                 rimg_eot = [rimgs[i] for i in bg_idx]
 
-                # metadata = self._on_real_attack_step(metadata)
                 with torch.enable_grad():
                     z_delta.requires_grad_()
                     # Determine how perturbation is projected
@@ -163,7 +162,6 @@ class RP2AttackModule(base_attack.DetectorAttackModule):
                         delta = self._to_model_space(z_delta, 0, 1)
 
                     # Load new adversarial patch to each RenderObject
-                    obj_class: int = robj.obj_class
                     # TODO(feature): Support batch rimg
                     rimg = rimg_eot[0]
                     robj = rimg.get_object()
@@ -177,9 +175,8 @@ class RP2AttackModule(base_attack.DetectorAttackModule):
                     #     torchvision.utils.save_image(
                     #         adv_img[0], f'gen_adv_real_{step}.png')
 
-                    # mdata = None if metadata is None else metadata[bg_idx]
                     loss: torch.Tensor = self.compute_loss(
-                        delta, adv_img, adv_target, obj_class
+                        delta, adv_img, adv_target, robj.obj_class
                     )
                     loss.backward()
                     z_delta = self._step_opt(z_delta, opt)
