@@ -295,7 +295,7 @@ class DetectronEvaluator:
             elif not img_df.empty:
                 # Attacking real signs
                 # Iterate through annotated objects in the current image
-                for obj_idx, obj in img_df.iterrows():
+                for _, obj in img_df.iterrows():
 
                     obj_id: int = obj["object_id"]
                     obj_class: int = self._class_names.index(obj["final_shape"])
@@ -317,7 +317,7 @@ class DetectronEvaluator:
 
                     # TODO(feature): Should we put only one adversarial patch
                     # per image? i.e., attacking only one sign per image.
-                    self._log(f"Attacking {filename} on obj {obj_idx}...")
+                    self._log(f"Attacking {filename} on obj {obj_id}...")
 
                     if self._attack_type == "per-sign":
                         # Run attack for each sign to get a new `adv_patch`

@@ -85,7 +85,7 @@ def collect_attack_rimgs(
     num_collected: int = 0
     print("=> Collecting background images...")
 
-    for _, batch in tqdm(enumerate(dataloader)):
+    for _, batch in enumerate(tqdm(dataloader)):
         file_name = batch[0]["file_name"]
         filename = file_name.split("/")[-1]
 
