@@ -204,7 +204,7 @@ class DetectronEvaluator:
         # Output of pairwise_iou here has shape [num_dts, 1]
         ious: torch.Tensor = pairwise_iou(
             instances.pred_boxes,
-            target_render["instances"].gt_boxes[-1].to(self._device)
+            target_render["instances"].gt_boxes[-1].to(self._device),
         )[:, 0]
 
         # Skip empty ious (no overlap)

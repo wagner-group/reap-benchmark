@@ -77,7 +77,6 @@ class RP2AttackDetectron(rp2_base.RP2AttackModule):
         _, target_labels, target_logits, obj_logits = _get_targets(
             self._core_model,
             [inputs],
-            device=self._core_model.device,
             iou_thres=self._detectron_iou_thres,
             score_thres=self.min_conf,
             use_correct_only=False,
@@ -145,7 +144,6 @@ class RP2AttackDetectron(rp2_base.RP2AttackModule):
 def _get_targets(
     model: torch.nn.Module,
     inputs: List[Dict[str, Any]],
-    device: str = "cuda",
     iou_thres: float = 0.1,
     score_thres: float = 0.1,
     use_correct_only: bool = False,
@@ -153,16 +151,20 @@ def _get_targets(
     """Select a set of targets to attack.
 
     Args:
+        model: Model to attack.
         inputs: A list containing a single dataset_dict, transformed by
             a DatasetMapper.
         iou_thres: IoU threshold for matching predicted and ground-truth
             bouing boxes.
         score_thres: Predictions with class score less than score_thres are
             dropped.
+        use_correct_only: Filter out predictions that are already incorrect.
 
     Returns:
-        target_boxes, target_labels
+        Matched gt target boxes, gt classes, predicted class logits, and
+        predicted objectness logits.
     """
+    device = model.device
     images = model.preprocess_image(inputs)
 
     # Get features
@@ -209,7 +211,6 @@ def _get_roi_heads_predictions(
     model,
     features: Dict[str, torch.Tensor],
     proposal_boxes: List[structures.Boxes],
-    # proposals,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     roi_heads = model.roi_heads
     features = [features[f] for f in roi_heads.box_in_features]
@@ -219,12 +220,6 @@ def _get_roi_heads_predictions(
     box_features = roi_heads.box_head(box_features)
     logits, proposal_deltas = roi_heads.box_predictor(box_features)
     del box_features
-    # proposal_boxes = [x.proposal_boxes for x in proposals]
-    # predictions = roi_heads.box_predictor(box_features)
-    # pred_instances, temp = roi_heads.box_predictor.inference(predictions, proposals)
-    # print('get_roi_heads_predictions')
-    # import pdb
-    # pdb.set_trace()
     return logits, proposal_deltas
 
 
@@ -237,9 +232,7 @@ def _filter_positive_proposals(
 ) -> List[List[Any]]:
     """See _filter_positive_proposals_single()."""
     outputs = [[], []]
-    for inpt in zip(
-        proposal_boxes, class_logits, gt_boxes, gt_classes
-    ):
+    for inpt in zip(proposal_boxes, class_logits, gt_boxes, gt_classes):
         out = _filter_positive_proposals_single(*inpt, **kwargs)
         for i, o in enumerate(out):
             outputs[i].append(o)
