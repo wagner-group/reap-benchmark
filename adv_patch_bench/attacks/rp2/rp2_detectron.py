@@ -111,7 +111,7 @@ class RP2AttackDetectron(rp2_base.RP2AttackModule):
         # pdb.set_trace()
 
         # Loop through each EoT image
-        loss = 0
+        loss: torch.Tensor = torch.zeros(1, device=adv_img.device)
         for tgt_lb, tgt_log, obj_log in zip(
             target_labels, target_logits, obj_logits
         ):
@@ -128,7 +128,8 @@ class RP2AttackDetectron(rp2_base.RP2AttackModule):
                 tgt_lb = torch.zeros_like(tgt_lb) + obj_class
             # If there's no matched gt/prediction, then attack already succeeds.
             # TODO(feature): Appearing or misclassification attacks
-            target_loss, obj_loss = 0, 0
+            target_loss: torch.Tensor = torch.zeros_like(loss)
+            obj_loss: torch.Tensor = torch.zeros_like(loss)
             if len(tgt_log) > 0 and len(tgt_lb) > 0:
                 # Ignore the background class on tgt_log
                 target_loss = F.cross_entropy(tgt_log, tgt_lb, reduction="mean")
@@ -148,7 +149,7 @@ def _get_targets(
     iou_thres: float = 0.1,
     score_thres: float = 0.1,
     use_correct_only: bool = False,
-) -> Tuple[structures.Boxes, torch.Tensor]:
+) -> Tuple[structures.Boxes, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Select a set of targets to attack.
 
     Args:
@@ -189,17 +190,19 @@ def _get_targets(
     gt_classes = [i["instances"].gt_classes for i in inputs]
     objectness_logits = [x.objectness_logits for x in proposals]
 
-    return _filter_positive_proposals(
+    outputs = _filter_positive_proposals(
         proposal_boxes,
         class_logits,
         gt_boxes,
         gt_classes,
-        objectness_logits,
         device=device,
         iou_thres=iou_thres,
         score_thres=score_thres,
         use_correct_only=use_correct_only,
     )
+    outputs.append(class_logits)
+    outputs.append(objectness_logits)
+    return outputs
 
 
 def _get_roi_heads_predictions(
@@ -230,17 +233,16 @@ def _filter_positive_proposals(
     class_logits: List[torch.Tensor],
     gt_boxes: List[structures.Boxes],
     gt_classes: List[torch.Tensor],
-    objectness_logits: List[torch.Tensor],
     **kwargs,
-) -> Tuple[structures.Boxes, torch.Tensor, torch.Tensor]:
-
-    outputs = [[], [], [], []]
+) -> List[List[Any]]:
+    """See _filter_positive_proposals_single()."""
+    outputs = [[], []]
     for inpt in zip(
-        proposal_boxes, class_logits, gt_boxes, gt_classes, objectness_logits
+        proposal_boxes, class_logits, gt_boxes, gt_classes
     ):
         out = _filter_positive_proposals_single(*inpt, **kwargs)
-        for i in range(4):
-            outputs[i].append(out[i])
+        for i, o in enumerate(out):
+            outputs[i].append(o)
     return outputs
 
 
@@ -249,24 +251,21 @@ def _filter_positive_proposals_single(
     class_logits: torch.Tensor,
     gt_boxes: structures.Boxes,
     gt_classes: torch.Tensor,
-    objectness_logits: torch.Tensor,
     device: str = "cuda",
     iou_thres: float = 0.1,
     score_thres: float = 0.1,
     use_correct_only: bool = False,
-) -> Tuple[structures.Boxes, torch.Tensor, torch.Tensor]:
-    """Filter for desired targets for the DAG algo.
+) -> Tuple[structures.Boxes, torch.Tensor]:
+    """Filter for desired targets for the attack.
 
     Args:
-        proposal_boxes: Proposal boxes directly from RPN
-        scores: Softmaxed scores for each proposal box
-        gt_boxes: Ground truth boxes
-        gt_classes: Ground truth classes
+        proposal_boxes: Proposal boxes directly from RPN.
+        scores: Softmaxed scores for each proposal box.
+        gt_boxes: Ground truth boxes.
+        gt_classes: Ground truth classes.
 
     Returns:
-        filtered_target_boxes:
-        corresponding_class_labels:
-        corresponding_scores:
+        Filtered target boxes and corresponding class labels.
     """
     n_proposals: int = len(proposal_boxes)
 
@@ -298,9 +297,4 @@ def _filter_positive_proposals_single(
     else:
         cond = iou_cond
 
-    return (
-        proposal_boxes[cond],
-        paired_gt_classes[cond].to(device),
-        class_logits[cond],
-        objectness_logits[cond],
-    )
+    return (proposal_boxes[cond], paired_gt_classes[cond].to(device))

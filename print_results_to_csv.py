@@ -155,7 +155,10 @@ def main(args):
                 #     split_hash = "null"
                 # else:
                 #     split_hash = hashes[2].split("split")[1].split(".pkl")[0]
+                if "bbox" not in results:
+                    continue
                 metrics = results["bbox"]
+                print(result_path)
 
                 # Experiment setting identifier for matching clean and attack
                 obj_class = results["obj_class"]
@@ -192,8 +195,8 @@ def main(args):
                 base_sid += f" | {eval_hash}"
 
                 if base_sid not in tp_scores:
-                    tp_scores[eval_hash] = {t: [] for t in range(10)}
-                    fp_scores[eval_hash] = {t: [] for t in range(10)}
+                    tp_scores[base_sid] = {t: [] for t in range(10)}
+                    fp_scores[base_sid] = {t: [] for t in range(10)}
 
                 scores = cls_scores[obj_class]
                 num_gts = scores.shape[1]
@@ -230,8 +233,8 @@ def main(args):
                     print_df_rows[sid]["Recall"] = outputs["recall"] * 100
                     print_df_rows[sid]["AP"] = results["bbox"]["AP"]
                     for t in range(10):
-                        tp_scores[eval_hash][t].extend(scores_full[t][0])
-                        fp_scores[eval_hash][t].extend(scores_full[t][1])
+                        tp_scores[base_sid][t].extend(scores_full[t][0])
+                        fp_scores[base_sid][t].extend(scores_full[t][1])
 
                 # Create DF row for all classes
                 all_class_sid = f"{base_sid} | all"
@@ -291,7 +294,6 @@ def main(args):
         clean_detected = clean_scores[iou_idx] >= CONF_THRES
         adv_detected = adv_scores[iou_idx] >= CONF_THRES
         total = clean_scores.shape[1]
-        print(total)
 
         num_succeed = np.sum(~adv_detected & clean_detected)
         num_clean = np.sum(clean_detected)
@@ -408,7 +410,7 @@ def main(args):
                 aps[t] = _compute_ap_recall(
                     scores, matches, _NUM_SIGNS_PER_CLASS.sum()
                 )["AP"]
-            print_df_rows[sid + "_allw"]["AP"] = np.mean(aps) * 100
+            print_df_rows[sid + " | allw"]["AP"] = np.mean(aps) * 100
 
     print_df_rows = list(print_df_rows.values())
     df = pd.DataFrame.from_records(print_df_rows)

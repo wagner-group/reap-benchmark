@@ -198,12 +198,13 @@ class DetectronEvaluator:
             target_render: Target of rendered image.
         """
         instances: structures.Instances = outputs["instances"]
-        # ious has shape [num_dts, 1]
+        # Filter both dt by class
+        instances = instances[instances.pred_classes == self._obj_class]
+        # Last gt box is the new one we added for synthetic sign
+        # Output of pairwise_iou here has shape [num_dts, 1]
         ious: torch.Tensor = pairwise_iou(
             instances.pred_boxes,
-            target_render["instances"]
-            .gt_boxes[-1]
-            .to(self._device),  # Last new gt bbox is synthetic sign
+            target_render["instances"].gt_boxes[-1].to(self._device)
         )[:, 0]
 
         # Skip empty ious (no overlap)
@@ -211,17 +212,14 @@ class DetectronEvaluator:
             self._syn_idx += 1
             return
 
+        # Find the match with highest IoU. This matches COCO evaluator.
+        max_iou, max_idx = ious.max(0, keepdim=True)
+        matches = max_iou >= self._all_iou_thres
+        # Zero out scores if there's no match (i.e., IoU lower than threshold)
+        scores = instances.scores[max_idx] * matches
         # Save scores and gt-dt matches at each level of IoU thresholds
-        # Find the match with highest IoU and has correct class
-        ious *= instances.pred_classes == self._obj_class
-        matches = ious[None, :] >= self._all_iou_thres[:, None]
-        # Zero out scores that have lowe IoU than threshold
-        scores = instances.scores[None, :] * matches
-        # Select matched dt with highest score at each IoU
-        idx_max_score = scores.argmax(-1)
-        tmp_idx = torch.arange(len(self._all_iou_thres))
-        self.syn_matches[:, self._syn_idx] = matches[tmp_idx, idx_max_score]
-        self.syn_scores[:, self._syn_idx] = scores[tmp_idx, idx_max_score]
+        self.syn_matches[:, self._syn_idx] = matches
+        self.syn_scores[:, self._syn_idx] = scores
         self._syn_idx += 1
 
     def run(self) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
