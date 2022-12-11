@@ -1,10 +1,13 @@
 """Utility functions for transforms."""
 
-from typing import List, NewType, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import List, NewType, Tuple
 
 import kornia
 import kornia.augmentation as K
 import numpy as np
+
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     ImageTensor,
@@ -15,22 +18,22 @@ from adv_patch_bench.utils.types import (
 _KeyPoints = NewType("_KeyPoints", List[Tuple[float, float]])
 
 
-def _identity(x: Union[ImageTensor, BatchImageTensor]) -> BatchImageTensor:
+def _identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
     """Identity transform function."""
-    return x
+    return inputs
 
 
 def _identity_with_params(
-    x: Union[ImageTensor, BatchImageTensor]
-) -> Tuple[BatchImageTensor, None]:
+    inputs: ImageTensor | BatchImageTensor
+) -> tuple[BatchImageTensor, None]:
     """Indentity function that also returns None param."""
-    x = _identity(x)
-    return x, None
+    inputs = _identity(inputs)
+    return inputs, None
 
 
 def _gen_rect_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate rectangular mask.
 
     The keypoints are a list of tuple (x, y) coordinates starting from the
@@ -54,8 +57,8 @@ def _gen_rect_mask(
 
 
 def _gen_diamond_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate diamond mask. See _gen_rect_mask()."""
     del ratio  # Unused
     mid = round(size / 2)
@@ -70,8 +73,8 @@ def _gen_diamond_mask(
 
 
 def _gen_circle_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate circle mask. See _gen_rect_mask()."""
     del ratio  # Unused
     Y, X = np.ogrid[:size, :size]
@@ -82,8 +85,8 @@ def _gen_circle_mask(
 
 
 def _gen_triangle_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate triangle mask. See _gen_rect_mask()."""
     height = round(ratio * size)
     mid = round(size / 2)
@@ -93,8 +96,8 @@ def _gen_triangle_mask(
 
 
 def _gen_triangle_inverted_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate inverted triangle mask. See _gen_rect_mask()."""
     height = round(ratio * size)
     mid = round(size / 2)
@@ -104,8 +107,8 @@ def _gen_triangle_inverted_mask(
 
 
 def _gen_pentagon_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate pentagon mask. See _gen_rect_mask()."""
     del ratio  # Unused
     mid = round(size / 2)
@@ -120,8 +123,8 @@ def _gen_pentagon_mask(
 
 
 def _gen_octagon_mask(
-    size: int, ratio: Optional[float] = None
-) -> Tuple[np.ndarray, _KeyPoints]:
+    size: int, ratio: float | None = None
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate octagon mask. See _gen_rect_mask()."""
     del ratio  # Unused
     edge = round((2 - np.sqrt(2)) / 2 * size)
@@ -142,7 +145,7 @@ def _gen_octagon_mask(
 
 def gen_sign_mask(
     shape: str, hw_ratio: float, obj_width_px: int
-) -> Tuple[np.ndarray, _KeyPoints]:
+) -> tuple[np.ndarray, _KeyPoints]:
     """Generate mask of object and source keypoints.
 
     The keypoints are a list of tuple (x, y) coordinates starting from the
@@ -173,15 +176,15 @@ def gen_sign_mask(
 
 
 def get_transform_fn(
-    prob_geo: Optional[float] = None,
-    syn_rotate: Optional[float] = None,
-    syn_scale: Optional[float] = None,
-    syn_translate: Optional[float] = None,
-    syn_3d_dist: Optional[float] = None,
-    prob_colorjitter: Optional[float] = None,
-    syn_colorjitter: Optional[float] = None,
+    prob_geo: float | None = None,
+    syn_rotate: float | None = None,
+    syn_scale: float | None = None,
+    syn_translate: float | None = None,
+    syn_3d_dist: float | None = None,
+    prob_colorjitter: float | None = None,
+    syn_colorjitter: float | None = None,
     interp: str = "bilinear",
-) -> Tuple[TransformFn, TransformFn, TransformFn]:
+) -> tuple[TransformFn, TransformFn, TransformFn]:
     """Initialize geometric (for object and mask) and lighting transforms.
 
     When transforms are not applied, they are returned as identity function.

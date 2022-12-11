@@ -70,20 +70,20 @@ TS_COLOR_DICT = {
 # Generate dictionary of traffic sign class offset
 TS_COLOR_OFFSET_DICT = {}
 idx = 0
-for k in TS_COLOR_DICT:
-    TS_COLOR_OFFSET_DICT[k] = idx
-    idx += max(1, len(TS_COLOR_DICT[k]))
+for shape, colors in TS_COLOR_DICT.items():
+    TS_COLOR_OFFSET_DICT[shape] = idx
+    idx += max(1, len(colors))
 
 # Generate dictionary of traffic sign class: name -> idx
 TS_COLOR_LABEL_DICT = {}
 idx = 0
-for k in TS_COLOR_DICT:
-    if len(TS_COLOR_DICT[k]) == 0:
-        TS_COLOR_LABEL_DICT[f"{k}-none"] = idx
+for shape, colors in TS_COLOR_DICT.items():
+    if len(colors) == 0:
+        TS_COLOR_LABEL_DICT[f"{shape}-none"] = idx
         idx += 1
     else:
-        for color in TS_COLOR_DICT[k]:
-            TS_COLOR_LABEL_DICT[f"{k}-{color}"] = idx
+        for color in colors:
+            TS_COLOR_LABEL_DICT[f"{shape}-{color}"] = idx
             idx += 1
 
 # Make sure that ordering is correct
@@ -100,7 +100,7 @@ LABEL_LIST["synthetic"] = LABEL_LIST["mapillary_no_color"]
 
 # Get list of shape (no size, no color)
 TS_SHAPE_LIST = list(
-    set([shape.split("-")[0] for shape in TS_NO_COLOR_LABEL_LIST])
+    set(shape.split("-", maxsplit=1)[0] for shape in TS_NO_COLOR_LABEL_LIST)
 )
 
 # =========================================================================== #

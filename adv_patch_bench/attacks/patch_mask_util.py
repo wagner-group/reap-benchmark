@@ -1,8 +1,11 @@
 """Define utility functions for creating patch masks."""
 
+from __future__ import annotations
+
 from typing import Tuple
 
 import torch
+
 from adv_patch_bench.utils.types import MaskTensor, SizeMM, SizePx
 
 
@@ -10,6 +13,7 @@ def _gen_mask_rect(
     patch_size_mm: Tuple[int, float, float],
     obj_size_px: SizePx,
     obj_size_mm: SizeMM,
+    shift_height_mm: float | None = None,
 ) -> MaskTensor:
     """Generate rectangular patch mask at the bottom of the object.
 
@@ -19,10 +23,14 @@ def _gen_mask_rect(
         patch_size_mm: Patch size in millimeters.
         obj_size_px: Object size in pixels.
         obj_size_mm: Object size in millimeters.
+        shift_height_mm: Height to shift patch from the bottom edge of the sign.
+            Defaults to 0.
 
     Returns:
         Binary mask of patch.
     """
+    if shift_height_mm is not None and shift_height_mm < 0:
+        raise ValueError("shift_height_mm must be non-negative!")
     patch_mask: MaskTensor = torch.zeros(
         (1,) + obj_size_px, dtype=torch.float32
     )  # type: ignore
@@ -34,7 +42,10 @@ def _gen_mask_rect(
 
     # Define patch location and size
     mid_height, mid_width = obj_h_px // 2, obj_w_px // 2
-    shift_mm = (obj_h_mm - patch_h_mm) / 2
+    if shift_height_mm is not None:
+        shift_mm = shift_height_mm
+    else:
+        shift_mm = (obj_h_mm - patch_h_mm) / 2
     patch_y_shift = round(shift_mm / obj_h_mm * obj_h_px)
     patch_x_pos = mid_width
     hh, hw = patch_h_px // 2, patch_w_px // 2
@@ -63,6 +74,7 @@ def gen_patch_mask(
     patch_size_mm: Tuple[int, float, float],
     obj_size_px: SizePx,
     obj_size_mm: SizeMM,
+    shift_height_mm: float | None = None,
 ) -> MaskTensor:
     """Generate digital patch mask with given real patch_size_mm.
 
@@ -71,6 +83,8 @@ def gen_patch_mask(
             in millimeters, and num_patch must be int.
         obj_size_px: Size of object to place patch on in pixels.
         obj_size_mm: Size of object to place patch on in millimeters.
+        shift_height_mm: Height to shift patch from the bottom edge of the sign.
+            Defaults to 0.
 
     Raises:
         ValueError: Invalid format for patch_size_mm.
@@ -89,6 +103,7 @@ def gen_patch_mask(
         patch_size_mm,
         obj_size_px,
         obj_size_mm,
+        shift_height_mm=shift_height_mm,
     )
 
     return patch_mask
