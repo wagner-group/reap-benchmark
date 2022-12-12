@@ -1,13 +1,12 @@
 """Methods for extracting shape and keypoints from segmentation masks.
 
-Functions in this file are used by script that generates REAP transform params. 
+Functions in this file are used by script that generates REAP transform params.
 """
 
 import cv2 as cv
 import numpy as np
 
 _POLYGON_ERROR = 0.04
-
 _SHAPE_TO_VERTICES = {
     "circle": ((0, 1, 2, 3),),
     "triangle_inverted": ((0, 1, 2),),
@@ -17,6 +16,7 @@ _SHAPE_TO_VERTICES = {
     "pentagon": ((0, 2, 3, 4),),
     "octagon": ((0, 2, 4, 6),),
 }
+
 
 def get_corners(mask):
     # Check that we have a binary mask
