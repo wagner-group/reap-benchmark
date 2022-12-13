@@ -1,21 +1,24 @@
 """Image wrapper to handle object rendering."""
 
+from __future__ import annotations
+
 import copy
 import os
 from collections import OrderedDict
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable
 
-import adv_patch_bench.utils.image as img_util
 import kornia.augmentation as K
 import pandas as pd
 import torchvision
+
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object, util
 from adv_patch_bench.utils.types import (
-    SizePx,
     ImageTensor,
+    ImageTensorDet,
+    SizePx,
     Target,
     TransformFn,
-    ImageTensorDet,
 )
 
 
@@ -52,12 +55,12 @@ class RenderImage:
     def __init__(
         self,
         dataset: str,
-        sample: Dict[str, Any],  # TODO: YOLO?
+        sample: dict[str, Any],  # TODO: YOLO?
         img_df: pd.DataFrame,
-        img_size: Optional[SizePx] = None,
+        img_size: SizePx | None = None,
         img_mode: str = "BGR",
         interp: str = "bilinear",
-        img_aug_prob_geo: Optional[float] = None,
+        img_aug_prob_geo: float | None = None,
         device: Any = "cuda",
         is_detectron: bool = True,
     ) -> None:
@@ -116,12 +119,12 @@ class RenderImage:
             sample["height"],
             sample["width"],
         )
-        self.size_ratio: Tuple[float, float] = (
+        self.size_ratio: tuple[float, float] = (
             self.img_size[0] / self.img_size_orig[0],
             self.img_size[1] / self.img_size_orig[1],
         )
 
-        self.obj_tf_dict: Dict[int, render_object.RenderObject] = OrderedDict()
+        self.obj_tf_dict: dict[int, render_object.RenderObject] = OrderedDict()
 
         # Init augmentation transform for image
         self._aug_geo_img: TransformFn = util._identity
@@ -133,7 +136,7 @@ class RenderImage:
                 resample=interp,
             )
 
-    def _resize_image(self, image: ImageTensor) -> Tuple[ImageTensor, SizePx]:
+    def _resize_image(self, image: ImageTensor) -> tuple[ImageTensor, SizePx]:
         """Resize or pad image to self.img_size.
 
         Args:
@@ -143,14 +146,14 @@ class RenderImage:
             image: Resized or padded image.
             pad_size: Tuple of top and left padding.
         """
-        h, w = image.shape[-2:]
+        height, width = image.shape[-2:]
         pad_size: SizePx
-        if w != self.img_size[1]:
+        if width != self.img_size[1]:
             raise ValueError(
                 f"image of shape {image.shape} is not compatible with img_size "
                 f"{self.img_size}!"
             )
-        if h > self.img_size[0]:
+        if height > self.img_size[0]:
             # If actual height is larger than desired height, just resize
             # image and avoid padding
             image = img_util.resize_and_pad(
@@ -171,9 +174,9 @@ class RenderImage:
 
     def create_object(
         self,
-        obj_id: Optional[int],
+        obj_id: int | None,
         robj_fn: Callable[..., render_object.RenderObject],
-        robj_kwargs: Dict[str, Any],
+        robj_kwargs: dict[str, Any],
     ) -> None:
         """Create a new RenderObject and add to obj_tf_dict.
 
@@ -192,7 +195,7 @@ class RenderImage:
             raise ValueError(f"obj_id {obj_id} already exists!")
 
         assign_obj_id: int
-        obj_df: Optional[pd.DataFrame]
+        obj_df: pd.DataFrame | None
         if obj_id is None:
             # If obj_id not specified, use the largest id not yet taken
             if self.obj_tf_dict:
@@ -222,7 +225,7 @@ class RenderImage:
     def add_object(
         self,
         robj: render_object.RenderObject,
-        obj_id: Optional[int] = None,
+        obj_id: int | None = None,
     ) -> None:
         """Add an existing RenderObject to obj_tf_dict.
 
@@ -267,14 +270,14 @@ class RenderImage:
 
     def get_object(
         self,
-        obj_id: Optional[int] = None,
+        obj_id: int | None = None,
     ) -> render_object.RenderObject:
         """Get a RenderObject with a given obj_id.
 
         Args:
             obj_id: Object ID of RenderObject to retrieve. If None, obj_tf_dict
-            must have exactly one object, and that object will be returned.
-            Defaults to None.
+                must have exactly one object, and that object will be returned.
+                Defaults to None.
 
         Raises:
             ValueError: obj_tf_dict does not have exactly 1 object.
@@ -296,11 +299,14 @@ class RenderImage:
             raise ValueError(f"obj_id {obj_id} does not exist!")
         return self.obj_tf_dict[obj_id]
 
-    def apply_objects(self) -> Tuple[ImageTensor, Target]:
-        """Apply all RenderObjects in obj_tf_list to image.
+    def apply_objects(self) -> tuple[ImageTensor, Target]:
+        """Render adversarial patches (or objects) on image.
+
+        This calls apply_object() on each of RenderObjects in obj_tf_dict.
 
         Returns:
-            Image with patches and other objects applied.
+            image: Image with patches (or synthetic objects) applied.
+            target: Updated target labels to account for applied object if any.
         """
         image: ImageTensor = self.image
         target: Target = self.target
@@ -316,7 +322,7 @@ class RenderImage:
 
     def post_process_image(
         self,
-        image: Optional[ImageTensor] = None,
+        image: ImageTensor | None = None,
     ) -> ImageTensorDet:
         """Post-process image by puting it in original format and scale to 255.
 
@@ -351,7 +357,7 @@ class RenderImage:
     def save_image(
         self,
         save_dir: str,
-        image: Optional[ImageTensor] = None,
+        image: ImageTensor | None = None,
         ext: str = "png",
     ) -> None:
         """Save image to save_dir.

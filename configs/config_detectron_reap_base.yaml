@@ -16,7 +16,7 @@ eval:
   tgt_csv_filepath: 'reap_annotations.csv'
   # Custom experiment name (null for auto-generated)
   name: null
-  obj_class: 1  # Class of object to eval/attack
+  obj_class: 0  # Class of object to eval/attack
   patch_size_inch: '10x10'  # e.g., '2_10x20'
   num_eval: null  # Number of samples to use for eval; Set to null to use all.
   # Path to txt file containing file names to use either for generating patch or
@@ -58,7 +58,7 @@ eval:
 # Attack algorithm params
 attack:
   common:
-    attack_name: 'rp2'
+    attack_name: 'rp2'  # 'rp2', 'dpatch'
     patch_dim: 64
     num_bg: 50  # Number of backgrounds attacker uses to generate patch
     # Additional augmentation for patch
@@ -86,6 +86,21 @@ attack:
     syn_3d_dist: null
     
   rp2:
+    attack_mode: ''
+    lambda: 1.0e-5
+    min_conf: 0
+    num_eot: 1
+    num_steps: 1000
+    optimizer: 'adam'  # 'adam', 'sgd', 'pgd'
+    step_size: 0.01
+    use_lr_schedule: False
+    # var_change_ab: Use variable change on alpha, beta 
+    # attack_mode: 'var_change_ab'
+    detectron:
+      obj_loss_const: 0
+      iou_thres: 0
+
+  dpatch:
     attack_mode: ''
     lambda: 1.0e-5
     min_conf: 0

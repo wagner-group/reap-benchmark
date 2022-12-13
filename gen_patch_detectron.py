@@ -1,24 +1,25 @@
 """Generate adversarial patch on Detectron2 model."""
 
-import os
+from __future__ import annotations
+
+import pathlib
 import pickle
 import random
-from os.path import join
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable
 
 import detectron2
 import numpy as np
 import pandas as pd
 import torch
-import torch.backends.cudnn as cudnn
 import torchvision
 import yaml
+from torch.backends import cudnn
 from tqdm import tqdm
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
-import adv_patch_bench.dataloaders.reap_util as reap_util
 import adv_patch_bench.utils.argparse as args_util
-from adv_patch_bench.attacks import attacks, base_attack, patch_mask_util
+from adv_patch_bench.attacks import attack_util, base_attack, patch_mask_util
+from adv_patch_bench.dataloaders import reap_util
 from adv_patch_bench.dataloaders.detectron import (
     custom_build,
     custom_sampler,
@@ -38,14 +39,14 @@ from hparams import LABEL_LIST, MAPILLARY_IMG_COUNTS_DICT
 def collect_attack_rimgs(
     dataset: str,
     dataloader: Any,
-    num_bg: Union[int, float],
+    num_bg: int | float,
     robj_fn: Callable,
-    anno_df: Optional[pd.DataFrame] = None,
-    class_name: Optional[str] = None,
-    filter_file_names: Optional[List[str]] = None,
-    rimg_kwargs: Dict[str, Any] = None,
-    robj_kwargs: Dict[str, Any] = None,
-) -> List[render_image.RenderImage]:
+    anno_df: pd.DataFrame | None = None,
+    class_name: str | None = None,
+    filter_file_names: list[str] | None = None,
+    rimg_kwargs: dict[str, Any] | None = None,
+    robj_kwargs: dict[str, Any] | None = None,
+) -> list[render_image.RenderImage]:
     """Collect background images to be used by the attack.
 
     Args:
@@ -81,7 +82,7 @@ def collect_attack_rimgs(
         print(f"For {class_name}, this is {num_bg} images.")
     num_bg = int(num_bg)
 
-    rimg_list: List[render_image.RenderImage] = []
+    rimg_list: list[render_image.RenderImage] = []
     num_collected: int = 0
     print("=> Collecting background images...")
 
@@ -102,8 +103,8 @@ def collect_attack_rimgs(
             img_df = None
 
         found: bool = False
-        attack_obj_df: Optional[pd.DataFrame] = None
-        attack_obj_id: Optional[int] = None
+        attack_obj_df: pd.DataFrame | None = None
+        attack_obj_id: int | None = None
         if class_name is not None and img_df is not None:
             # If class_name is also specified, make sure that there is at least
             # one sign with label class_name in image. We use the first object
@@ -143,16 +144,16 @@ def collect_attack_rimgs(
 
 def _generate_adv_patch(
     model: torch.nn.Module,
-    rimgs: List[render_image.RenderImage],
-    patch_size_mm: Tuple[int, float, float] = (1, 200.0, 200.0),
+    rimgs: list[render_image.RenderImage],
+    patch_size_mm: tuple[int, float, float] = (1, 200.0, 200.0),
     obj_size_mm: SizeMM = SizeMM((900.0, 900.0)),
     obj_size_px: SizePx = SizePx((64, 64)),
     img_size: SizePx = SizePx((1536, 2048)),
     save_images: bool = False,
-    save_dir: str = "./",
+    save_dir: pathlib.Path = pathlib.Path("./"),
     verbose: bool = False,
-    config_attack: Optional[Dict[str, Any]] = None,
-) -> Tuple[ImageTensor, MaskTensor]:
+    config_attack: dict[str, Any] | None = None,
+) -> tuple[ImageTensor, MaskTensor]:
     """Generate adversarial patch.
 
     Returns:
@@ -166,7 +167,7 @@ def _generate_adv_patch(
         obj_size_mm,
     )
 
-    attack: base_attack.DetectorAttackModule = attacks.setup_attack(
+    attack: base_attack.DetectorAttackModule = attack_util.setup_attack(
         config_attack=config_attack,
         is_detectron=True,
         model=model,
@@ -180,33 +181,32 @@ def _generate_adv_patch(
 
     if save_images:
         torchvision.utils.save_image(
-            patch_mask, join(save_dir, "patch_mask.png")
+            patch_mask, str(save_dir / "patch_mask.png")
         )
         torchvision.utils.save_image(
-            adv_patch, join(save_dir, "adversarial_patch.png")
+            adv_patch, str(save_dir / "adversarial_patch.png")
         )
 
     return adv_patch, patch_mask
 
 
-def main(config: Dict[str, Dict[str, Any]]) -> None:
+def main() -> None:
     """Main function for generating patch.
 
     Args:
         config: Config dict containing eval and attack config dicts.
     """
-    config_eval: Dict[str, Any] = config["eval"]
-    config_attack: Dict[str, Dict[str, Any]] = config["attack"]
-    config_atk_common: Dict[str, Any] = config_attack["common"]
+    config_attack: dict[str, dict[str, Any]] = config["attack"]
+    config_atk_common: dict[str, Any] = config_attack["common"]
     img_size: SizePx = config_eval["img_size"]
     dataset: str = config_eval["dataset"]
     split_file_path: str = config_eval["split_file_path"]
     obj_class: int = config_eval["obj_class"]
     synthetic: bool = config_eval["synthetic"]
-    save_dir: str = config_eval["save_dir"]
+    save_dir: pathlib.Path = pathlib.Path(config_eval["save_dir"])
     interp: str = config_eval["interp"]
-    num_bg: Union[int, float] = config_atk_common["num_bg"]
-    df: pd.DataFrame = reap_util.load_annotation_df(
+    num_bg: int | float = config_atk_common["num_bg"]
+    dataframe: pd.DataFrame = reap_util.load_annotation_df(
         config_eval["tgt_csv_filepath"]
     )
     class_name: str = LABEL_LIST[dataset][obj_class]
@@ -215,15 +215,15 @@ def main(config: Dict[str, Dict[str, Any]]) -> None:
     model = detectron2.engine.DefaultPredictor(cfg).model
 
     # Build dataloader
-    data_dicts: List[DetectronSample] = detectron2.data.DatasetCatalog.get(
+    data_dicts: list[DetectronSample] = detectron2.data.DatasetCatalog.get(
         config_eval["dataset"]
     )
-    split_file_names: Optional[List[str]] = None
+    split_file_names: list[str] | None = None
     num_samples: int = len(data_dicts)
     if split_file_path is not None:
         print(f"Loading file names from {split_file_path}...")
-        with open(split_file_path, "r") as f:
-            split_file_names = f.read().splitlines()
+        with open(split_file_path, "r", encoding="utf-8") as file:
+            split_file_names = file.read().splitlines()
         # Update num samples
         num_samples = len(split_file_names)
 
@@ -241,14 +241,14 @@ def main(config: Dict[str, Dict[str, Any]]) -> None:
     )
 
     # Set up parameters for RenderImage and RenderObject
-    rimg_kwargs: Dict[str, Any] = {
+    rimg_kwargs: dict[str, Any] = {
         "img_size": img_size,
         "img_mode": "BGR",
         "interp": interp,
         "img_aug_prob_geo": config_atk_common["img_aug_prob_geo"],
         "is_detectron": True,
     }
-    robj_kwargs: Dict[str, Any] = {
+    robj_kwargs: dict[str, Any] = {
         "obj_size_px": config_eval["obj_size_px"],
         "interp": interp,
         "patch_aug_params": config_atk_common,
@@ -274,12 +274,12 @@ def main(config: Dict[str, Dict[str, Any]]) -> None:
         }
 
     # Collect background images for generating patch attack
-    attack_rimgs: List[render_image.RenderImage] = collect_attack_rimgs(
+    attack_rimgs: list[render_image.RenderImage] = collect_attack_rimgs(
         dataset,
         dataloader,
         num_bg,
         robj_fn,
-        anno_df=df,
+        anno_df=dataframe,
         class_name=class_name,
         filter_file_names=split_file_names,
         rimg_kwargs=rimg_kwargs,
@@ -289,17 +289,17 @@ def main(config: Dict[str, Dict[str, Any]]) -> None:
     # Save background filenames in txt file if split_file_path was not given
     if split_file_names is None:
         print("=> Saving names of images used to generate patch in txt file.")
-        split_file_path = join(save_dir, f"{class_name}_attack_bg{num_bg}.txt")
-        with open(split_file_path, "w") as f:
+        split_file_path = save_dir / f"{class_name}_attack_bg{num_bg}.txt"
+        with split_file_path.open("w", encoding="utf-8") as file:
             for rimg in attack_rimgs:
-                f.write(f"{rimg.filename}\n")
+                file.write(f"{rimg.filename}\n")
 
     if config_eval["debug"]:
         # Save all the background images
-        rimg_save_dir = join(save_dir, "attack_bg_syn")
-        os.makedirs(rimg_save_dir, exist_ok=True)
+        rimg_save_dir = save_dir / "attack_bg_syn"
+        rimg_save_dir.mkdir(exist_ok=True)
         for rimg in attack_rimgs:
-            rimg.save_image(rimg_save_dir)
+            rimg.save_image(str(rimg_save_dir))
 
     # Generate mask and adversarial patch
     adv_patch, patch_mask = _generate_adv_patch(
@@ -316,25 +316,25 @@ def main(config: Dict[str, Dict[str, Any]]) -> None:
     )
 
     # Save adv patch
-    patch_path: str = join(save_dir, "adv_patch.pkl")
+    patch_path = save_dir / "adv_patch.pkl"
     print(f"Saving the generated adv patch to {patch_path}...")
-    with open(patch_path, "wb") as f:
-        pickle.dump([adv_patch, patch_mask], f)
+    with patch_path.open("wb") as file:
+        pickle.dump([adv_patch, patch_mask], file)
 
     # Save attack config
-    patch_metadata_path: str = join(save_dir, "config.yaml")
+    patch_metadata_path = save_dir / "config.yaml"
     print(f"Saving the adv patch metadata to {patch_metadata_path}...")
-    with open(patch_metadata_path, "w") as f:
-        yaml.dump(config, f)
+    with patch_metadata_path.open("w", encoding="utf-8") as file:
+        yaml.dump(config, file)
 
 
 if __name__ == "__main__":
-    config: Dict[str, Dict[str, Any]] = args_util.eval_args_parser(
+    config: dict[str, dict[str, Any]] = args_util.eval_args_parser(
         True, is_gen_patch=True
     )
     # Verify some args
     cfg = args_util.setup_detectron_test_args(config)
-    config_eval: Dict[str, Any] = config["eval"]
+    config_eval: dict[str, Any] = config["eval"]
     seed: int = config_eval["seed"]
     cudnn.benchmark = True
 
@@ -346,11 +346,12 @@ if __name__ == "__main__":
         )
 
     # Set random seeds
-    torch.random.manual_seed(seed)
-    np.random.seed(seed)
     random.seed(seed)
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+    torch.cuda.random.manual_seed_all(seed)
 
     # Register Detectron2 dataset
     data_util.register_dataset(config_eval)
 
-    main(config)
+    main()

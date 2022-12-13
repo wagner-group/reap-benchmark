@@ -10,11 +10,18 @@ https://github.com/yizhe-ang/detectron2-1/blob/master/detectron2_1/adv.py
 import pathlib
 from typing import Any, Dict, List, Optional, Tuple
 
-import adv_patch_bench.utils.detectron.custom_coco_evaluator as cocoeval
 import numpy as np
 import pandas as pd
 import torch
-from adv_patch_bench.attacks import attack_util, attacks, base_attack
+from detectron2 import structures
+from detectron2.config import global_cfg
+from detectron2.data import MetadataCatalog
+from detectron2.structures.boxes import pairwise_iou
+from detectron2.utils.visualizer import Visualizer
+from tqdm import tqdm
+
+import adv_patch_bench.utils.detectron.custom_coco_evaluator as cocoeval
+from adv_patch_bench.attacks import attack_util, base_attack
 from adv_patch_bench.dataloaders import reap_util
 from adv_patch_bench.transforms import (
     reap_object,
@@ -31,12 +38,6 @@ from adv_patch_bench.utils.types import (
     SizePx,
     Target,
 )
-from detectron2 import structures
-from detectron2.config import global_cfg
-from detectron2.data import MetadataCatalog
-from detectron2.structures.boxes import pairwise_iou
-from detectron2.utils.visualizer import Visualizer
-from tqdm import tqdm
 
 _DEFAULT_IOU_THRESHOLDS = np.linspace(
     0.5, 0.95, int(np.round((0.95 - 0.5) / 0.05)) + 1, endpoint=True
@@ -150,7 +151,7 @@ class DetectronEvaluator:
         self._attack: Optional[base_attack.DetectorAttackModule] = None
         # Set up attack when running  "per-sign"
         if self._attack_type == "per-sign":
-            self._attack = attacks.setup_attack(
+            self._attack = attack_util.setup_attack(
                 config_attack=config_attack,
                 is_detectron=True,
                 model=model,

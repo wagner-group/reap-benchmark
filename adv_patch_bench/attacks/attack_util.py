@@ -1,13 +1,52 @@
 """Simple utility functions for preparing attacks."""
 
-from typing import Optional, Tuple
+from __future__ import annotations
 
 import pickle
+from typing import Any, Dict, Optional, Tuple
+
 import torch
 import torchvision
+
+from adv_patch_bench.attacks import base_attack, patch_mask_util
+from adv_patch_bench.attacks.dpatch import dpatch_detectron
+from adv_patch_bench.attacks.rp2 import rp2_detectron, rp2_yolo
 from adv_patch_bench.utils.types import ImageTensor, MaskTensor, SizeMM, SizePx
-from adv_patch_bench.attacks import patch_mask_util
 from hparams import DEFAULT_PATH_DEBUG_PATCH
+
+_ATTACK_DICT = {
+    "rp2-detectron": rp2_detectron.RP2AttackDetectron,
+    "rp2-yolo": rp2_yolo.RP2AttackYOLO,
+    "dpatch-detectron": dpatch_detectron.DPatchAttackDetectron,
+}
+
+
+def setup_attack(
+    config_attack: Optional[Dict[Any, str]] = None,
+    is_detectron: bool = True,
+    model: Optional[torch.nn.Module] = None,
+    input_size: Tuple[int, int] = (1536, 2048),
+    verbose: bool = False,
+) -> base_attack.DetectorAttackModule:
+    """Set up attack object."""
+    # TODO(feature): Add no_attack as an attack option.
+    attack_name: str = config_attack["common"]["attack_name"]
+    if is_detectron:
+        attack_fn_name: str = f"{attack_name}-detectron"
+    else:
+        attack_fn_name: str = f"{attack_name}-yolo"
+    attack_fn = _ATTACK_DICT[attack_fn_name]
+    combined_config_attack: Dict[str, Any] = {
+        **config_attack["common"],
+        **config_attack[attack_name],
+    }
+
+    return attack_fn(
+        combined_config_attack,
+        model,
+        input_size=input_size,
+        verbose=verbose,
+    )
 
 
 def prep_adv_patch(
@@ -43,7 +82,8 @@ def prep_adv_patch(
             raise ValueError(
                 'If attack_type is "load", adv_patch_path must be specified!'
             )
-        adv_patch, patch_mask = pickle.load(open(adv_patch_path, "rb"))
+        with open(adv_patch_path, "rb") as file:
+            adv_patch, patch_mask = pickle.load(file)
         return adv_patch, patch_mask
 
     if patch_size_mm is None or obj_size_px is None or obj_size_mm is None:

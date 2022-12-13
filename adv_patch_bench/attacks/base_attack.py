@@ -1,10 +1,13 @@
 """Base attack class for all object detection models."""
 
+from __future__ import annotations
+
 import abc
-from typing import Any, Dict
+from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
+
 from adv_patch_bench.utils.types import ImageTensor
 
 
@@ -13,11 +16,11 @@ class DetectorAttackModule(nn.Module):
 
     def __init__(
         self,
-        attack_config: Dict[str, Any],
+        attack_config: dict[str, Any],
         core_model: torch.nn.Module,
         verbose: bool = False,
         **kwargs,
-    ):
+    ) -> None:
         """Initialize DetectorAttackModule.
 
         Args:
@@ -26,17 +29,21 @@ class DetectorAttackModule(nn.Module):
             verbose: Whether to log messages during attack.
         """
         super().__init__()
+        _ = attack_config, kwargs  # Unused
         self._core_model: torch.nn.Module = core_model
         self._verbose: bool = verbose
+        self._is_training: bool = False
 
     def _on_enter_attack(self, **kwargs) -> None:
         """Method called at the begining of the attack call."""
-        self.is_training = self._core_model.training
+        _ = kwargs  # Unused
+        self._is_training = self._core_model.training
         self._core_model.eval()
 
     def _on_exit_attack(self, **kwargs) -> None:
         """Method called at the end of the attack call."""
-        self._core_model.train(self.is_training)
+        _ = kwargs  # Unused
+        self._core_model.train(self._is_training)
 
     @abc.abstractmethod
     def run(self, *args, **kwargs) -> ImageTensor:
@@ -46,3 +53,7 @@ class DetectorAttackModule(nn.Module):
             Adversarial patch.
         """
         raise NotImplementedError("run() must be implemented!")
+
+    def forward(self, *args, **kwargs) -> ImageTensor:
+        """Run attack with forward."""
+        return self.run(*args, **kwargs)

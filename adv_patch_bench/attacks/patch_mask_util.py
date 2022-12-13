@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 
 from adv_patch_bench.utils.types import MaskTensor, SizeMM, SizePx
 
 
 def _gen_mask_rect(
-    patch_size_mm: Tuple[int, float, float],
+    patch_size_mm: tuple[int, float, float],
     obj_size_px: SizePx,
     obj_size_mm: SizeMM,
     shift_height_mm: float | None = None,
@@ -71,7 +69,7 @@ def _gen_mask_rect(
 
 
 def gen_patch_mask(
-    patch_size_mm: Tuple[int, float, float],
+    patch_size_mm: tuple[int, float, float],
     obj_size_px: SizePx,
     obj_size_mm: SizeMM,
     shift_height_mm: float | None = None,

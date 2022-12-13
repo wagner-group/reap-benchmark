@@ -3,10 +3,11 @@
 from abc import abstractmethod
 from typing import Any, Dict, Optional, Tuple, TypeVar, Union
 
-import adv_patch_bench.utils.image as img_util
 import numpy as np
 import pandas as pd
 import torch
+
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import util
 from adv_patch_bench.utils.types import (
     ImageTensor,

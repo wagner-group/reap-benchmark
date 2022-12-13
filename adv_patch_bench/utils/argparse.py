@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 import detectron2
 import yaml
 from detectron2.engine import default_argument_parser, default_setup
+
 from hparams import (
     DEFAULT_SYN_OBJ_DIR,
     INTERPS,
@@ -238,7 +239,7 @@ def eval_args_parser(
         "--tgt-csv-filepath",
         type=str,
         default="",
-        help="path to csv which contains target points for transform",
+        help="path to csv which contains target points for transform.",
     )
     parser.add_argument(
         "--attack-config-path",
@@ -565,7 +566,7 @@ def _verify_eval_config(config_eval: Dict[str, Any], is_detectron: bool):
     # Verify obj_class arg
     obj_class = config_eval["obj_class"]
     max_cls = NUM_CLASSES[dataset] - 1
-    if not (0 <= obj_class <= max_cls):
+    if not 0 <= obj_class <= max_cls:
         raise ValueError(
             f"Target object class {obj_class} is not between 0 and {max_cls}!"
         )
@@ -840,7 +841,7 @@ def _update_patch_size(config: Dict[str, Dict[str, Any]]) -> None:
         )
 
     patch_size = patch_size_inch.split("_")[-1].split("x")
-    if not all([s.isnumeric() for s in patch_size]):
+    if not all(s.isnumeric() for s in patch_size):
         raise ValueError(f"Invalid patch size: {patch_size_inch}!")
     patch_size_inch = [int(s) for s in patch_size]
     patch_size_mm = [_inch_to_mm(s) for s in patch_size_inch]
