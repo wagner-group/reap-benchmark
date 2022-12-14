@@ -1,5 +1,7 @@
 """Test script for Detectron2 models."""
 
+from __future__ import annotations
+
 import contextlib
 import hashlib
 import io
@@ -17,6 +19,7 @@ import torch
 import yaml
 from detectron2.data.datasets.coco import convert_to_coco_json
 from detectron2.utils.file_io import PathManager
+from pycocotools.coco import COCO
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
 from adv_patch_bench.dataloaders.detectron import custom_build, mapper
@@ -27,7 +30,6 @@ from adv_patch_bench.utils.argparse import (
 )
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import LABEL_LIST
-from pycocotools.coco import COCO
 
 log = logging.getLogger(__name__)
 formatter = logging.Formatter("[%(levelname)s] %(asctime)s: %(message)s")
@@ -154,7 +156,7 @@ def _compute_metrics(
 
     else:
 
-        log.debug(f"Using specified conf_thres of {conf_thres}...")
+        log.debug("Using specified conf_thres of %f...", conf_thres)
 
         tp_full = np.zeros((num_ious, num_classes))
         fp_full = np.zeros_like(tp_full)

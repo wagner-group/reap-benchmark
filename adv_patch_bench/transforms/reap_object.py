@@ -2,12 +2,13 @@
 
 from typing import Any, Callable, Tuple
 
-import adv_patch_bench.utils.image as img_util
 import cv2
 import kornia.geometry.transform as kornia_tf
 import numpy as np
 import pandas as pd
 import torch
+
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
 from adv_patch_bench.utils.types import (
     BatchImageTensorGeneric,
@@ -191,17 +192,17 @@ class ReapObject(render_object.RenderObject):
         adv_patch.clamp_(0, 1)
 
         # Combine patch_mask with adv_patch as alpha channel
-        alpha_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=0)
+        rgba_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=0)
         # Crop with sign_mask and patch_mask
-        alpha_patch *= self.obj_mask * patch_mask
+        rgba_patch *= self.obj_mask * patch_mask
 
         # Apply extra geometric augmentation on patch
-        alpha_patch: BatchImageTensorRGBA
-        alpha_patch, _ = self.aug_geo(alpha_patch)
-        alpha_patch = img_util.coerce_rank(alpha_patch, 4)
+        rgba_patch: BatchImageTensorRGBA
+        rgba_patch, _ = self.aug_geo(rgba_patch)
+        rgba_patch = img_util.coerce_rank(rgba_patch, 4)
 
         # Apply transform on RGBA patch
-        warped_patch: BatchImageTensorRGBA = self.transform_fn(alpha_patch)
+        warped_patch: BatchImageTensorRGBA = self.transform_fn(rgba_patch)
         warped_patch.squeeze_(0)
         warped_patch.clamp_(0, 1)
 

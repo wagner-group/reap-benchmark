@@ -36,15 +36,15 @@ INPUT:
   # MTSD paper where images smaller than 2048 are not saled up.
   # Size of the smallest side of the image during testing. Set to zero to 
   # disable resize in testing.
-  MIN_SIZE_TEST: 4000  # This will be set by args during testing
+  MIN_SIZE_TEST: 2048  # This will be set by args during testing
   # Maximum size of the side of the image during testing
-  MAX_SIZE_TEST: 4000  # This will be set by args during testing
+  MAX_SIZE_TEST: 2048  # This will be set by args during testing
 DATALOADER:
   NUM_WORKERS: 48
   SAMPLER_TRAIN: 'RepeatFactorTrainingSampler'  # EDIT: default: 'TrainingSampler'
   REPEAT_THRESHOLD: 1.0  # EDIT: default: 0
 DATASETS:
-  TRAIN: ('mtsd_train', )  # EDIT
-  TEST: ('mtsd_val', )  # EDIT
+  TRAIN: ('mtsd_no_color_train', )  # EDIT
+  TEST: ('mtsd_no_color_val', )  # EDIT
 TEST:
   EVAL_PERIOD: 2000

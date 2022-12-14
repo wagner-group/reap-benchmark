@@ -5,10 +5,11 @@ import pathlib
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from adv_patch_bench.utils.types import DetectronSample
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from tqdm import tqdm
+
+from adv_patch_bench.utils.types import DetectronSample
 from hparams import LABEL_LIST
 
 _ALLOWED_SPLITS = ("train", "test", "combined")

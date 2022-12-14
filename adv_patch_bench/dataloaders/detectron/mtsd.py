@@ -6,24 +6,26 @@ import pathlib
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from adv_patch_bench.utils.types import DetectronSample
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
+from tqdm import tqdm
+
+from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DEFAULT_PATH_MTSD_LABEL,
     LABEL_LIST,
-    PATH_SIMILAR_FILES,
+    OLD_TO_NEW_LABELS,
+    PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
     TS_COLOR_OFFSET_DICT,
 )
-from tqdm import tqdm
 
 _ALLOWED_SPLITS = ("train", "test", "val")
 
 
 def _readlines(path: str) -> List:
-    with open(path, "r") as f:
-        lines = f.readlines()
+    with open(path, "r", encoding="utf-8") as file:
+        lines = file.readlines()
     return [line.strip() for line in lines]
 
 
@@ -35,24 +37,25 @@ def get_mtsd_anno(
 ) -> Dict[str, Any]:
     """Get MTSD annotation and metadata needed for loading dataset."""
     label_path: pathlib.Path = pathlib.Path(base_path) / "annotations"
-    similarity_df_csv_path: str = PATH_SIMILAR_FILES
-    similar_files_df: pd.DataFrame = pd.read_csv(similarity_df_csv_path)
+    similarity_df_csv_path: str = PATH_DUPLICATE_FILES
+    duplicate_files_df: pd.DataFrame = pd.read_csv(similarity_df_csv_path)
 
     # Load annotation file that contains dimension and shape of each MTSD label
     label_map: pd.DataFrame = pd.read_csv(DEFAULT_PATH_MTSD_LABEL)
     # Collect mapping from original MTSD labels to new class index
     mtsd_label_to_class_index: Dict[str, int] = {}
     for idx, row in label_map.iterrows():
+        new_target = OLD_TO_NEW_LABELS.get(row["target"])
         if use_mtsd_original_labels:
             mtsd_label_to_class_index[row["sign"]] = idx
-        elif any([row["target"] in c for c in class_names]):
+        elif new_target in class_names:
             if use_color:
-                cat_idx = TS_COLOR_OFFSET_DICT[row["target"]]
-                color_list = TS_COLOR_DICT[row["target"]]
+                cat_idx = TS_COLOR_OFFSET_DICT[new_target]
+                color_list = TS_COLOR_DICT[new_target]
                 if len(color_list) > 0:
                     cat_idx += color_list.index(row["color"])
             else:
-                cat_idx = class_names.index(row["target"])
+                cat_idx = class_names.index(new_target)
             mtsd_label_to_class_index[row["sign"]] = cat_idx
 
     # Get all JSON files
@@ -63,7 +66,7 @@ def get_mtsd_anno(
     ]
 
     return {
-        "similar_files_df": similar_files_df,
+        "duplicate_files_df": duplicate_files_df,
         "mtsd_label_to_class_index": mtsd_label_to_class_index,
         "json_files": json_files,
     }
@@ -73,7 +76,7 @@ def get_mtsd_dict(
     split: str,
     data_path: str,
     json_files: Optional[List[str]] = None,
-    similar_files_df: Optional[pd.DataFrame] = None,
+    duplicate_files_df: Optional[pd.DataFrame] = None,
     mtsd_label_to_class_index: Optional[Dict[str, int]] = None,
     bg_class_id: int = 10,
     ignore_bg_class: bool = False,
@@ -86,7 +89,7 @@ def get_mtsd_dict(
         data_path: Base path to dataset. Defaults to "~/data/".
         json_files: List of paths to JSON files each of which contains original
             annotation of one image.
-        similar_files_df: DataFrame of duplicated files between MTSD and
+        duplicate_files_df: DataFrame of duplicated files between MTSD and
             Mapillary Vistas.
         mtsd_label_to_class_index: Dictionary that maps original MTSD labels to
             new class index.
@@ -108,7 +111,7 @@ def get_mtsd_dict(
 
     if (
         json_files is None
-        or similar_files_df is None
+        or duplicate_files_df is None
         or mtsd_label_to_class_index is None
     ):
         raise ValueError(
@@ -117,11 +120,12 @@ def get_mtsd_dict(
         )
 
     dpath: pathlib.Path = pathlib.Path(data_path)
-    filenames = _readlines(str(dpath / "splits" / split + ".txt"))
+    filenames = _readlines(str(dpath / "splits" / (split + ".txt")))
     filenames = set(filenames)
     dataset_dicts: List[DetectronSample] = []
+    duplicate_file_names = set(duplicate_files_df["filename"].values)
 
-    for idx, json_file in tqdm(enumerate(json_files)):
+    for idx, json_file in enumerate(tqdm(json_files)):
 
         filename: str = json_file.split("/")[-1].split(".")[0]
         # Skip samples not in this split
@@ -129,12 +133,12 @@ def get_mtsd_dict(
             continue
         jpg_filename: str = f"{filename}.jpg"
         # Skip samples that appear in Mapillary Vistas
-        if jpg_filename in similar_files_df["filename"].values:
+        if jpg_filename in duplicate_file_names:
             continue
 
         # Read JSON files
-        with open(json_file) as f:
-            anno: Dict[str, Any] = json.load(f)
+        with open(json_file, "r", encoding="utf-8") as file:
+            anno: Dict[str, Any] = json.load(file)
 
         height, width = anno["height"], anno["width"]
         record: DetectronSample = {
@@ -199,15 +203,15 @@ def register_mtsd(
     else:
         color = "no_color"
     dataset: str = f"mtsd_{color}"
-    data_path = os.path.join(base_path, "mtsd_v2_fully_annotated", color)
+    data_path = os.path.join(base_path, "mtsd_v2_fully_annotated")
 
     class_names: List[str] = LABEL_LIST[dataset]
     mtsd_anno: Dict[str, Any] = get_mtsd_anno(
-        base_path, use_color, use_mtsd_original_labels, class_names
+        data_path, use_color, use_mtsd_original_labels, class_names
     )
     bg_class_id: int = len(class_names) - 1
 
-    label_map: pd.DataFrame = mtsd_anno["label_map"]
+    label_map: pd.DataFrame = mtsd_anno["mtsd_label_to_class_index"]
     if use_mtsd_original_labels:
         thing_classes = label_map["sign"].tolist()
     else:

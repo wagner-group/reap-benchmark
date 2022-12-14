@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import detectron2
 import pandas as pd
+
 from adv_patch_bench.dataloaders import reap_util
 from adv_patch_bench.dataloaders.detectron import mapillary, mtsd, reap
 from adv_patch_bench.utils.types import DetectronSample
@@ -85,7 +86,7 @@ def register_dataset(config_eval: Dict[str, Any]) -> None:
 
     # Load annotation if specified
     anno_df: Optional[pd.DataFrame] = None
-    if config_eval["annotated_signs_only"]:
+    if config_eval.get("annotated_signs_only", False):
         anno_df = reap_util.load_annotation_df(config_eval["tgt_csv_filepath"])
 
     if base_dataset in ("reap", "synthetic"):
