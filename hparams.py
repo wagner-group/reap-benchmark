@@ -164,6 +164,7 @@ OBJ_DIM_DICT: Dict[str, Dict[str, Any]] = {
 }
 OBJ_DIM_DICT["reap"] = OBJ_DIM_DICT["mapillary_no_color"]
 OBJ_DIM_DICT["synthetic"] = OBJ_DIM_DICT["mapillary_no_color"]
+OBJ_DIM_DICT["mtsd_no_color"] = OBJ_DIM_DICT["mapillary_no_color"]
 
 # =========================================================================== #
 

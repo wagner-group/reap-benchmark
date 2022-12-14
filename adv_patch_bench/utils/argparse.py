@@ -31,10 +31,11 @@ _TRANSFORM_PARAMS: List[str] = [
 ]
 
 
-def eval_args_parser(
+def reap_args_parser(
     is_detectron: bool,
     root: Optional[str] = None,
     is_gen_patch: bool = False,
+    is_train: bool = False,
 ) -> Dict[str, Any]:
     """Setup argparse for evaluation.
 
@@ -42,7 +43,7 @@ def eval_args_parser(
 
     Args:
         is_detectron: Whether we are evaluating dectectron model.
-        root: Path to root or base directory. Defaults to None.
+        root: Path to root or base directory. Defaults to current dir (None).
 
     Returns:
         Config dict containing two dicts, one for eval and the other for attack.
@@ -71,7 +72,22 @@ def eval_args_parser(
     )
     parser.add_argument("--single-image", action="store_true")
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--dataset", type=str, required=False)
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=False,
+        help="Specify dataset name for evaluation or training.",
+    )
+    parser.add_argument(
+        "--train-dataset",
+        type=str,
+        required=False,
+        default=None,
+        help=(
+            "Optionally specify dataset name for training if different from "
+            "dataset."
+        ),
+    )
     parser.add_argument(
         "--eval-mode",
         type=str,
@@ -90,12 +106,6 @@ def eval_args_parser(
             '"bicubic".'
         ),
     )
-    # TODO: DEPRECATE this for YOLO
-    # parser.add_argument(
-    #     "--synthetic",
-    #     action="store_true",
-    #     help="evaluate with pasted synthetic signs",
-    # )
     parser.add_argument(
         "--name", type=str, default=None, help="save to project/name"
     )
@@ -253,15 +263,6 @@ def eval_args_parser(
         default="",
         help="path to a text file containing image filenames",
     )
-    # TODO: This can be removed? This is specified through reap-transform-mode
-    # parser.add_argument(
-    #     "--no-patch-transform",
-    #     action="store_true",
-    #     help=(
-    #         "If True, do not apply patch to signs using 3D-transform. "
-    #         "Patch will directly face camera."
-    #     ),
-    # )
     parser.add_argument(
         "--reap-transform-mode",
         type=str,
@@ -273,13 +274,12 @@ def eval_args_parser(
         ),
     )
     parser.add_argument(
-        "-a",
-        "--attack-options",
+        "--options",
         type=str,
         default="",
         help=(
             "Custom attack options; will overwrite config file. Use '.' to "
-            'impose hierarchy and space to separate options, e.g., -a "'
+            'impose hierarchy and space to separate options, e.g., -o "'
             'common.patch_dim=64 rp2.num_steps=1000".'
         ),
     )
@@ -477,21 +477,21 @@ def eval_args_parser(
 
     if args.exp_config_file:
         # Load config from YAML file
-        with open(args.exp_config_file, "r") as f:
-            config = yaml.safe_load(f)
+        with open(args.exp_config_file, "r", encoding="utf-8") as file:
+            config = yaml.safe_load(file)
         # These configs are only set as default so command line args overwrite
         # config file.
-        parser.set_defaults(**config["eval"])
+        parser.set_defaults(**config["base"])
         args = parser.parse_args()
         attack_config = config["attack"]
         args = vars(args)
-        config = {"eval": args, "attack": attack_config}
+        config = {"base": args, "attack": attack_config}
     else:
         args = vars(args)
-        config = {"eval": args, "attack": {}}
+        config = {"base": args, "attack": {}}
 
     # Update attack config through command line args
-    for opt in args["attack_options"].split():
+    for opt in args["options"].split():
         tokens: List[str] = opt.split("=")
         if len(tokens) != 2:
             raise ValueError(
@@ -499,7 +499,7 @@ def eval_args_parser(
                 f"found {opt}."
             )
         params: List[str] = tokens[0].split(".")
-        parent: Dict[str, Any] = config["attack"]
+        parent: Dict[str, Any] = config
         for i, param in enumerate(params):
             if param not in parent:
                 raise ValueError(
@@ -515,9 +515,9 @@ def eval_args_parser(
                 val = tokens[1]
             parent[param] = val
 
-    assert "eval" in config and "attack" in config
-    _update_dataset_name(config)
-    _verify_eval_config(config["eval"], is_detectron)
+    assert "base" in config and "attack" in config
+    _update_dataset_name(config, is_train)
+    _verify_eval_config(config["base"], is_detectron)
 
     # Update config and fill with auto-generated params
     _update_img_size(config)
@@ -532,29 +532,29 @@ def eval_args_parser(
     return config
 
 
-def _verify_eval_config(config_eval: Dict[str, Any], is_detectron: bool):
+def _verify_eval_config(config_base: Dict[str, Any], is_detectron: bool):
     """Some manual verifications of config.
 
     Args:
-        config_eval: Eval config dict.
+        config_base: Eval config dict.
         is_detectron: Whether detectron is used.
     """
     allowed_interp = INTERPS
     allowed_attack_types = ("none", "load", "per-sign", "random", "debug")
     allowed_yolo_models = ("yolov5", "yolor")
     allowed_datasets = ("reap", "synthetic", "mtsd", "mapillary")
-    dataset: str = config_eval["dataset"]
+    dataset: str = config_base["dataset"]
 
-    if config_eval["interp"] not in allowed_interp:
+    if config_base["interp"] not in allowed_interp:
         raise ValueError(
             f"interp must be in {allowed_interp}, but it is "
-            f'{config_eval["interp"]}!'
+            f'{config_base["interp"]}!'
         )
 
-    if config_eval["attack_type"] not in allowed_attack_types:
+    if config_base["attack_type"] not in allowed_attack_types:
         raise ValueError(
             f"attack_type must be in {allowed_attack_types}, but it is "
-            f'{config_eval["attack_type"]}!'
+            f'{config_base["attack_type"]}!'
         )
 
     # Verify dataset
@@ -564,7 +564,7 @@ def _verify_eval_config(config_eval: Dict[str, Any], is_detectron: bool):
         )
 
     # Verify obj_class arg
-    obj_class = config_eval["obj_class"]
+    obj_class = config_base["obj_class"]
     max_cls = NUM_CLASSES[dataset] - 1
     if not 0 <= obj_class <= max_cls:
         raise ValueError(
@@ -572,44 +572,60 @@ def _verify_eval_config(config_eval: Dict[str, Any], is_detectron: bool):
         )
 
     if not is_detectron:
-        if config_eval["model_name"] not in allowed_yolo_models:
+        if config_base["model_name"] not in allowed_yolo_models:
             raise ValueError(
                 f"model_name (YOLO) must be in {allowed_yolo_models}, but it "
-                f'is {config_eval["model_name"]}!'
+                f'is {config_base["model_name"]}!'
             )
 
 
-def _update_dataset_name(config: Dict[str, Dict[str, Any]]) -> List[str]:
-    """Update dataset and dataset_split in config_eval."""
-    config_eval: Dict[str, Any] = config["eval"]
-    dataset: str = config_eval["dataset"]
+def _update_dataset_name(
+    config: Dict[str, Dict[str, Any]], is_train: bool = False
+) -> List[str]:
+    """Update dataset and dataset_split in config_base.
+
+    Expect dataset to have 1-3 tokens separated by "-" (hyphen). The first token
+    must be base name (e.g., "reap", "mtsd", etc.). The other two can be split
+    (e.g., "train", "test", or "val") or label indication (called "color" for
+    now). color is either "color" or "no_color" (default) and is only applicable
+    to mtsd and mapillary.
+    """
+    config_base: Dict[str, Any] = config["base"]
+    dataset: str = config_base["dataset"]
     tokens: List[str] = dataset.split("-")
     if dataset in ("reap", "synthetic"):
-        config_eval["use_color"] = False
-        config_eval["synthetic"] = dataset == "synthetic"
+        config_base["use_color"] = False
+        config_base["synthetic"] = dataset == "synthetic"
         # REAP benchmark only uses annotated signs. Synthetic data use both.
-        config_eval["annotated_signs_only"] = not config_eval["synthetic"]
+        config_base["annotated_signs_only"] = not config_base["synthetic"]
         split = "combined"
     else:
-        assert len(tokens) in (2, 3), f"Invalid dataset: {dataset}!"
-        if len(tokens) == 2:
-            base_dataset, split = tokens
-            color = "no_color"
-        else:
-            base_dataset, color, split = tokens
-        dataset: str = f"{base_dataset}_{color}"
-        config_eval["synthetic"] = False
-        config_eval["use_color"] = "color" == color
-    config_eval["dataset"] = dataset
-    config_eval["dataset_split"] = split
+        assert 1 <= len(tokens) <= 3, f"Invalid dataset: {dataset}!"
+        dataset = tokens[0]
+        split = "val" if is_train else "test"
+        color = "no_color"
+        for token in tokens[1:]:
+            if "color" in token:
+                color = token
+            else:
+                split = token
+        if dataset in ("mapillary", "mtsd"):
+            dataset = f"{dataset}_{color}"
+        config_base["synthetic"] = False
+        config_base["use_color"] = "color" == color
+    config_base["dataset"] = dataset
+    config_base["dataset_split"] = split
+
+    if config_base["train_dataset"] is None:
+        config_base["train_dataset"] = f"{dataset}_train"
 
 
 def _update_split_file(
     config: Dict[str, Dict[str, Any]], is_gen_patch: bool
 ) -> None:
-    config_eval = config["eval"]
-    split_file_path: Optional[str] = config_eval["split_file_path"]
-    dataset: str = config_eval["dataset"]
+    config_base = config["base"]
+    split_file_path: Optional[str] = config_base["split_file_path"]
+    dataset: str = config_base["dataset"]
     num_bg: int = config["attack"]["common"]["num_bg"]
     if split_file_path is None:
         print("split_file_path is not specified.")
@@ -629,12 +645,12 @@ def _update_split_file(
 
     # Try to find split file in given dir
     split: str = "attack" if is_gen_patch else "test"
-    class_name: str = LABEL_LIST[dataset][config_eval["obj_class"]]
+    class_name: str = LABEL_LIST[dataset][config_base["obj_class"]]
     default_filename: str = f"{class_name}_{split}.txt"
     split_file_path: pathlib.Path = split_file_dir / default_filename
     if split_file_path.is_file():
         print(f"Using split_file_path: {split_file_path}.")
-        config_eval["split_file_path"] = split_file_path
+        config_base["split_file_path"] = split_file_path
         return
 
     # Try to automatically generate correct path to split file
@@ -649,7 +665,7 @@ def _update_split_file(
 
     split_file_path = str(split_file_path)
     print(f"Using auto-generated split_file_path: {split_file_path}.")
-    config_eval["split_file_path"] = split_file_path
+    config_base["split_file_path"] = split_file_path
 
 
 def _update_syn_obj_path(config: Dict[str, Dict[str, Any]]) -> None:
@@ -658,25 +674,25 @@ def _update_syn_obj_path(config: Dict[str, Dict[str, Any]]) -> None:
     Args:
         config: Config dict.
     """
-    config_eval = config["eval"]
-    if config_eval["syn_obj_path"] is not None:
+    config_base = config["base"]
+    if config_base["syn_obj_path"] is not None:
         return
-    dataset = config_eval["dataset"]
-    obj_class = config_eval["obj_class"]
+    dataset = config_base["dataset"]
+    obj_class = config_base["obj_class"]
     class_name = LABEL_LIST[dataset][obj_class]
-    config_eval["syn_obj_path"] = os.path.join(
+    config_base["syn_obj_path"] = os.path.join(
         DEFAULT_SYN_OBJ_DIR, dataset, f"{class_name}.png"
     )
 
 
 def _update_img_size(config: Dict[str, Dict[str, Any]]) -> None:
-    config_eval = config["eval"]
-    img_size = config_eval["padded_imgsz"]
-    img_size = tuple([int(s) for s in img_size.split(",")])
-    config_eval["img_size"] = img_size
-    config_eval["padded_imgsz"] = img_size
+    config_base = config["base"]
+    img_size = config_base["padded_imgsz"]
+    img_size = tuple(int(s) for s in img_size.split(","))
+    config_base["img_size"] = img_size
+    config_base["padded_imgsz"] = img_size
     # Verify given image size
-    if len(img_size) != 2 or not all([isinstance(s, int) for s in img_size]):
+    if len(img_size) != 2 or not all(isinstance(s, int) for s in img_size):
         raise ValueError(f"padded_imgsz has wrong format: {img_size}")
 
 
@@ -689,31 +705,31 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
     Raises:
         ValueError: syn_obj_width_px is not int.
     """
-    config_eval = config["eval"]
+    config_base = config["base"]
     # Get real object size of that class
-    dataset = config_eval["dataset"]
+    dataset = config_base["dataset"]
     obj_dim_dict = OBJ_DIM_DICT[dataset]
-    obj_class = config_eval["obj_class"]
+    obj_class = config_base["obj_class"]
     hw_ratio = obj_dim_dict["hw_ratio"][obj_class]
-    config_eval["obj_size_mm"] = obj_dim_dict["size_mm"][obj_class]
+    config_base["obj_size_mm"] = obj_dim_dict["size_mm"][obj_class]
 
-    if not config_eval["synthetic"]:
+    if not config_base["synthetic"]:
         # For attack using real images, we still need to specify obj_size_px to
         # come up with the correctly-sized mask so obj_size is set to patch_dim
         # from attack config.
         if "attack" in config:
             patch_dim = config["attack"]["common"]["patch_dim"]
-            config_eval["obj_size_px"] = (
+            config_base["obj_size_px"] = (
                 round(patch_dim * hw_ratio),
                 patch_dim,
             )
         return
 
-    obj_width_px = config_eval["syn_obj_width_px"]
+    obj_width_px = config_base["syn_obj_width_px"]
     if not isinstance(obj_width_px, int):
         raise ValueError(f"syn_obj_width_px must be int ({obj_width_px})!")
 
-    config_eval["obj_size_px"] = (
+    config_base["obj_size_px"] = (
         round(obj_width_px * hw_ratio),
         obj_width_px,
     )
@@ -730,20 +746,20 @@ def _update_save_dir(
     Raises:
         ValueError: Invalid obj_class.
     """
-    config_eval = config["eval"]
+    config_base = config["base"]
     config_atk = config["attack"]["common"]
-    synthetic = config_eval["synthetic"]
+    synthetic = config_base["synthetic"]
 
     # Automatically generate experiment name
     token_list: List[str] = []
-    token_list.append(config_eval["dataset"])
-    token_list.append(config_eval["model_name"])
-    token_list.append(config_eval["attack_type"])
+    token_list.append(config_base["dataset"])
+    token_list.append(config_base["model_name"])
+    token_list.append(config_base["attack_type"])
 
-    if config_eval["attack_type"] != "none":
-        token_list.append(config_eval["patch_size_inch"])
+    if config_base["attack_type"] != "none":
+        token_list.append(config_base["patch_size_inch"])
 
-    if config_eval["attack_type"] in ("load", "per-sign"):
+    if config_base["attack_type"] in ("load", "per-sign"):
 
         # Gather dataset-specific transform params
         if synthetic:
@@ -806,18 +822,18 @@ def _update_save_dir(
 
     # Append custom name at the end
     exp_name = "-".join(token_list)
-    if config_eval["name"] is not None:
-        name_from_cfg: str = str(config_eval["name"])
+    if config_base["name"] is not None:
+        name_from_cfg: str = str(config_base["name"])
         if name_from_cfg.startswith("_"):
             exp_name += name_from_cfg
         else:
             exp_name = name_from_cfg
-    config_eval["name"] = exp_name
+    config_base["name"] = exp_name
 
-    class_name = LABEL_LIST[config_eval["dataset"]][config_eval["obj_class"]]
-    save_dir = os.path.join(config_eval["base_dir"], exp_name, class_name)
+    class_name = LABEL_LIST[config_base["dataset"]][config_base["obj_class"]]
+    save_dir = os.path.join(config_base["base_dir"], exp_name, class_name)
     os.makedirs(save_dir, exist_ok=True)
-    config_eval["save_dir"] = save_dir
+    config_base["save_dir"] = save_dir
 
 
 def _inch_to_mm(length_in_inch: Union[int, float]) -> float:
@@ -825,8 +841,8 @@ def _inch_to_mm(length_in_inch: Union[int, float]) -> float:
 
 
 def _update_patch_size(config: Dict[str, Dict[str, Any]]) -> None:
-    config_eval = config["eval"]
-    patch_size_inch: str = config_eval["patch_size_inch"]
+    config_base = config["base"]
+    patch_size_inch: str = config_base["patch_size_inch"]
 
     # patch_size has format <NUM_PATCH>_<HEIGHT>x<WIDTH>
     num_patches: int
@@ -845,69 +861,71 @@ def _update_patch_size(config: Dict[str, Dict[str, Any]]) -> None:
         raise ValueError(f"Invalid patch size: {patch_size_inch}!")
     patch_size_inch = [int(s) for s in patch_size]
     patch_size_mm = [_inch_to_mm(s) for s in patch_size_inch]
-    config_eval["patch_size_mm"] = (num_patches,) + tuple(patch_size_mm)
+    config_base["patch_size_mm"] = (num_patches,) + tuple(patch_size_mm)
 
 
 def _update_attack_transforms(config: Dict[str, Dict[str, Any]]) -> None:
-    config_eval: Dict[str, Any] = config["eval"]
+    config_base: Dict[str, Any] = config["base"]
     config_atk: Dict[str, Any] = config["attack"]["common"]
     for param in _TRANSFORM_PARAMS:
         if param not in config_atk or config_atk[param] is None:
-            config_atk[param] = config_eval[param]
+            config_atk[param] = config_base[param]
 
 
 def _update_result_dir(config: Dict[str, Dict[str, Any]]) -> None:
-    config_eval = config["eval"]
-    result_dir = config_eval["attack_type"] + (
-        "_syn" if config_eval["synthetic"] else ""
+    config_base = config["base"]
+    result_dir = config_base["attack_type"] + (
+        "_syn" if config_base["synthetic"] else ""
     )
-    result_dir = os.path.join(config_eval["save_dir"], result_dir)
+    result_dir = os.path.join(config_base["save_dir"], result_dir)
     os.makedirs(result_dir, exist_ok=True)
-    config_eval["result_dir"] = result_dir
+    config_base["result_dir"] = result_dir
 
 
-def setup_detectron_test_args(
+def setup_detectron_cfg(
     config: Dict[str, Dict[str, Any]]
 ) -> detectron2.config.CfgNode:
     """Create configs and perform basic setups."""
-    config_eval = config["eval"]
-    dataset: str = config_eval["dataset"]
-    split: str = config_eval["dataset_split"]
+    config_base = config["base"]
+    dataset: str = config_base["dataset"]
+    split: str = config_base["dataset_split"]
 
     # Set default path to load adversarial patch
-    if not config_eval["adv_patch_path"]:
-        config_eval["adv_patch_path"] = os.path.join(
-            config_eval["save_dir"], "adv_patch.pkl"
+    if not config_base["adv_patch_path"]:
+        config_base["adv_patch_path"] = os.path.join(
+            config_base["save_dir"], "adv_patch.pkl"
         )
 
     cfg = detectron2.config.get_cfg()
-    cfg.merge_from_file(config_eval["config_file"])
-    cfg.merge_from_list(config_eval["opts"])
+    cfg.merge_from_file(config_base["config_file"])
+    cfg.merge_from_list(config_base["opts"])
 
     # Copy dataset from args
     cfg.DATASETS.TEST = (f"{dataset}_{split}",)
-    cfg.SOLVER.IMS_PER_BATCH = 1
+    cfg.DATASETS.TRAIN = (config_base["train_dataset"],)
+    cfg.SOLVER.IMS_PER_BATCH = config_base["batch_size"]
     cfg.INPUT.CROP.ENABLED = False  # Turn off augmentation for testing
-    cfg.DATALOADER.NUM_WORKERS = config_eval["workers"]
-    cfg.eval_mode = config_eval["eval_mode"]
-    cfg.obj_class = config_eval["obj_class"]
+    cfg.DATALOADER.NUM_WORKERS = config_base["workers"]
+    cfg.eval_mode = config_base["eval_mode"]
+    cfg.obj_class = config_base["obj_class"]
     # Assume that "other" class is always last
     cfg.other_catId = NUM_CLASSES[dataset] - 1
-    config_eval["other_sign_class"] = cfg.other_catId
-    cfg.conf_thres = config_eval["conf_thres"]
+    config_base["other_sign_class"] = cfg.other_catId
+    cfg.conf_thres = config_base["conf_thres"]
 
     # Set detectron image size from argument
     # Let img_size be (1536, 2048). This tries to set the smaller side of the
     # image to 2048, but the longer side cannot exceed 2048. The result of this
     # is that every image has its longer side (could be width or height) 2048.
-    cfg.INPUT.MAX_SIZE_TEST = max(config_eval["img_size"])
+    cfg.INPUT.MAX_SIZE_TEST = max(config_base["img_size"])
     cfg.INPUT.MIN_SIZE_TEST = cfg.INPUT.MAX_SIZE_TEST
 
     # Model config
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = NUM_CLASSES[dataset]
-    cfg.OUTPUT_DIR = config_eval["base_dir"]
-    weight_path = config_eval["weights"]
-    if isinstance(config_eval["weights"], list):
+    cfg.OUTPUT_DIR = config_base["base_dir"]
+    cfg.SEED = config_base["seed"]
+    weight_path = config_base["weights"]
+    if isinstance(config_base["weights"], list):
         weight_path = weight_path[0]
     assert isinstance(
         weight_path, str
@@ -917,8 +935,8 @@ def setup_detectron_test_args(
     cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around
     detectron2.config.set_global_cfg(cfg)
-    config_eval.pop("config_file")  # Remove to avoid logging
-    default_setup(cfg, argparse.Namespace(**config_eval))
+    config_base.pop("config_file")  # Remove to avoid logging
+    default_setup(cfg, argparse.Namespace(**config_base))
     return cfg
 
 
@@ -931,10 +949,11 @@ def setup_yolo_test_args(config, other_sign_class):
         config: Config dict.
         other_sign_class: Class of "other" or background object.
     """
-    config_eval = config["eval"]
+    _ = other_sign_class  # Unused
+    config_base = config["base"]
 
     # Set YOLO data yaml file
-    config_eval["data"] = config_eval["dataset"] + ".yaml"
+    config_base["data"] = config_base["dataset"] + ".yaml"
 
     # Set to default value. This is different from conf_thres in detectron
     # args.conf_thres = 0.001

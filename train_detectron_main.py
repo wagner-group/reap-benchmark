@@ -6,20 +6,15 @@ Code is adapted from train_net.py.
 import logging
 import os
 from collections import OrderedDict
+from typing import Any
 
 import torch
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
-from detectron2.config import get_cfg
 from detectron2.data import (
     build_detection_test_loader,
     build_detection_train_loader,
 )
-from detectron2.engine import (
-    default_argument_parser,
-    default_setup,
-    default_writers,
-    launch,
-)
+from detectron2.engine import default_writers, launch
 from detectron2.evaluation import (
     COCOEvaluator,
     inference_on_dataset,
@@ -32,10 +27,12 @@ from detectron2.utils.events import EventStorage
 from torch.nn.parallel import DistributedDataParallel
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
+from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 
 logger = logging.getLogger("detectron2")
 
 
+# Need cfg/config for launch. pylint: disable=redefined-outer-name
 def _get_evaluator(cfg, dataset_name, output_folder=None):
     """Create evaluator."""
     if output_folder is None:
@@ -43,7 +40,8 @@ def _get_evaluator(cfg, dataset_name, output_folder=None):
     return COCOEvaluator(dataset_name, output_dir=output_folder)
 
 
-def do_test(cfg, model):
+# Need cfg/config for launch. pylint: disable=redefined-outer-name
+def do_test(cfg, config, model):
     results = OrderedDict()
     for dataset_name in cfg.DATASETS.TEST:
         # pylint: disable=missing-kwoa,too-many-function-args
@@ -65,7 +63,9 @@ def do_test(cfg, model):
     return results
 
 
-def do_train(cfg, model, resume=False):
+# Need cfg/config for launch. pylint: disable=redefined-outer-name
+def do_train(cfg, config, model):
+    resume: bool = config["base"]["resume"]
     model.train()
     optimizer = build_optimizer(cfg, model)
     scheduler = build_lr_scheduler(cfg, optimizer)
@@ -90,14 +90,6 @@ def do_train(cfg, model, resume=False):
         if comm.is_main_process()
         else []
     )
-
-    # TODO:
-    config_eval = {
-        "dataset": "mtsd",
-        "data_dir": "~/data/",
-        "use_color": False,
-    }
-    data_util.register_dataset(config_eval)
 
     # compared to "train_net.py", we do not support accurate timing and
     # precise BN here, because they are not trivial to implement in a small
@@ -135,7 +127,7 @@ def do_train(cfg, model, resume=False):
                 and (iteration + 1) % cfg.TEST.EVAL_PERIOD == 0
                 and iteration != max_iter - 1
             ):
-                do_test(cfg, model)
+                do_test(cfg, config, model)
                 # Compared to "train_net.py", the test results are not dumped to EventStorage
                 comm.synchronize()
 
@@ -147,33 +139,20 @@ def do_train(cfg, model, resume=False):
             periodic_checkpointer.step(iteration)
 
 
-# Need args for launch. pylint: disable=redefined-outer-name
-def setup(args):
-    """Create configs and perform basic setups."""
-    cfg = get_cfg()
-    cfg.merge_from_file(args.config_file)
-    cfg.merge_from_list(args.opts)
-
-    # TODO:
-
-    cfg.freeze()
-    default_setup(
-        cfg, args
-    )  # if you don't like any of the default setup, write your own setup code
-    return cfg
-
-
-# Need args for launch. pylint: disable=redefined-outer-name
-def main(args):
-    cfg = setup(args)
+# Need cfg/config for launch. pylint: disable=redefined-outer-name
+def main(config):
+    """Main function."""
+    cfg = setup_detectron_cfg(config)
+    # Register data. This has to be called by every process.
+    data_util.register_dataset(config["base"])
 
     model = build_model(cfg)
     logger.info("Model:\n%s", model)
-    if args.eval_only:
+    if config["base"]["eval_only"]:
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-            cfg.MODEL.WEIGHTS, resume=args.resume
+            cfg.MODEL.WEIGHTS, resume=config["base"]["resume"]
         )
-        return do_test(cfg, model)
+        return do_test(cfg, config, model)
 
     distributed = comm.get_world_size() > 1
     if distributed:
@@ -181,20 +160,19 @@ def main(args):
             model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
         )
 
-    do_train(cfg, model, resume=args.resume)
-    return do_test(cfg, model)
+    do_train(cfg, config, model)
+    return do_test(cfg, config, model)
 
 
 if __name__ == "__main__":
-    parser = default_argument_parser()
-
-    args = parser.parse_args()
-    print("Command Line Args:", args)
+    config: dict[str, dict[str, Any]] = reap_args_parser(
+        True, is_gen_patch=False, is_train=True
+    )
     launch(
         main,
-        args.num_gpus,
-        num_machines=args.num_machines,
-        machine_rank=args.machine_rank,
-        dist_url=args.dist_url,
-        args=(args,),
+        config["base"]["num_gpus"],
+        num_machines=config["base"]["num_machines"],
+        machine_rank=config["base"]["machine_rank"],
+        dist_url=config["base"]["dist_url"],
+        args=(config,),
     )

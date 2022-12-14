@@ -2,7 +2,7 @@
 # See argparse.py for how this file is loaded, automatically set params, and
 # detailed descriptions of params.
 
-eval:
+base:
   seed: 0
   num_gpus: 1  # Number of GPUs to use
   workers: 8  # Number of CPU workers
@@ -10,8 +10,10 @@ eval:
   base_dir: './detectron_output/'
   data_dir: '~/data/'
   dataset: 'reap'  # dataset name: 'reap', 'synthetic', 'mapillary-no_color-SPLIT', 'mtsd-SPLIT'
+  train_dataset: null
   # Sample dimension (height, width); comma-separated
   padded_imgsz: '1536,2048'  # '1536,2048'
+  batch_size: 1
   # Path to annotation file
   tgt_csv_filepath: 'reap_annotations.csv'
   # Custom experiment name (null for auto-generated)

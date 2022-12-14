@@ -71,8 +71,8 @@ def get_mapillary_dict(
         if anno_df is not None:
             img_df = anno_df[anno_df["filename"] == jpg_filename]
 
-        with open(label_file) as f:
-            labels: List[str] = f.readlines()
+        with open(label_file, "r", encoding="utf-8") as file:
+            labels: List[str] = file.readlines()
             labels = [a.strip() for a in labels]
 
         width: float = float(labels[0].split(",")[5])

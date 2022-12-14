@@ -329,11 +329,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    config: dict[str, dict[str, Any]] = args_util.eval_args_parser(
+    config: dict[str, dict[str, Any]] = args_util.reap_args_parser(
         True, is_gen_patch=True
     )
     # Verify some args
-    cfg = args_util.setup_detectron_test_args(config)
+    cfg = args_util.setup_detectron_cfg(config)
     config_eval: dict[str, Any] = config["eval"]
     seed: int = config_eval["seed"]
     cudnn.benchmark = True

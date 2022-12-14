@@ -4,10 +4,10 @@ import os
 from typing import List, Optional
 
 import pandas as pd
-from adv_patch_bench.dataloaders.detectron import mapillary
-from adv_patch_bench.utils.types import DetectronSample
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
+from adv_patch_bench.dataloaders.detectron import mapillary
+from adv_patch_bench.utils.types import DetectronSample
 from hparams import LABEL_LIST
 
 
