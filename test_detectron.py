@@ -93,8 +93,12 @@ def _hash_dict(config_dict: Dict[str, Any]) -> str:
     return _hash(dict_str)
 
 
-def _normalize_dict(d: Dict[str, Any], sep: str = ".") -> Dict[str, Any]:
-    [flat_dict] = pd.json_normalize(d, sep=sep).to_dict(orient="records")
+def _normalize_dict(
+    orig_dict: Dict[str, Any], sep: str = "."
+) -> Dict[str, Any]:
+    [flat_dict] = pd.json_normalize(orig_dict, sep=sep).to_dict(
+        orient="records"
+    )
     flat_dict = {key: flat_dict[key] for key in sorted(flat_dict.keys())}
     return flat_dict
 
@@ -150,12 +154,12 @@ def _compute_metrics(
         fp: np.ndarray = fp_full[iou_idx, :, max_f1_idx]
         conf_thres = scores_thres[max_f1_idx]
         log.debug(
-            f"max_f1_idx: {max_f1_idx}, max_f1: {max_f1:.4f}, conf_thres: "
-            f"{conf_thres:.3f}."
+            "max_f1_idx: %d, max_f1: %.4f, conf_thres: %.3f.",
+            max_f1_idx,
+            max_f1,
+            conf_thres,
         )
-
     else:
-
         log.debug("Using specified conf_thres of %f...", conf_thres)
 
         tp_full = np.zeros((num_ious, num_classes))
@@ -178,20 +182,17 @@ def _compute_metrics(
     # Compute combined metrics, ignoring class
     recall_cmb = tp.sum() / (num_gts_per_class.sum() + eps)
 
-    log.debug(f"num_gts_per_class: {num_gts_per_class}")
-    log.debug(f"tp: {tp}")
-    log.debug(f"fp: {fp}")
-    log.debug(f"precision: {pr}")
-    log.debug(f"recall: {rc}")
-    log.debug(f"recall_cmb: {recall_cmb}")
+    log.debug("num_gts_per_class: %s", str(num_gts_per_class))
+    log.debug("tp: %s", str(tp))
+    log.debug("fp: %s", str(fp))
+    log.debug("precision: %s", str(pr))
+    log.debug("recall: %s", str(rc))
+    log.debug("recall_cmb: %s", str(recall_cmb))
 
     return tp, fp, conf_thres
 
 
-def _dump_results(
-    results: Dict[str, Any],
-    config_eval: Dict[str, Any],
-) -> None:
+def _dump_results(results: Dict[str, Any]) -> None:
     """Dump result dict to pickle file.
 
     Use hash of eval and attack configs for naming so only one result is saved
@@ -226,13 +227,8 @@ def _dump_results(
         pickle.dump(results, f)
 
 
-def main(config: Dict[str, Dict[str, Any]]):
-    """Main function.
-
-    Args:
-        config: Config dict for both eval and attack.
-    """
-    config_eval: Dict[str, Any] = config["eval"]
+def main() -> None:
+    """Main function."""
     dataset: str = config_eval["dataset"]
     attack_config_path: str = config_eval["attack_config_path"]
     split_file_path: str = config_eval["split_file_path"]
@@ -240,8 +236,8 @@ def main(config: Dict[str, Dict[str, Any]]):
 
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):
-        log.info(f"Loading saved attack config from {attack_config_path}...")
-        with open(attack_config_path) as f:
+        log.info("Loading saved attack config from %s...", attack_config_path)
+        with open(attack_config_path, "r", encoding="utf-8") as f:
             # pylint: disable=unexpected-keyword-arg
             config_attack = yaml.safe_load(f, Loader=yaml.FullLoader)
     else:
@@ -257,8 +253,8 @@ def main(config: Dict[str, Dict[str, Any]]):
     )
     split_file_names: Optional[List[str]] = None
     if split_file_path is not None:
-        print(f"Loading file names from {split_file_path}...")
-        with open(split_file_path, "r") as f:
+        log.info("Loading file names from %s...", split_file_path)
+        with open(split_file_path, "r", encoding="utf-8") as f:
             split_file_names = set(f.read().splitlines())
 
     # Filter only images with desired class when evaluating on REAP
@@ -291,7 +287,7 @@ def main(config: Dict[str, Dict[str, Any]]):
 
     eval_cfg = _normalize_dict(config_eval)
     results: Dict[str, Any] = {**metrics, **eval_cfg, **config_attack}
-    _dump_results(results, config_eval)
+    _dump_results(results)
 
     # Logging results
     metrics: Dict[str, Any] = results["bbox"]
@@ -316,9 +312,12 @@ def main(config: Dict[str, Dict[str, Any]]):
         metrics["syn_tpr"] = tp / total_num_patches
         metrics["syn_fnr"] = fn / total_num_patches
         log.info(
-            f'[Syn] Total: {metrics["syn_total"]:4d}\n'
-            f'      TP: {metrics["syn_tp"]:4d} ({metrics["syn_tpr"]:.4f})\n'
-            f'      FN: {metrics["syn_fn"]:4d} ({metrics["syn_fnr"]:.4f})\n'
+            "[Syn] Total: %4d\nTP: %4d (%.4f)\nFN: %4d (%.4f)\n",
+            metrics["syn_total"],
+            metrics["syn_tp"],
+            metrics["syn_tpr"],
+            metrics["syn_fn"],
+            metrics["syn_fnr"],
         )
     else:
         num_gts_per_class = metrics["num_gts_per_class"]
@@ -333,26 +332,26 @@ def main(config: Dict[str, Dict[str, Any]]):
             # Update with new conf_thres
             metrics["conf_thres"] = conf_thres
 
-        for k, v in metrics.items():
-            if "syn" in k or not isinstance(v, (int, float, str, bool)):
+        for key, value in metrics.items():
+            if "syn" in key or not isinstance(value, (int, float, str, bool)):
                 continue
-            log.info(f"{k}: {v}")
+            log.info("%s: %s", key, str(value))
 
         log.info("          tp   fp   num_gt")
         tp_all = 0
         fp_all = 0
         total = 0
-        for i, (t, f, n) in enumerate(zip(tp, fp, num_gts_per_class)):
-            log.info(f"Class {i:2d}: {int(t):4d} {int(f):4d} {int(n):4d}")
+        for i, (t, f, num_gt) in enumerate(zip(tp, fp, num_gts_per_class)):
+            log.info("Class %2d: %4d %4d %4d", i, int(t), int(f), int(num_gt))
             metrics[f"TP-{class_names[i]}"] = t
             metrics[f"FP-{class_names[i]}"] = f
             tp_all += t
             fp_all += f
-            total += n
+            total += num_gt
         metrics["TPR-all"] = tp_all / total
         metrics["FPR-all"] = fp_all / total
-        log.info(f'Total num patches: {metrics["total_num_patches"]}')
-        _dump_results(results, config_eval)
+        log.info("Total num patches: %d", metrics["total_num_patches"])
+        _dump_results(results)
 
 
 if __name__ == "__main__":
@@ -387,4 +386,4 @@ if __name__ == "__main__":
     # Register Detectron2 dataset
     data_util.register_dataset(config_eval)
 
-    main(config)
+    main()

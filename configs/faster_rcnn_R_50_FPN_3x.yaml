@@ -21,12 +21,14 @@ SOLVER:
   BASE_LR: 0.01  # EDIT
   STEPS: (50000, 70000, 90000)  # EDIT
   MAX_ITER: 100000  # EDIT
-  IMS_PER_BATCH: 32
+  IMS_PER_BATCH: 16
 INPUT:
   RANDOM_FLIP: 'none'  # EDIT: traffic sign can be flipped?. Option: 'none' (orig), 'horizontal' (shape)
   # EDIT: follow MTSD paper: no resizing during training but crop to (1000, 1000)
-  MIN_SIZE_TRAIN: (0, )  # TODO: does this disables resizing? If not working, see https://github.com/facebookresearch/detectron2/issues/2275
-  MAX_SIZE_TRAIN: 5000
+  # TODO: does setting to 0 disables resizing? 
+  # If not working, see https://github.com/facebookresearch/detectron2/issues/2275
+  MIN_SIZE_TRAIN: (2048, )
+  MAX_SIZE_TRAIN: 2048  # Original training is 5000
   # Only used during traning
   CROP:
     ENABLED: True
@@ -40,7 +42,7 @@ INPUT:
   # Maximum size of the side of the image during testing
   MAX_SIZE_TEST: 2048  # This will be set by args during testing
 DATALOADER:
-  NUM_WORKERS: 48
+  NUM_WORKERS: 24
   SAMPLER_TRAIN: 'RepeatFactorTrainingSampler'  # EDIT: default: 'TrainingSampler'
   REPEAT_THRESHOLD: 1.0  # EDIT: default: 0
 DATASETS:

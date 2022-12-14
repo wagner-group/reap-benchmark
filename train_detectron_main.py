@@ -7,12 +7,10 @@ import logging
 import os
 from collections import OrderedDict
 
-import detectron2.utils.comm as comm
 import torch
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import (
-    MetadataCatalog,
     build_detection_test_loader,
     build_detection_train_loader,
 )
@@ -24,12 +22,12 @@ from detectron2.engine import (
 )
 from detectron2.evaluation import (
     COCOEvaluator,
-    DatasetEvaluators,
     inference_on_dataset,
     print_csv_format,
 )
 from detectron2.modeling import build_model
 from detectron2.solver import build_lr_scheduler, build_optimizer
+from detectron2.utils import comm
 from detectron2.utils.events import EventStorage
 from torch.nn.parallel import DistributedDataParallel
 
@@ -42,20 +40,7 @@ def _get_evaluator(cfg, dataset_name, output_folder=None):
     """Create evaluator."""
     if output_folder is None:
         output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
-    evaluator_list = []
-    evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
-    if evaluator_type in ["coco", "coco_panoptic_seg"]:
-        evaluator_list.append(
-            COCOEvaluator(dataset_name, output_dir=output_folder)
-        )
-    if len(evaluator_list) == 0:
-        raise NotImplementedError(
-            f"no Evaluator for the dataset {dataset_name} with the type "
-            f"{evaluator_type}!"
-        )
-    if len(evaluator_list) == 1:
-        return evaluator_list[0]
-    return DatasetEvaluators(evaluator_list)
+    return COCOEvaluator(dataset_name, output_dir=output_folder)
 
 
 def do_test(cfg, model):
@@ -72,7 +57,7 @@ def do_test(cfg, model):
         results[dataset_name] = results_i
         if comm.is_main_process():
             logger.info(
-                "Evaluation results for {} in csv format:".format(dataset_name)
+                "Evaluation results for %s in csv format:", dataset_name
             )
             print_csv_format(results_i)
     if len(results) == 1:
@@ -162,16 +147,15 @@ def do_train(cfg, model, resume=False):
             periodic_checkpointer.step(iteration)
 
 
+# Need args for launch. pylint: disable=redefined-outer-name
 def setup(args):
-    """
-    Create configs and perform basic setups.
-    """
+    """Create configs and perform basic setups."""
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
 
     # TODO:
-    
+
     cfg.freeze()
     default_setup(
         cfg, args
@@ -179,11 +163,12 @@ def setup(args):
     return cfg
 
 
+# Need args for launch. pylint: disable=redefined-outer-name
 def main(args):
     cfg = setup(args)
 
     model = build_model(cfg)
-    logger.info("Model:\n{}".format(model))
+    logger.info("Model:\n%s", model)
     if args.eval_only:
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=args.resume
@@ -202,13 +187,6 @@ def main(args):
 
 if __name__ == "__main__":
     parser = default_argument_parser()
-    # parser.add_argument("--dataset", type=str, required=True)
-    # parser.add_argument(
-    #     "--data-no-other",
-    #     action="store_true",
-    #     help='If True, do not load "other" or "background" class to the dataset.',
-    # )
-    # parser.add_argument("--eval-mode", type=str, default="default")
 
     args = parser.parse_args()
     print("Command Line Args:", args)
