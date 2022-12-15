@@ -7,9 +7,25 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from collections import OrderedDict
 from typing import Any
 
+from packaging import version
+
+# Calling subprocess.check_output() with python version 3.8.10 or lower will
+# raise NotADirectoryError. When torch calls this to call hipconfig, it does
+# not catch this exception but only FileNotFoundError or PermissionError.
+# This hack makes sure that correct exception is raised.
+if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
+    import subprocess
+
+    def _hacky_subprocess_fix(*args, **kwargs):
+        raise FileNotFoundError("")
+
+    subprocess.check_output = _hacky_subprocess_fix
+
+# pylint: disable=wrong-import-position
 import torch
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.data import (
@@ -144,7 +160,7 @@ def do_train(cfg, config, model):
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
 def main(config):
     """Main function."""
-    cfg = setup_detectron_cfg(config)
+    cfg = setup_detectron_cfg(config, is_train=True)
     # Register data. This has to be called by every process.
     data_util.register_dataset(config["base"])
 

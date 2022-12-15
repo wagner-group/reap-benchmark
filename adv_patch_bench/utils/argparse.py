@@ -883,7 +883,8 @@ def _update_result_dir(config: Dict[str, Dict[str, Any]]) -> None:
 
 
 def setup_detectron_cfg(
-    config: Dict[str, Dict[str, Any]]
+    config: Dict[str, Dict[str, Any]],
+    is_train: bool = False,
 ) -> detectron2.config.CfgNode:
     """Create configs and perform basic setups."""
     config_base = config["base"]
@@ -904,7 +905,8 @@ def setup_detectron_cfg(
     cfg.DATASETS.TEST = (f"{dataset}_{split}",)
     cfg.DATASETS.TRAIN = (config_base["train_dataset"],)
     cfg.SOLVER.IMS_PER_BATCH = config_base["batch_size"]
-    cfg.INPUT.CROP.ENABLED = False  # Turn off augmentation for testing
+    if not is_train:
+        cfg.INPUT.CROP.ENABLED = False  # Turn off augmentation for testing
     cfg.DATALOADER.NUM_WORKERS = config_base["workers"]
     cfg.eval_mode = config_base["eval_mode"]
     cfg.obj_class = config_base["obj_class"]
