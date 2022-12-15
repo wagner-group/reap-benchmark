@@ -3,6 +3,8 @@
 Code is adapted from train_net.py.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from collections import OrderedDict
