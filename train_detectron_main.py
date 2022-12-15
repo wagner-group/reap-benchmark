@@ -32,6 +32,10 @@ from detectron2.data import (
     build_detection_test_loader,
     build_detection_train_loader,
 )
+from detectron2.data.build import (
+    RepeatFactorTrainingSampler,
+    get_detection_dataset_dicts,
+)
 from detectron2.engine import default_writers, launch
 from detectron2.evaluation import (
     COCOEvaluator,
@@ -48,6 +52,30 @@ import adv_patch_bench.dataloaders.detectron.util as data_util
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 
 logger = logging.getLogger("detectron2")
+
+
+def _get_sampler(cfg):
+    """Define a custom process to get training sampler.
+
+    This error is caused by torch.trunc raising a segfault (floating point
+    exception) on pytorch docker image. Calling repeat_factors.long() before
+    passing it to torch.trunc fixes this.
+    """
+    dataset = get_detection_dataset_dicts(
+        cfg.DATASETS.TRAIN,
+        filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
+        min_keypoints=0,
+        proposal_files=None,
+    )
+    repeat_factors = (
+        RepeatFactorTrainingSampler.repeat_factors_from_category_frequency(
+            dataset, cfg.DATALOADER.REPEAT_THRESHOLD
+        )
+    )
+    # Key fix here
+    repeat_factors = repeat_factors.long()
+    sampler = RepeatFactorTrainingSampler(repeat_factors)
+    return sampler
 
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
@@ -109,11 +137,9 @@ def do_train(cfg, config, model):
         else []
     )
 
-    # compared to "train_net.py", we do not support accurate timing and
-    # precise BN here, because they are not trivial to implement in a small
-    # training loop
+    sampler = _get_sampler(cfg)
     # pylint: disable=missing-kwoa,too-many-function-args
-    data_loader = build_detection_train_loader(cfg)
+    data_loader = build_detection_train_loader(cfg, sampler=sampler)
     logger.info("Starting training from iteration %d", start_iter)
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
