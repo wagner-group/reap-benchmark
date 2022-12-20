@@ -529,6 +529,9 @@ def reap_args_parser(
     _update_save_dir(config, is_detectron)
     _update_result_dir(config)
 
+    if config["base"]["debug"]:
+        config["base"]["verbose"] = True
+
     return config
 
 
@@ -647,7 +650,7 @@ def _update_split_file(
     split: str = "attack" if is_gen_patch else "test"
     if config_base["obj_class"] < 0:
         return
-    
+
     class_name: str = LABEL_LIST[dataset][config_base["obj_class"]]
     default_filename: str = f"{class_name}_{split}.txt"
     split_file_path: pathlib.Path = split_file_dir / default_filename

@@ -93,7 +93,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         image_shape = image.shape[:2]  # h, w
 
         # FIXME: Transform is applied after crop???
-        print("mapper", image_shape)
+        # print("mapper", image_shape)
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.

@@ -120,18 +120,28 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
         objectness_logits = [x.objectness_logits for x in proposals]
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
-        outputs = _filter_positive_proposals(
+        conds = _filter_positive_proposals(
             proposal_boxes,
             class_logits,
             gt_boxes,
             gt_classes,
-            device=device,
             iou_thres=iou_thres,
             score_thres=score_thres,
             use_correct_only=use_correct_only,
         )
-        outputs.append(class_logits)
-        outputs.append(objectness_logits)
+        outputs = []
+        for i, (paired_gt_classes, cond) in enumerate(conds):
+            outputs.append(
+                [
+                    paired_gt_classes.to(device),
+                    class_logits[i][cond],
+                    objectness_logits[i][cond],
+                ]
+            )
+            num_pairs = len(paired_gt_classes)
+            assert (
+                num_pairs == len(outputs[-1][1]) == len(outputs[-1][2])
+            ), f"Output shape mismatch: {[len(o) for o in outputs[-1]]}!"
         return outputs
 
     def _generate_proposal(
@@ -287,7 +297,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
             target["image"] = img
             inputs.append(target)
         # pylint: disable=unbalanced-tuple-unpacking
-        _, target_labels, target_logits, obj_logits = self._get_targets(
+        outputs = self._get_targets(
             inputs,
             iou_thres=self._detectron_iou_thres,
             score_thres=self._min_conf,
@@ -323,11 +333,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
 
         # Loop through each EoT image
         loss: torch.Tensor = torch.zeros(1, device=adv_imgs.device)
-        for tgt_lb, tgt_log, obj_log in zip(
-            target_labels,
-            target_logits,
-            obj_logits,
-        ):
+        for tgt_lb, tgt_log, obj_log in outputs:
             # Filter obj_class
             # if self._obj_class_only:
             #     # Focus attack on prediction of `obj_class` only
@@ -346,7 +352,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
             if len(tgt_log) > 0 and len(tgt_lb) > 0:
                 # Ignore the background class on tgt_log
                 target_loss = F.cross_entropy(tgt_log, tgt_lb, reduction="mean")
-            if len(obj_logits) > 0 and self._detectron_obj_const != 0:
+            if len(obj_log) > 0 and self._detectron_obj_const != 0:
                 obj_lb = torch.ones_like(obj_log)
                 obj_loss = F.binary_cross_entropy_with_logits(
                     obj_log, obj_lb, reduction="mean"
@@ -361,13 +367,11 @@ def _filter_positive_proposals(
     gt_boxes: list[structures.Boxes],
     gt_classes: list[torch.Tensor],
     **kwargs,
-) -> list[list[Any]]:
+) -> list[tuple[torch.Tensor, torch.Tensor]]:
     """See _filter_positive_proposals_single()."""
-    outputs = [[], []]
+    outputs = []
     for inpt in zip(proposal_boxes, class_logits, gt_boxes, gt_classes):
-        out = _filter_positive_proposals_single(*inpt, **kwargs)
-        for i, o in enumerate(out):
-            outputs[i].append(o)
+        outputs.append(_filter_positive_proposals_single(*inpt, **kwargs))
     return outputs
 
 
@@ -376,11 +380,10 @@ def _filter_positive_proposals_single(
     class_logits: torch.Tensor,
     gt_boxes: structures.Boxes,
     gt_classes: torch.Tensor,
-    device: str = "cuda",
     iou_thres: float = 0.1,
     score_thres: float = 0.1,
     use_correct_only: bool = False,
-) -> tuple[structures.Boxes, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Filter for desired targets for the attack.
 
     Args:
@@ -411,6 +414,7 @@ def _filter_positive_proposals_single(
     idx = torch.arange(n_proposals)
     paired_gt_classes = gt_classes_repeat[idx, paired_gt_idx]
 
+    cond = iou_cond
     if use_correct_only:
         # Filter for score of proposal > score_thres
         # Get scores of corresponding class
@@ -419,7 +423,5 @@ def _filter_positive_proposals_single(
         score_cond = paired_scores >= score_thres
         # Filter for positive proposals and their corresponding gt labels
         cond = iou_cond & score_cond
-    else:
-        cond = iou_cond
 
-    return (proposal_boxes[cond], paired_gt_classes[cond].to(device))
+    return paired_gt_classes[cond], cond

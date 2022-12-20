@@ -31,7 +31,7 @@ INPUT:
   MAX_SIZE_TRAIN: 2048  # Original training is 5000
   # Only used during traning
   CROP:
-    ENABLED: True
+    ENABLED: False
     TYPE: 'absolute'
     SIZE: (1000, 1000)
   # EDIT: Test with max size 2048 or 4000. This is slightly different from 

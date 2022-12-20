@@ -97,9 +97,6 @@ class ReapDatasetMapper:
         else:
             self.crop_gen = None
 
-        import pdb
-        pdb.set_trace()
-
         self.tfm_gens = _build_transform_gen(cfg, is_train)
 
         self.img_format = cfg.INPUT.FORMAT

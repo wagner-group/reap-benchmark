@@ -178,7 +178,6 @@ class ReapObject(render_object.RenderObject):
 
         # Apply extra lighting augmentation on patch
         adv_patch = aug_light(adv_patch)
-        adv_patch.clamp_(0, 1)
 
         # Combine patch_mask with adv_patch as alpha channel
         rgba_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=1)
@@ -208,9 +207,19 @@ class ReapObject(render_object.RenderObject):
         per_img_patches = torch.cat(per_img_patches, dim=0)
         assert len(per_img_patches) == batch_size
 
-        # Place patch on object using alpha channel
         alpha_mask = per_img_patches[:, -1:]
         warped_patch: BatchImageTensor = per_img_patches[:, :-1]
+        num_overlap_pixels = (alpha_mask > 1).sum().item()
+        if num_overlap_pixels > 0:
+            alpha_mask.clamp_max_(1)
+            warped_patch.clamp_max_(1)
+            print(
+                f"=> {num_overlap_pixels} pixels overlap! If this number is "
+                "large, it is likely that either the geometric transformation "
+                "is wrong."
+            )
+
+        # Place patch on object using alpha channel
         final_img: ImageTensor = (
             1 - alpha_mask
         ) * images + alpha_mask * warped_patch

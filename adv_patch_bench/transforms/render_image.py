@@ -180,7 +180,6 @@ class RenderImage:
         if adv_patch is None or patch_mask is None:
             return self.images, self.samples
 
-        # if self._mode in ("reap", "mtsd"):
         images, targets = self._robj_fn.apply_objects(
             self.images,
             self.samples,
@@ -188,9 +187,6 @@ class RenderImage:
             patch_mask,
             self._tf_params,
         )
-        # else:
-        #     # TODO: Synthetic mode
-        #     raise NotImplementedError()
 
         # Apply augmentation on the entire image
         images = self._aug_geo_img(images)
@@ -220,8 +216,10 @@ class RenderImage:
             raise ValueError(
                 f"image must have rank 4, but its shape is {images.shape}!"
             )
-        if images.max() > 1 or images.min() < 0:
-            raise ValueError("Pixel values of image are not between 0 and 1!")
+        assert ((0 <= images) & (images <= 1)).all(), (
+            "Pixel values of image are not between 0 and 1 (min: "
+            f"{images.min().item():.2f}, max: {images.max().item():.2f})!"
+        )
 
         if not self._is_detectron:
             return images

@@ -31,6 +31,7 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
 # pylint: disable=wrong-import-position
 import detectron2
 import torch
+import torchvision
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.data import (
     build_detection_test_loader,
@@ -97,6 +98,8 @@ def _get_evaluator(cfg, dataset_name, output_folder=None):
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
 def evaluate(cfg, config, model):
+    """Evaluate model (validate or test)."""
+    _ = config  # Unused for now
     results = OrderedDict()
     for dataset_name in cfg.DATASETS.TEST:
         # pylint: disable=missing-kwoa,too-many-function-args
@@ -120,6 +123,7 @@ def evaluate(cfg, config, model):
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
 def train(cfg, config, model, attack):
+    """Main training loop."""
     config_base = config["base"]
     resume: bool = config_base["resume"]
     use_attack: bool = config_base["attack_type"] != "none"
@@ -218,6 +222,15 @@ def train(cfg, config, model, attack):
                     img_render, data = rimg.apply_objects(
                         cur_adv_patch, cur_patch_mask
                     )
+
+                    if config_base["debug"]:
+                        logger.info(
+                            "Saving debug training batch %d...", iteration
+                        )
+                        torchvision.utils.save_image(
+                            img_render, f"tmp_train_debug_{iteration:05d}.png"
+                        )
+
                     img_render = rimg.post_process_image(img_render)
                     for i, dataset_dict in enumerate(data):
                         dataset_dict["image"] = img_render[i]
@@ -249,7 +262,8 @@ def train(cfg, config, model, attack):
                 and iteration != max_iter - 1
             ):
                 evaluate(cfg, config, model)
-                # Compared to "train_net.py", the test results are not dumped to EventStorage
+                # Compared to "train_net.py", the test results are not dumped
+                # to EventStorage
                 comm.synchronize()
 
             if iteration - start_iter > 5 and (
