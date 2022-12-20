@@ -15,12 +15,13 @@ class RP2AttackYOLO(grad_attack.GradAttack):
         self,
         adv_imgs: list[ImageTensor],
         adv_targets: list[Target],
-        obj_class: int | None = None,
+        # obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute loss for YOLO models.
 
         TODO(documentation)
         """
+        # TODO: Get obj_class from targets instead
         # Compute logits, loss, gradients
         out, _ = self._core_model(adv_imgs, val=True)
         conf = out[:, :, 4:5] * out[:, :, 5:]
@@ -47,7 +48,6 @@ class RP2AttackYOLO(grad_attack.GradAttack):
         delta: ImageTensor,
         adv_imgs: list[ImageTensor],
         adv_targets: list[Target],
-        obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute loss on perturbed image.
 
@@ -61,7 +61,7 @@ class RP2AttackYOLO(grad_attack.GradAttack):
         Returns:
             Loss for attacker to minimize.
         """
-        loss: torch.Tensor = self._loss_func(adv_imgs, adv_targets, obj_class)
+        loss: torch.Tensor = self._loss_func(adv_imgs, adv_targets)
         reg: torch.Tensor = (
             delta[:, :-1, :] - delta[:, 1:, :]
         ).abs().mean() + (delta[:, :, :-1] - delta[:, :, 1:]).abs().mean()

@@ -1,130 +1,37 @@
-"""Registers datasets, and defines other dataloading utilities.
+"""Registers datasets, and defines other dataloading utilities."""
 
-Code is taken directly from
-https://github.com/yizhe-ang/detectron2-1/blob/master/detectron2_1/datasets.py
-"""
+from __future__ import annotations
+
 import copy
-import logging
-from pathlib import Path
 
 import numpy as np
 import torch
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
-from detectron2.data.datasets import register_coco_instances
 from detectron2.structures import BoxMode
 
 import adv_patch_bench.utils.image as img_util
-
-# Define dataset paths
-data_dir = Path("data")
-
-benign_data_dir = data_dir / "benign_data"
-benign_img_dir = benign_data_dir / "benign_database"
-eval_img_dir = benign_data_dir / "eval_imgs"
-
-benign_train_coco_path = benign_data_dir / "coco_train.json"
-benign_test_coco_path = benign_data_dir / "coco_test.json"
-benign_eval_coco_path = benign_data_dir / "coco_eval.json"
-benign_bet365_coco_path = benign_data_dir / "coco_bet365.json"
-
-# Register benign train and test sets
-register_coco_instances(
-    "benign_train", {}, benign_train_coco_path, benign_img_dir
-)
-register_coco_instances(
-    "benign_test", {}, benign_test_coco_path, benign_img_dir
-)
-register_coco_instances("benign_eval", {}, benign_eval_coco_path, eval_img_dir)
-register_coco_instances(
-    "benign_bet365", {}, benign_bet365_coco_path, benign_img_dir
-)
+from adv_patch_bench.dataloaders.detectron import reap_dataset_mapper
+from adv_patch_bench.transforms.lighting_tf import compute_relight_params
 
 
-def build_transform_gen(cfg, is_train):
-    """Create a list of :class:`TransformGen` from config.
-
-    Now it includes only resizing.
-
-    Returns:
-        list[TransformGen]
-    """
-    if is_train:
-        min_size = cfg.INPUT.MIN_SIZE_TRAIN
-        max_size = cfg.INPUT.MAX_SIZE_TRAIN
-        sample_style = cfg.INPUT.MIN_SIZE_TRAIN_SAMPLING
-    else:
-        min_size = cfg.INPUT.MIN_SIZE_TEST
-        max_size = cfg.INPUT.MAX_SIZE_TEST
-        sample_style = "choice"
-    if sample_style == "range":
-        assert (
-            len(min_size) == 2
-        ), "more than 2 ({}) min_size(s) are provided for ranges".format(
-            len(min_size)
-        )
-
-    logger = logging.getLogger(__name__)
-    tfm_gens = []
-    tfm_gens.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
-    if is_train:
-        # Remove horizontal flipping
-        # tfm_gens.append(T.RandomFlip())
-        logger.info("TransformGens used in training: " + str(tfm_gens))
-        logger.info("Why no changes!!")
-    return tfm_gens
-
-
-class BenignMapper:
+class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
     """A callable which takes a dataset dict in Detectron2 Dataset format.
 
     This is the default callable to be used to map your dataset dict into
     training data.
     """
 
-    def __init__(self, cfg, is_train=True):
-        """Initialize benign data mapper.
+    # def __init__(self, cfg, is_train=True):
+    #     """Initialize benign data mapper.
 
-        Args:
-            cfg: Detectron2 config.
-            is_train: Whether we are training. Defaults to True.
-        """
-        if cfg.INPUT.CROP.ENABLED and is_train:
-            self.crop_gen = T.RandomCrop(
-                cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE
-            )
-            logging.getLogger(__name__).info(
-                "CropGen used in training: " + str(self.crop_gen)
-            )
-        else:
-            self.crop_gen = None
-
-        self.tfm_gens = build_transform_gen(cfg, is_train)
-
-        self.img_format = cfg.INPUT.FORMAT
-        self.mask_on = cfg.MODEL.MASK_ON
-        self.mask_format = cfg.INPUT.MASK_FORMAT
-        # Set keypoint_on to True to handle REAP geometric transform
-        # self.keypoint_on = cfg.MODEL.KEYPOINT_ON
-        self.keypoint_on = True
-        self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
-
-        if self.keypoint_on and is_train:
-            # Flip only makes sense in training
-            self.keypoint_hflip_indices = utils.create_keypoint_hflip_indices(
-                cfg.DATASETS.TRAIN
-            )
-        else:
-            self.keypoint_hflip_indices = None
-
-        if self.load_proposals:
-            self.proposal_min_box_size = cfg.MODEL.PROPOSAL_GENERATOR.MIN_SIZE
-            self.proposal_topk = (
-                cfg.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TRAIN
-                if is_train
-                else cfg.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TEST
-            )
-        self.is_train = is_train
+    #     Args:
+    #         cfg: Detectron2 config.
+    #         is_train: Whether we are training. Defaults to True.
+    #     """
+    #     super().__init__(cfg, is_train=is_train)
+    #     # TODO:
+    #     self.keypoint_on = False
 
     def __call__(self, dataset_dict):
         """Modify sample directly loaded from Detectron2 dataset.
@@ -142,13 +49,18 @@ class BenignMapper:
             dataset_dict["file_name"], format=self.img_format
         )
         image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
-        image = img_util.resize_and_pad(
+        # print("before:", image.shape)
+        image, scales, padding = img_util.resize_and_pad(
             obj=image,
             resize_size=(1536, 2048),  # FIXME
             pad_size=(1536, 2048),
             keep_aspect_ratio=True,
+            return_params=True,
         )
+        # print("after:", image.shape)
         image = image.permute(1, 2, 0).numpy()
+        dataset_dict["width"] = 2048
+        dataset_dict["height"] = 1536
         utils.check_image_size(dataset_dict, image)
 
         if "annotations" not in dataset_dict:
@@ -157,6 +69,14 @@ class BenignMapper:
                 image,
             )
         else:
+            for anno in dataset_dict["annotations"]:
+                xmin, ymin, xmax, ymax = anno["bbox"]
+                ymin = ymin * scales[0] + padding[1]
+                ymax = ymax * scales[0] + padding[1]
+                xmin = xmin * scales[1] + padding[0]
+                xmax = xmax * scales[1] + padding[0]
+                anno["bbox"] = [xmin, ymin, xmax, ymax]
+
             # Crop around an instance if there are instances in the image.
             # USER: Remove if you don't use cropping
             if self.crop_gen:
@@ -172,12 +92,14 @@ class BenignMapper:
 
         image_shape = image.shape[:2]  # h, w
 
+        # FIXME: Transform is applied after crop???
+        print("mapper", image_shape)
+
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
-        dataset_dict["image"] = torch.as_tensor(
-            np.ascontiguousarray(image.transpose(2, 0, 1))
-        )
+        image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        dataset_dict["image"] = image
 
         # USER: Remove if you don't use pre-computed proposals.
         # Most users would not need this feature.
@@ -190,13 +112,6 @@ class BenignMapper:
                 min_box_size=self.proposal_min_box_size,
             )
 
-        # HACK Keep annotations for test
-        # if not self.is_train:
-        #     # USER: Modify this if you want to keep them for some reason.
-        #     dataset_dict.pop("annotations", None)
-        #     dataset_dict.pop("sem_seg_file_name", None)
-        #     return dataset_dict
-
         if "annotations" in dataset_dict:
             # USER: Modify this if you want to keep them for some reason.
             for anno in dataset_dict["annotations"]:
@@ -204,6 +119,20 @@ class BenignMapper:
                     anno.pop("segmentation", None)
                 if not self.keypoint_on:
                     anno.pop("keypoints", None)
+
+                xmin, ymin, xmax, ymax = anno["bbox"]
+                obj = image[:, int(ymin) : int(ymax), int(xmin) : int(xmax)]
+                # TODO: set percentile
+                anno["alpha"], anno["beta"] = compute_relight_params(obj / 255)
+                anno["keypoints"] = np.array(
+                    [
+                        [xmin, ymin, 2],
+                        [xmax, ymin, 2],
+                        [xmax, ymax, 2],
+                        [xmin, ymax, 2],
+                    ],
+                    dtype=np.float32,
+                )
 
             # USER: Implement additional transformations if you have other types of data
             annos = [
@@ -216,13 +145,6 @@ class BenignMapper:
                 for obj in dataset_dict["annotations"]
                 if obj.get("iscrowd", 0) == 0
             ]
-            # for anno in annos:
-            #     if "keypoints" in anno:
-            #         if anno["keypoints"].shape != (4, 3):
-            #             print(annos)
-            #             print(dataset_dict["file_name"])
-            #             raise NotImplementedError()
-            #         anno["keypoints"] = np.array(anno["keypoints"])
             instances = utils.annotations_to_instances(
                 annos, image_shape, mask_format=self.mask_format
             )

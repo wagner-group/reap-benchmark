@@ -29,6 +29,7 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
     subprocess.check_output = _hacky_subprocess_fix
 
 # pylint: disable=wrong-import-position
+import detectron2
 import torch
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.data import (
@@ -52,6 +53,9 @@ from detectron2.utils.events import EventStorage
 from torch.nn.parallel import DistributedDataParallel
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
+from adv_patch_bench.attacks import attack_util
+from adv_patch_bench.dataloaders.detectron import mtsd_dataset_mapper
+from adv_patch_bench.transforms.render_image import RenderImage
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 
 logger = logging.getLogger("detectron2")
@@ -72,8 +76,6 @@ def _get_sampler(cfg):
         min_keypoints=0,
         proposal_files=None,
     )
-    import pdb
-    pdb.set_trace()
     repeat_factors = (
         RepeatFactorTrainingSampler.repeat_factors_from_category_frequency(
             dataset, cfg.DATALOADER.REPEAT_THRESHOLD
@@ -94,7 +96,7 @@ def _get_evaluator(cfg, dataset_name, output_folder=None):
 
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
-def do_test(cfg, config, model):
+def evaluate(cfg, config, model):
     results = OrderedDict()
     for dataset_name in cfg.DATASETS.TEST:
         # pylint: disable=missing-kwoa,too-many-function-args
@@ -117,8 +119,32 @@ def do_test(cfg, config, model):
 
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
-def do_train(cfg, config, model):
-    resume: bool = config["base"]["resume"]
+def train(cfg, config, model, attack):
+    config_base = config["base"]
+    resume: bool = config_base["resume"]
+    use_attack: bool = config_base["attack_type"] != "none"
+    train_dataset = cfg.DATASETS.TRAIN[0]
+    class_names = detectron2.data.MetadataCatalog.get(train_dataset).get(
+        "thing_classes"
+    )
+    bg_class: int = len(class_names) - 1
+
+    rimg_kwargs: dict[str, Any] = {
+        "img_mode": cfg.INPUT.FORMAT,
+        "interp": config_base["interp"],
+        "img_aug_prob_geo": config_base["img_aug_prob_geo"],
+        "device": model.device,
+        "obj_class": config_base["obj_class"],
+        "mode": "mtsd",
+        "bg_class": bg_class,
+    }
+    robj_kwargs = {
+        "obj_size_px": config_base["obj_size_px"],
+        "interp": config_base["interp"],
+        "reap_transform_mode": config_base["reap_transform_mode"],
+        "reap_use_relight": config_base["reap_use_relight"],
+    }
+
     model.train()
     optimizer = build_optimizer(cfg, model)
     scheduler = build_lr_scheduler(cfg, optimizer)
@@ -144,16 +170,57 @@ def do_train(cfg, config, model):
         else []
     )
 
+    # Create patch mask
+    adv_patches, patch_masks = attack_util.prep_adv_patch_all_classes(
+        dataset=train_dataset,
+        attack_type=config_base["attack_type"],
+        patch_size_mm=config_base["patch_size_mm"],
+        obj_width_px=config_base["obj_size_px"][1],
+    )
+    for i, (adv_patch, patch_mask) in enumerate(zip(adv_patches, patch_masks)):
+        if adv_patch is not None:
+            adv_patches[i] = adv_patch.to(model.device)
+        if patch_mask is not None:
+            patch_masks[i] = patch_mask.to(model.device)
+
     sampler = _get_sampler(cfg)
     # pylint: disable=missing-kwoa,too-many-function-args
-    data_loader = build_detection_train_loader(cfg, sampler=sampler)
+    data_loader = build_detection_train_loader(
+        cfg,
+        sampler=sampler,
+        mapper=mtsd_dataset_mapper.MtsdDatasetMapper(cfg, is_train=True),
+    )
     logger.info("Starting training from iteration %d", start_iter)
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
 
-            import pdb
-            pdb.set_trace()
+            if use_attack:
+                rimg: RenderImage = RenderImage(
+                    dataset=config["base"]["dataset"],
+                    samples=data,
+                    robj_kwargs=robj_kwargs,
+                    **rimg_kwargs,
+                )
+                if rimg.num_objs > 0:
+                    cur_patch_mask = [patch_masks[i] for i in rimg.obj_classes]
+                    cur_patch_mask = torch.cat(cur_patch_mask, dim=0)
+                    assert len(cur_patch_mask) == rimg.num_objs
+                    if config_base["attack_type"] == "per-sign":
+                        cur_adv_patch = attack(
+                            rimg, cur_patch_mask, batch_mode=True
+                        )
+                    else:
+                        cur_adv_patch = [
+                            adv_patches[i] for i in rimg.obj_classes
+                        ]
+                        cur_adv_patch = torch.cat(cur_adv_patch, dim=0)
+                    img_render, data = rimg.apply_objects(
+                        cur_adv_patch, cur_patch_mask
+                    )
+                    img_render = rimg.post_process_image(img_render)
+                    for i, dataset_dict in enumerate(data):
+                        dataset_dict["image"] = img_render[i]
 
             loss_dict = model(data)
             losses = sum(loss_dict.values())
@@ -181,7 +248,7 @@ def do_train(cfg, config, model):
                 and (iteration + 1) % cfg.TEST.EVAL_PERIOD == 0
                 and iteration != max_iter - 1
             ):
-                do_test(cfg, config, model)
+                evaluate(cfg, config, model)
                 # Compared to "train_net.py", the test results are not dumped to EventStorage
                 comm.synchronize()
 
@@ -202,11 +269,21 @@ def main(config):
 
     model = build_model(cfg)
     logger.info("Model:\n%s", model)
+
+    # TODO: no attack
+    attack = attack_util.setup_attack(
+        config_attack=config["attack"],
+        is_detectron=True,
+        model=model,
+        input_size=config["base"]["img_size"],
+        verbose=config["base"]["verbose"],
+    )
+
     if config["base"]["eval_only"]:
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=config["base"]["resume"]
         )
-        return do_test(cfg, config, model)
+        return evaluate(cfg, config, model)
 
     distributed = comm.get_world_size() > 1
     if distributed:
@@ -214,8 +291,8 @@ def main(config):
             model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
         )
 
-    do_train(cfg, config, model)
-    return do_test(cfg, config, model)
+    train(cfg, config, model, attack)
+    return evaluate(cfg, config, model)
 
 
 if __name__ == "__main__":

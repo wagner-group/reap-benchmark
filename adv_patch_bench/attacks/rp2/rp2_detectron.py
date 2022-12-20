@@ -11,7 +11,7 @@ from detectron2 import structures
 from torch import nn
 
 from adv_patch_bench.attacks.rp2 import rp2_yolo
-from adv_patch_bench.utils.types import ImageTensor, Target, BatchImageTensor
+from adv_patch_bench.utils.types import BatchImageTensor, Target
 
 
 class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
@@ -35,7 +35,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
         detectron_config: dict[str, Any] = attack_config["detectron"]
         self._detectron_obj_const: float = detectron_config["obj_loss_const"]
         self._detectron_iou_thres: float = detectron_config["iou_thres"]
-        self._obj_class_only: bool = "obj_class_only" in self._attack_mode
+        # self._obj_class_only: bool = "obj_class_only" in self._attack_mode
 
         self._nms_thresh_orig = copy.deepcopy(
             core_model.proposal_generator.nms_thresh
@@ -268,7 +268,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
         self,
         adv_imgs: BatchImageTensor,
         adv_targets: list[Target],
-        obj_class: int | None = None,
+        # obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute loss for Faster R-CNN models on detectron2.
 
@@ -324,19 +324,21 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
         # Loop through each EoT image
         loss: torch.Tensor = torch.zeros(1, device=adv_imgs.device)
         for tgt_lb, tgt_log, obj_log in zip(
-            target_labels, target_logits, obj_logits
+            target_labels,
+            target_logits,
+            obj_logits,
         ):
             # Filter obj_class
-            if self._obj_class_only:
-                # Focus attack on prediction of `obj_class` only
-                idx = obj_class == tgt_lb
-                tgt_lb, tgt_log, obj_log = (
-                    tgt_lb[idx],
-                    tgt_log[idx],
-                    obj_log[idx],
-                )
-            else:
-                tgt_lb = torch.zeros_like(tgt_lb) + obj_class
+            # if self._obj_class_only:
+            #     # Focus attack on prediction of `obj_class` only
+            #     idx = obj_class == tgt_lb
+            #     tgt_lb, tgt_log, obj_log = (
+            #         tgt_lb[idx],
+            #         tgt_log[idx],
+            #         obj_log[idx],
+            #     )
+            # else:
+            #     tgt_lb = torch.zeros_like(tgt_lb) + obj_class
             # If there's no matched gt/prediction, then attack already succeeds.
             # TODO(feature): Appearing or misclassification attacks
             target_loss: torch.Tensor = torch.zeros_like(loss)

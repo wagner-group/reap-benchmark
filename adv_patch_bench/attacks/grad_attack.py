@@ -78,7 +78,7 @@ class GradAttack(base_attack.DetectorAttackModule):
         delta: BatchImageTensor,
         adv_img: BatchImageTensor,
         adv_target: list[Target],
-        obj_class: int | None = None,
+        # obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute loss on perturbed image.
 
@@ -140,9 +140,7 @@ class GradAttack(base_attack.DetectorAttackModule):
             adv_img, adv_target = rimg.apply_objects(delta, patch_mask)
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
 
-            loss: torch.Tensor = self.compute_loss(
-                delta, adv_img, adv_target, rimg.obj_class
-            )
+            loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
             loss.backward()
             z_delta = self._step_opt(z_delta)
 

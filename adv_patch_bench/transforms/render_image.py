@@ -9,15 +9,13 @@ import kornia.augmentation as K
 import torch
 import torchvision
 
-import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.transforms import reap_object, util
+from adv_patch_bench.transforms import mtsd_object, reap_object, util
 from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchMaskTensor,
     ImageTensor,
     ImageTensorDet,
-    SizePx,
     Target,
     TransformFn,
 )
@@ -32,11 +30,12 @@ class RenderImage:
         samples: list[dict[str, Any]],
         mode: str = "reap",
         obj_class: int | None = None,
-        img_size: SizePx | None = None,
+        # img_size: SizePx | None = None,
         img_mode: str = "BGR",
         interp: str = "bilinear",
         img_aug_prob_geo: float | None = None,
         device: Any = "cuda",
+        bg_class: int | None = None,
         robj_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Initialize RenderImage containing full image and various metadata.
@@ -60,9 +59,7 @@ class RenderImage:
             ValueError: Invalid img_mode.
         """
         self._dataset: str = dataset
-        # self._img_df: pd.DataFrame = img_df
         self._interp: str = interp
-        # self._device: Any = device
         self._is_detectron: bool = "instances" in samples[0]
 
         if img_mode not in ("BGR", "RGB"):
@@ -71,9 +68,8 @@ class RenderImage:
             )
         self.img_mode: str = img_mode
         self._mode: str = mode
-        self.num_objs: int = 0
-        self.obj_class: int = -1 if obj_class is None else obj_class
-        self.img_size: SizePx = img_size
+        self.obj_classes: list[int] = []
+        # self._img_size: SizePx = img_size
 
         if robj_kwargs is None:
             robj_kwargs = {}
@@ -82,25 +78,34 @@ class RenderImage:
         images: list[ImageTensor] = []
         self._tf_params = {}
         obj_to_img = []
+        self._robj_fn = {
+            "reap": reap_object.ReapObject,
+            "mtsd": mtsd_object.MtsdObject,
+        }[mode]
 
         for i, sample in enumerate(samples):
             image: ImageTensor = sample["image"].float() / 255
-            image = self._resize_image(image)
+            # image = self._resize_image(image)
             image = image.flip(0) if img_mode == "BGR" else image
             images.append(image.to(device))
 
-            if mode == "reap":
+            if mode in ("reap", "mtsd"):
                 for obj in sample["annotations"]:
-                    wrong_class = obj["category_id"] not in (-1, obj_class)
-                    if not obj["has_reap"] or wrong_class:
+                    cat_id = obj["category_id"]
+                    wrong_class = cat_id == bg_class or (
+                        cat_id != obj_class and obj_class >= 0
+                    )
+                    if (mode == "reap" and not obj["has_reap"]) or wrong_class:
                         continue
-                    self.num_objs += 1
-                    robj: reap_object.ReapObject = reap_object.ReapObject(
-                        obj=obj,
+                    if any(point[2] != 2 for point in obj["keypoints"]):
+                        continue
+                    self.obj_classes.append(cat_id)
+                    robj: RenderObject = self._robj_fn(
+                        obj_dict=obj,
                         dataset=self._dataset,
                         obj_class=obj["category_id"],
-                        img_size=self.img_size,
                         device=device,
+                        image=image,
                         **robj_kwargs,
                     )
                     robj.aggregate_params(self._tf_params)
@@ -111,6 +116,7 @@ class RenderImage:
 
         self.images = torch.stack(images, dim=0)
         self.samples = samples
+        self.num_objs: int = len(self.obj_classes)
 
         for name, params in self._tf_params.items():
             self._tf_params[name] = torch.cat(params, dim=0)
@@ -124,39 +130,39 @@ class RenderImage:
         self._aug_geo_img: TransformFn = util._identity
         if img_aug_prob_geo is not None and img_aug_prob_geo > 0:
             self._aug_geo_img = K.RandomResizedCrop(
-                self.img_size,
+                self.images.shape[-2:],
                 scale=(0.8, 1),
                 p=img_aug_prob_geo,
                 resample=interp,
             )
 
-    def _resize_image(self, image: ImageTensor) -> tuple[ImageTensor, SizePx]:
-        """Resize or pad image to self.img_size.
+    # def _resize_image(self, image: ImageTensor) -> tuple[ImageTensor, SizePx]:
+    #     """Resize or pad image to self.img_size.
 
-        Args:
-            image: Image tensor to resize or pad.
+    #     Args:
+    #         image: Image tensor to resize or pad.
 
-        Returns:
-            image: Resized or padded image.
-            pad_size: Tuple of top and left padding.
-        """
-        # if width != self.img_size[1]:
-        #     raise ValueError(
-        #         f"image of shape {image.shape} is not compatible with img_size "
-        #         f"{self.img_size}!"
-        #     )
-        image = img_util.resize_and_pad(
-            obj=image,
-            resize_size=self.img_size,
-            pad_size=self.img_size,
-            interp=self._interp,
-            keep_aspect_ratio=True,
-        )
-        assert image.shape[-2:] == self.img_size, (
-            f"Image shape is {image.shape} but img_size is {self.img_size}. "
-            "Image resize went wrong!"
-        )
-        return image
+    #     Returns:
+    #         image: Resized or padded image.
+    #         pad_size: Tuple of top and left padding.
+    #     """
+    #     # if width != self.img_size[1]:
+    #     #     raise ValueError(
+    #     #         f"image of shape {image.shape} is not compatible with img_size "
+    #     #         f"{self.img_size}!"
+    #     #     )
+    #     image = img_util.resize_and_pad(
+    #         obj=image,
+    #         resize_size=self._img_size,
+    #         pad_size=self._img_size,
+    #         interp=self._interp,
+    #         keep_aspect_ratio=True,
+    #     )
+    #     assert image.shape[-2:] == self._img_size, (
+    #         f"Image shape is {image.shape} but img_size is {self._img_size}. "
+    #         "Image resize went wrong!"
+    #     )
+    #     return image
 
     def apply_objects(
         self,
@@ -174,17 +180,17 @@ class RenderImage:
         if adv_patch is None or patch_mask is None:
             return self.images, self.samples
 
-        if self._mode == "reap":
-            images, targets = reap_object.ReapObject.apply_objects(
-                self.images,
-                self.samples,
-                adv_patch,
-                patch_mask,
-                self._tf_params,
-            )
-        else:
-            # TODO: Synthetic mode
-            raise NotImplementedError()
+        # if self._mode in ("reap", "mtsd"):
+        images, targets = self._robj_fn.apply_objects(
+            self.images,
+            self.samples,
+            adv_patch,
+            patch_mask,
+            self._tf_params,
+        )
+        # else:
+        #     # TODO: Synthetic mode
+        #     raise NotImplementedError()
 
         # Apply augmentation on the entire image
         images = self._aug_geo_img(images)

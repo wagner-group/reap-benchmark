@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Tuple
+from typing import Any, Tuple
 
 import cv2
 import kornia.geometry.transform as kornia_tf
@@ -14,6 +14,7 @@ from adv_patch_bench.transforms import render_object
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchImageTensorRGBA,
+    BatchMaskTensor,
     ImageTensor,
     ImageTensorRGBA,
     Target,
@@ -27,7 +28,7 @@ class ReapObject(render_object.RenderObject):
 
     def __init__(
         self,
-        obj: dict[str, Any] | None = None,
+        obj_dict: dict[str, Any] | None = None,
         patch_transform_mode: str = "perspective",
         use_patch_relight: bool = True,
         **kwargs,
@@ -55,8 +56,8 @@ class ReapObject(render_object.RenderObject):
 
         # # Get REAP relighting transform params
         if use_patch_relight:
-            alpha = torch.tensor(obj["alpha"], device=self._device)
-            beta = torch.tensor(obj["beta"], device=self._device)
+            alpha = torch.tensor(obj_dict["alpha"], device=self._device)
+            beta = torch.tensor(obj_dict["beta"], device=self._device)
         else:
             alpha = torch.tensor(1.0, device=self._device)
             beta = torch.tensor(0.0, device=self._device)
@@ -64,7 +65,7 @@ class ReapObject(render_object.RenderObject):
         self.beta: torch.Tensor = img_util.coerce_rank(beta, 4)
 
         # Get REAP geometric transform params
-        self.transform_mat = self._get_reap_transforms(obj["keypoints"])
+        self.transform_mat = self._get_reap_transforms(obj_dict["keypoints"])
 
     def _get_reap_transforms(
         self, tgt: np.ndarray | list[list[float]] | None = None
@@ -75,7 +76,7 @@ class ReapObject(render_object.RenderObject):
             Tuple of (Transform function, transformation matrix, target points).
         """
         tgt = np.array(tgt, dtype=np.float32)[:, :2]
-        src = np.array(self.src_points, dtype=np.float32)
+        src: np.ndarray = self.src_points
         tgt = tgt[: len(src)].copy()
 
         if self._patch_transform_mode == "translate_scale":
@@ -129,8 +130,8 @@ class ReapObject(render_object.RenderObject):
     def apply_objects(
         images: BatchImageTensor,
         targets: Target,
-        adv_patch,
-        patch_mask,
+        adv_patch: BatchImageTensor,
+        patch_mask: BatchMaskTensor,
         tf_params: dict[str, Any],
     ) -> Tuple[ImageTensor, Target]:
         """Apply adversarial patch to image using REAP approach.
@@ -216,7 +217,8 @@ class ReapObject(render_object.RenderObject):
 
         return final_img, targets
 
-    def aggregate_params(self, params_dict):
+    def aggregate_params(self, params_dicts: list[dict[str, Any]]) -> None:
+        """Append self transform params to params_dicts."""
         params = {
             "transform_mat": self.transform_mat,
             "alpha": self.alpha,
@@ -224,7 +226,7 @@ class ReapObject(render_object.RenderObject):
             "obj_mask": self.obj_mask,
         }
         for name, value in params.items():
-            if name in params_dict:
-                params_dict[name].append(value)
+            if name in params_dicts:
+                params_dicts[name].append(value)
             else:
-                params_dict[name] = [value]
+                params_dicts[name] = [value]

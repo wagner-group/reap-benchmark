@@ -10,6 +10,7 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from tqdm import tqdm
 
+# import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DEFAULT_PATH_MTSD_LABEL,
@@ -18,9 +19,11 @@ from hparams import (
     PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
     TS_COLOR_OFFSET_DICT,
+    OBJ_DIM_DICT,
 )
 
 _ALLOWED_SPLITS = ("train", "test", "val")
+_NUM_KEYPOINTS = 4
 
 
 def _readlines(path: str) -> List:
@@ -148,6 +151,17 @@ def get_mtsd_dict(
             "height": height,
         }
 
+        # FIXME: This may have to be used with MtsdDatasetMapper?
+        # _, scales, padding = img_util.resize_and_pad(
+        #     orig_size=(height, width),
+        #     resize_size=(1536, 2048),
+        #     pad_size=(1536, 2048),
+        #     keep_aspect_ratio=True,
+        #     return_params=True,
+        # )
+        # record["width"] = 2048
+        # record["height"] = 1536
+
         # Populate record or sample with its objects
         objs: List[Dict[str, Any]] = []
         for obj in anno["objects"]:
@@ -158,6 +172,12 @@ def get_mtsd_dict(
             if ignore_bg_class and class_index == bg_class_id:
                 continue
             obj: Dict[str, Any] = {
+                # "bbox": [
+                #     obj["bbox"]["xmin"] * scales[1] + padding[0],
+                #     obj["bbox"]["ymin"] * scales[0] + padding[1],
+                #     obj["bbox"]["xmax"] * scales[1] + padding[0],
+                #     obj["bbox"]["ymax"] * scales[0] + padding[1],
+                # ],
                 "bbox": [
                     obj["bbox"]["xmin"],
                     obj["bbox"]["ymin"],
@@ -166,6 +186,10 @@ def get_mtsd_dict(
                 ],
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "category_id": class_index,
+                "has_reap": False,
+                "keypoints": [0] * _NUM_KEYPOINTS * 3,
+                "alpha": None,
+                "beta": None,
             }
             objs.append(obj)
 
@@ -231,4 +255,12 @@ def register_mtsd(
                 **mtsd_anno,
             ),
         )
-        MetadataCatalog.get(dataset_with_split).set(thing_classes=thing_classes)
+        MetadataCatalog.get(dataset_with_split).set(
+            thing_classes=thing_classes,
+            keypoint_names=[f"p{i}" for i in range(_NUM_KEYPOINTS)],
+            keypoint_flip_map=[
+                (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
+            ],
+            obj_dim_dict=OBJ_DIM_DICT[f"mtsd_{color}"],
+            bg_class=bg_class_id,
+        )

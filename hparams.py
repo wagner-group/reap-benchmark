@@ -132,7 +132,7 @@ _MPL_NO_COLOR_SIZE_MM = {
     "pentagon": (915.0, 915.0),
     "octagon": (915.0, 915.0),
 }
-_MPL_NO_COLOR_SIZE_MM = list(_MPL_NO_COLOR_SIZE_MM.values())
+_MPL_NO_COLOR_SIZE_MM = dict(enumerate(_MPL_NO_COLOR_SIZE_MM.values()))
 
 # Geometric shape of objects
 # This is straightforward for our traffic sign classes, but to extend to other
@@ -150,10 +150,12 @@ _MPL_NO_COLOR_SHAPE = {
     "pentagon": "pentagon",
     "octagon": "octagon",
 }
-_MPL_NO_COLOR_SHAPE = list(_MPL_NO_COLOR_SHAPE.values())
+_MPL_NO_COLOR_SHAPE = dict(enumerate(_MPL_NO_COLOR_SHAPE.values()))
 
 # Height-width ratio
-_MPL_NO_COLOR_RATIO = [s[0] / s[1] for s in _MPL_NO_COLOR_SIZE_MM]
+_MPL_NO_COLOR_RATIO = {
+    i: size[0] / size[1] for i, size in enumerate(_MPL_NO_COLOR_SIZE_MM.values())
+}
 
 OBJ_DIM_DICT: Dict[str, Dict[str, Any]] = {
     "mapillary_no_color": {

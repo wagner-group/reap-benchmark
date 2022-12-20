@@ -23,7 +23,7 @@ from adv_patch_bench.dataloaders import reap_util
 from adv_patch_bench.dataloaders.detectron import (
     custom_build,
     custom_sampler,
-    mapper,
+    reap_dataset_mapper,
 )
 from adv_patch_bench.transforms import reap_object, render_image, syn_object
 from adv_patch_bench.utils.types import (
@@ -230,7 +230,7 @@ def main() -> None:
     # pylint: disable=too-many-function-args
     dataloader = custom_build.build_detection_test_loader(
         data_dicts,
-        mapper=mapper.BenignMapper(cfg, is_train=False),
+        mapper=reap_dataset_mapper.ReapDatasetMapper(cfg, is_train=False),
         batch_size=1,
         num_workers=cfg.DATALOADER.NUM_WORKERS,
         # Use sampler for random sampling background images from new dataset,

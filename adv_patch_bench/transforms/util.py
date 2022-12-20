@@ -6,8 +6,8 @@ from typing import List, NewType, Tuple
 
 import kornia
 import kornia.augmentation as K
-import torch
 import numpy as np
+import torch
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import (
@@ -34,7 +34,7 @@ def _identity_with_params(
 
 
 def _gen_rect_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate rectangular mask.
 
@@ -59,7 +59,7 @@ def _gen_rect_mask(
 
 
 def _gen_diamond_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate diamond mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -75,7 +75,7 @@ def _gen_diamond_mask(
 
 
 def _gen_circle_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate circle mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -87,7 +87,7 @@ def _gen_circle_mask(
 
 
 def _gen_triangle_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate triangle mask. See _gen_rect_mask()."""
     height = round(ratio * size)
@@ -98,7 +98,7 @@ def _gen_triangle_mask(
 
 
 def _gen_triangle_inverted_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate inverted triangle mask. See _gen_rect_mask()."""
     height = round(ratio * size)
@@ -109,7 +109,7 @@ def _gen_triangle_inverted_mask(
 
 
 def _gen_pentagon_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate pentagon mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -125,7 +125,7 @@ def _gen_pentagon_mask(
 
 
 def _gen_octagon_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate octagon mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -146,7 +146,10 @@ def _gen_octagon_mask(
 
 
 def gen_sign_mask(
-    shape: str, hw_ratio: float, obj_width_px: int
+    shape: str = "circle",
+    hw_ratio: float = 1.0,
+    obj_width_px: int = 64,
+    use_box_mode: bool = False,
 ) -> tuple[torch.Tensor, _KeyPoints]:
     """Generate mask of object and source keypoints.
 
@@ -175,6 +178,10 @@ def gen_sign_mask(
         "square": _gen_rect_mask,
     }
     mask, box = shape_to_mask[shape](obj_width_px, ratio=hw_ratio)
+    if use_box_mode:
+        # Use mask from the correct shape but use keypoints of box
+        _, box = _gen_rect_mask(obj_width_px, ratio=hw_ratio)
+
     mask = torch.from_numpy(mask)
     img_util.coerce_rank(mask, 4)
     mask, scales, padding = img_util.resize_and_pad(

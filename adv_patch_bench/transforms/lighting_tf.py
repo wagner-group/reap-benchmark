@@ -1,5 +1,7 @@
 """Calculate parameters for lighting transform."""
 
+from __future__ import annotations
+
 from typing import Tuple
 
 import numpy as np
@@ -61,7 +63,9 @@ def _find_canonical_kmean(img: np.ndarray):
     return canonical, alpha, beta
 
 
-def _find_min_max(img: np.ndarray, method: str = "percentile", q: float = 5.0) -> Tuple[float]:
+def _find_min_max(
+    img: np.ndarray, method: str = "percentile", q: float = 5.0
+) -> tuple[float]:
     """Find "high" and "low" values of pixels in img.
 
     High/low values can be defined as some q-percentile pixels in img or based

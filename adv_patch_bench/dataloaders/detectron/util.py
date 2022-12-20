@@ -20,9 +20,9 @@ from adv_patch_bench.dataloaders import reap_util
 from adv_patch_bench.dataloaders.detectron import (
     custom_build,
     mapillary,
-    mapper,
     mtsd,
     reap,
+    reap_dataset_mapper,
 )
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import DATASETS
@@ -89,7 +89,7 @@ def get_dataloader(
 
     dataloader = custom_build.build_detection_test_loader(
         data_dicts,
-        mapper=mapper.BenignMapper(global_cfg, is_train=False),
+        mapper=reap_dataset_mapper.ReapDatasetMapper(global_cfg, is_train=False),
         # mapper=None,
         batch_size=config_base["batch_size"],
         num_workers=global_cfg.DATALOADER.NUM_WORKERS,

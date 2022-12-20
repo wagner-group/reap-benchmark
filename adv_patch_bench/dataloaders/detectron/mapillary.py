@@ -14,6 +14,7 @@ from adv_patch_bench.utils.types import DetectronSample
 from hparams import LABEL_LIST
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
+_NUM_KEYPOINTS = 4
 
 
 def get_mapillary_dict(
@@ -103,6 +104,10 @@ def get_mapillary_dict(
             xmin, ymin, xmax, ymax = [
                 float(x) for x in [xmin, ymin, xmax, ymax]
             ]
+            # We choose to transform (shift and scale) bbox here instead of
+            # automatically by detectron2 evaluator because it does not support
+            # padding. Another option is to do it in DatasetMapper, but it does
+            # not get called by COCO evaluator.
             ymin = ymin * scales[0] + padding[1]
             ymax = ymax * scales[0] + padding[1]
             xmin = xmin * scales[1] + padding[0]
@@ -135,7 +140,7 @@ def get_mapillary_dict(
                 "category_id": class_id,
                 "object_id": obj_id,
                 "has_reap": False,
-                "keypoints": [0] * 12,
+                "keypoints": [0] * _NUM_KEYPOINTS * 3,
                 "alpha": None,
                 "beta": None,
             }
@@ -148,14 +153,14 @@ def get_mapillary_dict(
                 # Include REAP annotation if exists
                 tgt_points = obj_df["tgt_points"].values[0]
                 keypoints = []
-                if len(tgt_points) > 4:
+                if len(tgt_points) > _NUM_KEYPOINTS:
                     print(
-                        "Each object should have at most 4 keypoints but "
-                        f"found {len(tgt_points)}!"
+                        f"Each object should have at most {_NUM_KEYPOINTS} "
+                        f"keypoints but found {len(tgt_points)}!"
                     )
                     print(obj_df)
                     assert class_id == bg_class_id
-                    tgt_points = tgt_points[:4]
+                    tgt_points = tgt_points[:_NUM_KEYPOINTS]
                 for tgt in tgt_points:
                     keypoints.extend(
                         (
@@ -164,7 +169,7 @@ def get_mapillary_dict(
                         )
                     )
                     keypoints.append(2)
-                if len(tgt_points) == 3:
+                if len(tgt_points) == _NUM_KEYPOINTS - 1:
                     keypoints.append(sum(tgt[0] for tgt in tgt_points) / 3)
                     keypoints.append(sum(tgt[1] for tgt in tgt_points) / 3)
                     keypoints.append(2)
@@ -223,4 +228,10 @@ def register_mapillary(
                 anno_df=anno_df,
             ),
         )
-        MetadataCatalog.get(dataset_with_split).set(thing_classes=thing_classes)
+        MetadataCatalog.get(dataset_with_split).set(
+            thing_classes=thing_classes,
+            keypoint_names=[f"p{i}" for i in range(_NUM_KEYPOINTS)],
+            keypoint_flip_map=[
+                (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
+            ],
+        )

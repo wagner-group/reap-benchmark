@@ -566,7 +566,7 @@ def _verify_eval_config(config_base: Dict[str, Any], is_detectron: bool):
     # Verify obj_class arg
     obj_class = config_base["obj_class"]
     max_cls = NUM_CLASSES[dataset] - 1
-    if not 0 <= obj_class <= max_cls:
+    if not -1 <= obj_class <= max_cls:
         raise ValueError(
             f"Target object class {obj_class} is not between 0 and {max_cls}!"
         )
@@ -645,6 +645,9 @@ def _update_split_file(
 
     # Try to find split file in given dir
     split: str = "attack" if is_gen_patch else "test"
+    if config_base["obj_class"] < 0:
+        return
+    
     class_name: str = LABEL_LIST[dataset][config_base["obj_class"]]
     default_filename: str = f"{class_name}_{split}.txt"
     split_file_path: pathlib.Path = split_file_dir / default_filename
@@ -679,10 +682,11 @@ def _update_syn_obj_path(config: Dict[str, Dict[str, Any]]) -> None:
         return
     dataset = config_base["dataset"]
     obj_class = config_base["obj_class"]
-    class_name = LABEL_LIST[dataset][obj_class]
-    config_base["syn_obj_path"] = os.path.join(
-        DEFAULT_SYN_OBJ_DIR, dataset, f"{class_name}.png"
-    )
+    if obj_class >= 0:
+        class_name = LABEL_LIST[dataset][obj_class]
+        config_base["syn_obj_path"] = os.path.join(
+            DEFAULT_SYN_OBJ_DIR, dataset, f"{class_name}.png"
+        )
 
 
 def _update_img_size(config: Dict[str, Dict[str, Any]]) -> None:
@@ -710,8 +714,11 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
     dataset = config_base["dataset"]
     obj_dim_dict = OBJ_DIM_DICT[dataset]
     obj_class = config_base["obj_class"]
-    hw_ratio = obj_dim_dict["hw_ratio"][obj_class]
-    config_base["obj_size_mm"] = obj_dim_dict["size_mm"][obj_class]
+    if obj_class < 0:
+        hw_ratio = 1.0
+    else:
+        hw_ratio = obj_dim_dict["hw_ratio"][obj_class]
+        config_base["obj_size_mm"] = obj_dim_dict["size_mm"][obj_class]
 
     if not config_base["synthetic"]:
         # For attack using real images, we still need to specify obj_size_px to
