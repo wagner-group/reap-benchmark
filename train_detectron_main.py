@@ -21,7 +21,10 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
     import subprocess
 
     def _hacky_subprocess_fix(*args, **kwargs):
-        raise FileNotFoundError("")
+        raise FileNotFoundError(
+            "Hacky exception. If this interferes with your workflow, consider "
+            "using python >= 3.8.10 or simply try to comment this out."
+        )
 
     subprocess.check_output = _hacky_subprocess_fix
 
@@ -61,19 +64,23 @@ def _get_sampler(cfg):
     exception) on pytorch docker image. Calling repeat_factors.long() before
     passing it to torch.trunc fixes this.
     """
+    if cfg.DATALOADER.SAMPLER_TRAIN != "RepeatFactorTrainingSampler":
+        return None
     dataset = get_detection_dataset_dicts(
         cfg.DATASETS.TRAIN,
         filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
         min_keypoints=0,
         proposal_files=None,
     )
+    import pdb
+    pdb.set_trace()
     repeat_factors = (
         RepeatFactorTrainingSampler.repeat_factors_from_category_frequency(
             dataset, cfg.DATALOADER.REPEAT_THRESHOLD
         )
     )
-    # Key fix here
-    repeat_factors = repeat_factors.long()
+    # This line is the fix
+    repeat_factors = repeat_factors.long().float()
     sampler = RepeatFactorTrainingSampler(repeat_factors)
     return sampler
 
@@ -144,6 +151,9 @@ def do_train(cfg, config, model):
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
+
+            import pdb
+            pdb.set_trace()
 
             loss_dict = model(data)
             losses = sum(loss_dict.values())

@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-import copy
 import os
-from collections import OrderedDict
-from typing import Any, Callable
+from typing import Any
 
 import kornia.augmentation as K
-import pandas as pd
+import torch
 import torchvision
 
 import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.transforms import render_object, util
+from adv_patch_bench.transforms import reap_object, util
+from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.types import (
+    BatchImageTensor,
+    BatchMaskTensor,
     ImageTensor,
     ImageTensorDet,
     SizePx,
@@ -22,47 +23,21 @@ from adv_patch_bench.utils.types import (
 )
 
 
-def _resize_pad_keep_ratio(image, img_size, interp):
-    raise NotImplementedError()
-    h, w = image.shape[-2:]
-    # FIXME: This code does not work correctly because gt is not
-    # adjusted in the same way (still requires padding).
-    # Resize and pad perturbed_image to self.img_size preseving
-    # aspect ratio. This also handles images whose width is the
-    # shorter side in the varying input size case.
-    if w < img_size[1]:
-        # If real width is smaller than desired one, then height
-        # must be longer than width so we scale down by height ratio
-        scale = img_size[0] / h
-    else:
-        scale = 1
-    resized_size = (int(h * scale), int(w * scale))
-    image = img_util.resize_and_pad(
-        image,
-        pad_size=img_size,
-        resize_size=resized_size,
-        interp=interp,
-    )
-    h, w = img_size
-    h_pad = h - resized_size[0]  # TODO: divided by 2?
-    w_pad = w - resized_size[1]
-    return image, (h_pad, w_pad)
-
-
 class RenderImage:
     """Image wrapper for rendering adversarial patch and synthetic objects."""
 
     def __init__(
         self,
         dataset: str,
-        sample: dict[str, Any],  # TODO: YOLO?
-        img_df: pd.DataFrame,
+        samples: list[dict[str, Any]],
+        mode: str = "reap",
+        obj_class: int | None = None,
         img_size: SizePx | None = None,
         img_mode: str = "BGR",
         interp: str = "bilinear",
         img_aug_prob_geo: float | None = None,
         device: Any = "cuda",
-        is_detectron: bool = True,
+        robj_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Initialize RenderImage containing full image and various metadata.
 
@@ -84,47 +59,66 @@ class RenderImage:
         Raises:
             ValueError: Invalid img_mode.
         """
-        self.filename: str = img_df["filename"]
         self._dataset: str = dataset
-        self._img_df: pd.DataFrame = img_df
+        # self._img_df: pd.DataFrame = img_df
         self._interp: str = interp
-        self._device: Any = device
-        self._is_detectron: bool = is_detectron
-
-        # Expect int image [0-255] and resize if size does not match img_size
-        image: ImageTensor = sample["image"].float() / 255
-        self.img_size: SizePx = (
-            image.shape[-2:] if img_size is None else img_size
-        )
-        self.pad_size: SizePx = (0, 0)
-        if self.img_size != image.shape[-2:]:
-            image, pad_size = self._resize_image(image)
-            self.pad_size = pad_size
-        self.image: ImageTensor = image.to(device)
-
-        # Copy metadata and use as target
-        target = copy.deepcopy(sample)
-        target.pop("image")
-        self.target: Target = target
+        # self._device: Any = device
+        self._is_detectron: bool = "instances" in samples[0]
 
         if img_mode not in ("BGR", "RGB"):
             raise ValueError(
                 f"Invalid img_mode {img_mode}! Must either be BGR or RGB."
             )
         self.img_mode: str = img_mode
-        if img_mode == "BGR":
-            self.image = self.image.flip(0)
+        self._mode: str = mode
+        self.num_objs: int = 0
+        self.obj_class: int = -1 if obj_class is None else obj_class
+        self.img_size: SizePx = img_size
 
-        self.img_size_orig: SizePx = (
-            sample["height"],
-            sample["width"],
-        )
-        self.size_ratio: tuple[float, float] = (
-            self.img_size[0] / self.img_size_orig[0],
-            self.img_size[1] / self.img_size_orig[1],
-        )
+        if robj_kwargs is None:
+            robj_kwargs = {}
 
-        self.obj_tf_dict: dict[int, render_object.RenderObject] = OrderedDict()
+        # Expect int image [0-255] and resize if size does not match img_size
+        images: list[ImageTensor] = []
+        self._tf_params = {}
+        obj_to_img = []
+
+        for i, sample in enumerate(samples):
+            image: ImageTensor = sample["image"].float() / 255
+            image = self._resize_image(image)
+            image = image.flip(0) if img_mode == "BGR" else image
+            images.append(image.to(device))
+
+            if mode == "reap":
+                for obj in sample["annotations"]:
+                    wrong_class = obj["category_id"] not in (-1, obj_class)
+                    if not obj["has_reap"] or wrong_class:
+                        continue
+                    self.num_objs += 1
+                    robj: reap_object.ReapObject = reap_object.ReapObject(
+                        obj=obj,
+                        dataset=self._dataset,
+                        obj_class=obj["category_id"],
+                        img_size=self.img_size,
+                        device=device,
+                        **robj_kwargs,
+                    )
+                    robj.aggregate_params(self._tf_params)
+                    obj_to_img.append(i)
+            else:
+                # TODO: Set self.num_objs
+                raise NotImplementedError()
+
+        self.images = torch.stack(images, dim=0)
+        self.samples = samples
+
+        for name, params in self._tf_params.items():
+            self._tf_params[name] = torch.cat(params, dim=0)
+        self._tf_params["obj_transforms"] = RenderObject.get_augmentation(
+            robj_kwargs.get("patch_aug_params"), interp
+        )
+        self._tf_params["obj_to_img"] = torch.tensor(obj_to_img, device=device)
+        self._tf_params["interp"] = interp
 
         # Init augmentation transform for image
         self._aug_geo_img: TransformFn = util._identity
@@ -146,160 +140,29 @@ class RenderImage:
             image: Resized or padded image.
             pad_size: Tuple of top and left padding.
         """
-        height, width = image.shape[-2:]
-        pad_size: SizePx
-        if width != self.img_size[1]:
-            raise ValueError(
-                f"image of shape {image.shape} is not compatible with img_size "
-                f"{self.img_size}!"
-            )
-        if height > self.img_size[0]:
-            # If actual height is larger than desired height, just resize
-            # image and avoid padding
-            image = img_util.resize_and_pad(
-                image, resize_size=self.img_size, interp=self._interp
-            )
-            pad_size = (0, 0)
-        else:
-            # Otherwise, pad height
-            image, padding = img_util.resize_and_pad(
-                image, pad_size=self.img_size, return_padding=True
-            )
-            pad_size = (padding[1], padding[0])
+        # if width != self.img_size[1]:
+        #     raise ValueError(
+        #         f"image of shape {image.shape} is not compatible with img_size "
+        #         f"{self.img_size}!"
+        #     )
+        image = img_util.resize_and_pad(
+            obj=image,
+            resize_size=self.img_size,
+            pad_size=self.img_size,
+            interp=self._interp,
+            keep_aspect_ratio=True,
+        )
         assert image.shape[-2:] == self.img_size, (
             f"Image shape is {image.shape} but img_size is {self.img_size}. "
             "Image resize went wrong!"
         )
-        return image, pad_size
+        return image
 
-    def create_object(
+    def apply_objects(
         self,
-        obj_id: int | None,
-        robj_fn: Callable[..., render_object.RenderObject],
-        robj_kwargs: dict[str, Any],
-    ) -> None:
-        """Create a new RenderObject and add to obj_tf_dict.
-
-        RenderObject represents a digital object (e.g., adversarial patch,
-        synthetic object). Once added to RenderImage, it will be rendered on
-        image after apply_objects is called.
-
-        Args:
-            obj_tf: Given RenderObject to be added to this RenderImage. It must
-                exist in as one of the object ids in img_df.
-
-        Raises:
-            ValueError: obj_id already exists in obj_tf_dict.
-        """
-        if obj_id in self.obj_tf_dict:
-            raise ValueError(f"obj_id {obj_id} already exists!")
-
-        assign_obj_id: int
-        obj_df: pd.DataFrame | None
-        if obj_id is None:
-            # If obj_id not specified, use the largest id not yet taken
-            if self.obj_tf_dict:
-                assign_obj_id = max(self.obj_tf_dict.keys()) + 1
-            else:
-                assign_obj_id = 0
-            obj_df = None
-        else:
-            if obj_id not in list(self._img_df["object_id"]):
-                raise ValueError(f"Given obj_id {obj_id} is not in img_df!")
-            assign_obj_id = obj_id
-            obj_df = self._img_df[self._img_df["object_id"] == obj_id].squeeze()
-
-        robj: render_object.RenderObject = robj_fn(
-            dataset=self._dataset,
-            obj_df=obj_df,
-            filename=self.filename,
-            img_size=self.img_size,
-            img_size_orig=self.img_size_orig,
-            img_hw_ratio=self.size_ratio,
-            img_pad_size=self.pad_size,
-            device=self._device,
-            **robj_kwargs,
-        )
-        self.add_object(robj, assign_obj_id)
-
-    def add_object(
-        self,
-        robj: render_object.RenderObject,
-        obj_id: int | None = None,
-    ) -> None:
-        """Add an existing RenderObject to obj_tf_dict.
-
-        Args:
-            obj_tf: Given RenderObject to be added to this RenderImage.
-
-        Raises:
-            ValueError: obj_tf is not an RenderObject instance.
-        """
-        if not isinstance(robj, render_object.RenderObject):
-            raise ValueError(
-                f"Given object ({robj}) is not an RenderObject instance!"
-            )
-
-        if obj_id in self.obj_tf_dict:
-            raise ValueError(f"obj_id {obj_id} already exists!")
-
-        if obj_id is None:
-            obj_id = max(self.obj_tf_dict.keys()) + 1
-
-        self.obj_tf_dict[obj_id] = robj
-
-    def update_object(
-        self,
-        robj: render_object.RenderObject,
-        obj_id: int,
-    ) -> None:
-        """Replace RenderObject in self.obj_tf_dict at obj_id with robj.
-
-        Args:
-            robj: RenderObject to replace an existing one.
-            obj_id: Object id to replace.
-
-        Raises:
-            ValueError: obj_id does not exist in self.obj_tf_dict.
-        """
-        if obj_id not in self.obj_tf_dict:
-            raise ValueError(
-                f"obj_id {obj_id} does not exist! Use add_object() instead."
-            )
-        self.obj_tf_dict[obj_id] = robj
-
-    def get_object(
-        self,
-        obj_id: int | None = None,
-    ) -> render_object.RenderObject:
-        """Get a RenderObject with a given obj_id.
-
-        Args:
-            obj_id: Object ID of RenderObject to retrieve. If None, obj_tf_dict
-                must have exactly one object, and that object will be returned.
-                Defaults to None.
-
-        Raises:
-            ValueError: obj_tf_dict does not have exactly 1 object.
-            ValueError: Given obj_id does not exist.
-
-        Returns:
-            RenderObject with given obj_id.
-        """
-        if obj_id is None:
-            num_objs = len(self.obj_tf_dict)
-            if num_objs != 1:
-                raise ValueError(
-                    f"There are 0 or more than 1 objects ({num_objs}) in "
-                    "obj_tf_dict. obj_id must be specified!"
-                )
-            obj_id: int = list(self.obj_tf_dict.keys())[0]
-
-        if obj_id not in self.obj_tf_dict:
-            raise ValueError(f"obj_id {obj_id} does not exist!")
-        return self.obj_tf_dict[obj_id]
-
-    def apply_objects(self) -> tuple[ImageTensor, Target]:
+        adv_patch: BatchImageTensor | None = None,
+        patch_mask: BatchMaskTensor | None = None,
+    ) -> tuple[BatchImageTensor, list[Target]]:
         """Render adversarial patches (or objects) on image.
 
         This calls apply_object() on each of RenderObjects in obj_tf_dict.
@@ -308,21 +171,29 @@ class RenderImage:
             image: Image with patches (or synthetic objects) applied.
             target: Updated target labels to account for applied object if any.
         """
-        image: ImageTensor = self.image
-        target: Target = self.target
+        if adv_patch is None or patch_mask is None:
+            return self.images, self.samples
 
-        for obj_tf in self.obj_tf_dict.values():
-            image, target = obj_tf.apply_object(image, target)
+        if self._mode == "reap":
+            images, targets = reap_object.ReapObject.apply_objects(
+                self.images,
+                self.samples,
+                adv_patch,
+                patch_mask,
+                self._tf_params,
+            )
+        else:
+            # TODO: Synthetic mode
+            raise NotImplementedError()
 
         # Apply augmentation on the entire image
-        image = self._aug_geo_img(image)
-        image = img_util.coerce_rank(image, 3)
+        images = self._aug_geo_img(images)
 
-        return image, target
+        return images, targets
 
     def post_process_image(
         self,
-        image: ImageTensor | None = None,
+        images: ImageTensor | None = None,
     ) -> ImageTensorDet:
         """Post-process image by puting it in original format and scale to 255.
 
@@ -337,28 +208,28 @@ class RenderImage:
         Returns:
             Processed image.
         """
-        if image is None:
-            image = self.image
-        if image.ndim != 3:
+        if images is None:
+            images = self.images
+        if images.ndim != 4:
             raise ValueError(
-                f"image must have rank 3, but its shape is {image.shape}!"
+                f"image must have rank 4, but its shape is {images.shape}!"
             )
-        if image.max() > 1 or image.min() < 0:
+        if images.max() > 1 or images.min() < 0:
             raise ValueError("Pixel values of image are not between 0 and 1!")
 
         if not self._is_detectron:
-            return image
+            return images
 
         if self.img_mode == "BGR":
-            image = image.flip(0)
-        image *= 255
-        return image
+            images = images.flip(1)
+        images *= 255
+        return images
 
-    def save_image(
+    def save_images(
         self,
         save_dir: str,
         image: ImageTensor | None = None,
-        ext: str = "png",
+        name: str = "temp.png",
     ) -> None:
         """Save image to save_dir.
 
@@ -368,10 +239,8 @@ class RenderImage:
         Args:
             save_dir: Directory to save image to.
             image: Image to save. If None, use self.image. Defaults to None.
-            ext: Image extension. Defaults to "png".
+            name: Image name to save as. Defaults to "temp.png".
         """
         if image is None:
-            image = self.image
-        torchvision.utils.save_image(
-            self.image, os.path.join(save_dir, f"{self.filename}.{ext}")
-        )
+            image = self.images
+        torchvision.utils.save_image(self.images, os.path.join(save_dir, name))

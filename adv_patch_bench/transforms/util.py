@@ -6,8 +6,10 @@ from typing import List, NewType, Tuple
 
 import kornia
 import kornia.augmentation as K
+import torch
 import numpy as np
 
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     ImageTensor,
@@ -24,7 +26,7 @@ def _identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
 
 
 def _identity_with_params(
-    inputs: ImageTensor | BatchImageTensor
+    inputs: ImageTensor | BatchImageTensor,
 ) -> tuple[BatchImageTensor, None]:
     """Indentity function that also returns None param."""
     inputs = _identity(inputs)
@@ -145,7 +147,7 @@ def _gen_octagon_mask(
 
 def gen_sign_mask(
     shape: str, hw_ratio: float, obj_width_px: int
-) -> tuple[np.ndarray, _KeyPoints]:
+) -> tuple[torch.Tensor, _KeyPoints]:
     """Generate mask of object and source keypoints.
 
     The keypoints are a list of tuple (x, y) coordinates starting from the
@@ -172,7 +174,21 @@ def gen_sign_mask(
         "octagon": _gen_octagon_mask,
         "square": _gen_rect_mask,
     }
-    return shape_to_mask[shape](obj_width_px, ratio=hw_ratio)
+    mask, box = shape_to_mask[shape](obj_width_px, ratio=hw_ratio)
+    mask = torch.from_numpy(mask)
+    img_util.coerce_rank(mask, 4)
+    mask, scales, padding = img_util.resize_and_pad(
+        obj=mask,
+        resize_size=(obj_width_px, obj_width_px),
+        pad_size=(obj_width_px, obj_width_px),
+        is_binary=True,
+        keep_aspect_ratio=True,
+        return_params=True,
+    )
+    new_box = []
+    for x, y in box:
+        new_box.append((x * scales[1] + padding[0], y * scales[0] + padding[1]))
+    return mask, new_box
 
 
 def get_transform_fn(

@@ -56,7 +56,7 @@ class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
             features,
             proposals,
             compute_loss=True,
-            gt_instances=instances,
+            # gt_instances=instances,
         )
 
         # TODO(feature): Custom weights on losses

@@ -14,6 +14,8 @@ from detectron2.data import transforms as T
 from detectron2.data.datasets import register_coco_instances
 from detectron2.structures import BoxMode
 
+import adv_patch_bench.utils.image as img_util
+
 # Define dataset paths
 data_dir = Path("data")
 
@@ -102,7 +104,9 @@ class BenignMapper:
         self.img_format = cfg.INPUT.FORMAT
         self.mask_on = cfg.MODEL.MASK_ON
         self.mask_format = cfg.INPUT.MASK_FORMAT
-        self.keypoint_on = cfg.MODEL.KEYPOINT_ON
+        # Set keypoint_on to True to handle REAP geometric transform
+        # self.keypoint_on = cfg.MODEL.KEYPOINT_ON
+        self.keypoint_on = True
         self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
 
         if self.keypoint_on and is_train:
@@ -137,6 +141,14 @@ class BenignMapper:
         image = utils.read_image(
             dataset_dict["file_name"], format=self.img_format
         )
+        image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        image = img_util.resize_and_pad(
+            obj=image,
+            resize_size=(1536, 2048),  # FIXME
+            pad_size=(1536, 2048),
+            keep_aspect_ratio=True,
+        )
+        image = image.permute(1, 2, 0).numpy()
         utils.check_image_size(dataset_dict, image)
 
         if "annotations" not in dataset_dict:
@@ -201,9 +213,16 @@ class BenignMapper:
                     image_shape,
                     keypoint_hflip_indices=self.keypoint_hflip_indices,
                 )
-                for obj in dataset_dict.pop("annotations")
+                for obj in dataset_dict["annotations"]
                 if obj.get("iscrowd", 0) == 0
             ]
+            # for anno in annos:
+            #     if "keypoints" in anno:
+            #         if anno["keypoints"].shape != (4, 3):
+            #             print(annos)
+            #             print(dataset_dict["file_name"])
+            #             raise NotImplementedError()
+            #         anno["keypoints"] = np.array(anno["keypoints"])
             instances = utils.annotations_to_instances(
                 annos, image_shape, mask_format=self.mask_format
             )
@@ -213,13 +232,18 @@ class BenignMapper:
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
 
         instances = dataset_dict["instances"]
-        dataset_dict["annotations"] = []
-        for i in range(len(instances)):
+        new_annos = []
+        num_instances = len(instances)
+        for i in range(num_instances):
             obj = {
                 "bbox": instances[i].gt_boxes.tensor[0].tolist(),
                 "category_id": instances[i].gt_classes.item(),
                 "bbox_mode": BoxMode.XYXY_ABS,
+                "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            dataset_dict["annotations"].append(obj)
+            for key in ("alpha", "beta", "has_reap"):
+                obj[key] = dataset_dict["annotations"][i][key]
+            new_annos.append(obj)
+        dataset_dict["annotations"] = new_annos
 
         return dataset_dict

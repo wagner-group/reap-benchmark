@@ -299,7 +299,7 @@ def main() -> None:
         rimg_save_dir = save_dir / "attack_bg_syn"
         rimg_save_dir.mkdir(exist_ok=True)
         for rimg in attack_rimgs:
-            rimg.save_image(str(rimg_save_dir))
+            rimg.save_images(str(rimg_save_dir))
 
     # Generate mask and adversarial patch
     adv_patch, patch_mask = _generate_adv_patch(

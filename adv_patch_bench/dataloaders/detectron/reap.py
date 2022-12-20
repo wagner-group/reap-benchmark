@@ -21,7 +21,7 @@ def get_reap_dict(
 
     See mapillary.get_mapillary_dict() for args and returns.
     """
-    del kwargs  # Unused
+    _ = kwargs  # Unused
     data_dict = mapillary.get_mapillary_dict(
         split="combined",
         base_path=base_path,

@@ -96,6 +96,14 @@ def gen_patch_mask(
             f"height, width), but {patch_size_mm} is given!"
         )
 
+    px_ratio = obj_size_px[0] / obj_size_px[1]
+    mm_ratio = obj_size_mm[0] / obj_size_mm[1]
+    if abs(px_ratio - mm_ratio) > 1e-2:
+        raise ValueError(
+            "Aspect ratio of obj_size_px and obj_size_mm must match "
+            f"({px_ratio} vs {mm_ratio})!"
+        )
+
     # TODO(feature): Add other non-rect patch shape
     patch_mask: MaskTensor = _gen_mask_rect(
         patch_size_mm,

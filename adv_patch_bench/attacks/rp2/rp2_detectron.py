@@ -11,7 +11,7 @@ from detectron2 import structures
 from torch import nn
 
 from adv_patch_bench.attacks.rp2 import rp2_yolo
-from adv_patch_bench.utils.types import ImageTensor, Target
+from adv_patch_bench.utils.types import ImageTensor, Target, BatchImageTensor
 
 
 class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
@@ -246,9 +246,10 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
         """
         roi_heads = self._core_model.roi_heads
         features = [features[f] for f in roi_heads.box_in_features]
-        proposals = roi_heads.label_and_sample_proposals(
-            proposals, gt_instances
-        )
+        if gt_instances is not None:
+            proposals = roi_heads.label_and_sample_proposals(
+                proposals, gt_instances
+            )
         box_features = roi_heads.box_pooler(
             features, [x.proposal_boxes for x in proposals]
         )
@@ -265,7 +266,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
 
     def _loss_func(
         self,
-        adv_imgs: list[ImageTensor],
+        adv_imgs: BatchImageTensor,
         adv_targets: list[Target],
         obj_class: int | None = None,
     ) -> torch.Tensor:
@@ -281,11 +282,13 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
             Loss for attacker to minimize.
         """
         # NOTE: IoU threshold for ROI is 0.5 and for RPN is 0.7
-        inputs = adv_targets
-        inputs["image"] = adv_imgs
+        inputs = []
+        for img, target in zip(adv_imgs, adv_targets):
+            target["image"] = img
+            inputs.append(target)
         # pylint: disable=unbalanced-tuple-unpacking
         _, target_labels, target_logits, obj_logits = self._get_targets(
-            [inputs],
+            inputs,
             iou_thres=self._detectron_iou_thres,
             score_thres=self._min_conf,
             use_correct_only=False,

@@ -1,22 +1,22 @@
 """Implement REAP patch rendering for each object."""
 
+from __future__ import annotations
+
 from typing import Any, Callable, Tuple
 
 import cv2
 import kornia.geometry.transform as kornia_tf
 import numpy as np
-import pandas as pd
 import torch
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
 from adv_patch_bench.utils.types import (
-    BatchImageTensorGeneric,
+    BatchImageTensor,
     BatchImageTensorRGBA,
     ImageTensor,
     ImageTensorRGBA,
     Target,
-    TransformFn,
 )
 
 _VALID_TRANSFORM_MODE = ("perspective", "translate_scale")
@@ -27,6 +27,7 @@ class ReapObject(render_object.RenderObject):
 
     def __init__(
         self,
+        obj: dict[str, Any] | None = None,
         patch_transform_mode: str = "perspective",
         use_patch_relight: bool = True,
         **kwargs,
@@ -49,65 +50,35 @@ class ReapObject(render_object.RenderObject):
                 f"transform_mode {patch_transform_mode} is not implemented. "
                 f"Only supports {_VALID_TRANSFORM_MODE}!"
             )
-        self.patch_transform_mode: str = patch_transform_mode
+        self._patch_transform_mode: str = patch_transform_mode
+        self._use_patch_relight: bool = use_patch_relight
 
-        # Get REAP relighting transform params
+        # # Get REAP relighting transform params
         if use_patch_relight:
-            alpha = torch.tensor(self.obj_df["alpha"], device=self._device)
-            beta = torch.tensor(self.obj_df["beta"], device=self._device)
+            alpha = torch.tensor(obj["alpha"], device=self._device)
+            beta = torch.tensor(obj["beta"], device=self._device)
         else:
             alpha = torch.tensor(1.0, device=self._device)
             beta = torch.tensor(0.0, device=self._device)
-        self.alpha: torch.Tensor = img_util.coerce_rank(alpha, 3)
-        self.beta: torch.Tensor = img_util.coerce_rank(beta, 3)
+        self.alpha: torch.Tensor = img_util.coerce_rank(alpha, 4)
+        self.beta: torch.Tensor = img_util.coerce_rank(beta, 4)
 
         # Get REAP geometric transform params
-        tf_data = self._get_reap_transforms(self.obj_df)
-        self.transform_mat = tf_data[1].to(self._device)
-        self.transform_fn: TransformFn = self._wrap_transform_fn(tf_data[0])
-
-    def _wrap_transform_fn(
-        self, transform_fn: Callable[..., BatchImageTensorGeneric]
-    ) -> TransformFn:
-        """Wrap kornia transform function to avoid passing arguments around.
-
-        Args:
-            transform_fn: kornia transform function to wrap.
-
-        Returns:
-            Wrapped transform function that only takes image as input.
-        """
-
-        def wrapper_tf_fn(
-            x: BatchImageTensorGeneric,
-        ) -> BatchImageTensorGeneric:
-            return transform_fn(
-                x,
-                self.transform_mat,
-                self.img_size,
-                mode=self._interp,
-                padding_mode="zeros",
-            )
-
-        return wrapper_tf_fn
+        self.transform_mat = self._get_reap_transforms(obj["keypoints"])
 
     def _get_reap_transforms(
-        self, df_row: pd.DataFrame
-    ) -> Tuple[Callable[..., Any], torch.Tensor]:
+        self, tgt: np.ndarray | list[list[float]] | None = None
+    ) -> torch.Tensor:
         """Get transformation matrix and parameters.
 
         Returns:
             Tuple of (Transform function, transformation matrix, target points).
         """
-        h_ratio, w_ratio = self.img_hw_ratio
-        h_pad, w_pad = self.img_pad_size
-
-        tgt = np.array(df_row["tgt_points"], dtype=np.float32)
-        tgt[:, 1] = (tgt[:, 1] * h_ratio) + h_pad
-        tgt[:, 0] = (tgt[:, 0] * w_ratio) + w_pad
+        tgt = np.array(tgt, dtype=np.float32)[:, :2]
         src = np.array(self.src_points, dtype=np.float32)
+        tgt = tgt[: len(src)].copy()
 
-        if self.patch_transform_mode == "translate_scale":
+        if self._patch_transform_mode == "translate_scale":
             # Use corners of axis-aligned bounding box for transform
             # (translation and scaling) instead of real corners.
             min_tgt_x = min(tgt[:, 0])
@@ -136,29 +107,31 @@ class ReapObject(render_object.RenderObject):
                 ]
             )
 
-        # Get transformation matrix and transform function from source and
-        # target keypoint coordinates.
+        assert src.shape == tgt.shape, (
+            f"src and tgt keypoints don't have the same shape ({src.shape} vs "
+            f"{tgt.shape})!"
+        )
+
         if len(src) == 3:
             # For triangles which have only 3 keypoints
-            M = (
-                torch.from_numpy(cv2.getAffineTransform(src, tgt))
-                .unsqueeze(0)
-                .float()
-            )
-            transform_func = kornia_tf.warp_affine
+            transform_mat = cv2.getAffineTransform(src, tgt)
+            transform_mat = torch.from_numpy(transform_mat).unsqueeze(0).float()
+            new_row = torch.tensor([[[0, 0, 1]]])
+            transform_mat = torch.cat([transform_mat, new_row], dim=1)
         else:
             # All other signs use perspective transform
             src = torch.from_numpy(src).unsqueeze(0)
             tgt = torch.from_numpy(tgt).unsqueeze(0)
-            M = kornia_tf.get_perspective_transform(src, tgt)
-            transform_func = kornia_tf.warp_perspective
+            transform_mat = kornia_tf.get_perspective_transform(src, tgt)
+        return transform_mat.to(self._device)
 
-        return transform_func, M
-
-    def apply_object(
-        self,
-        image: ImageTensor,
-        target: Target,
+    @staticmethod
+    def apply_objects(
+        images: BatchImageTensor,
+        targets: Target,
+        adv_patch,
+        patch_mask,
+        tf_params: dict[str, Any],
     ) -> Tuple[ImageTensor, Target]:
         """Apply adversarial patch to image using REAP approach.
 
@@ -170,47 +143,88 @@ class ReapObject(render_object.RenderObject):
             final_img: Image with transformed patch applied.
             target: Target with synthetic object label added.
         """
-        adv_patch: ImageTensor = self.adv_patch.clone()
-        patch_mask: ImageTensor = self.patch_mask.clone()
+        transform_mat = tf_params["transform_mat"]
+        alpha = tf_params["alpha"]
+        beta = tf_params["beta"]
+        obj_to_img = tf_params["obj_to_img"]
+        obj_mask = tf_params["obj_mask"]
+        aug_geo, _, aug_light = tf_params["obj_transforms"]
 
-        adv_patch = img_util.coerce_rank(adv_patch, 3)
-        patch_mask = img_util.coerce_rank(patch_mask, 3)
-        if not (
-            adv_patch.shape[-2:] == patch_mask.shape[-2:] == self.obj_size_px
-        ):
+        if adv_patch.shape[-2:] != patch_mask.shape[-2:] != obj_mask.shape[-2:]:
             raise ValueError(
                 f"Shape mismatched: adv_patch {adv_patch.shape}, patch_mask "
-                f"{patch_mask.shape}, obj_size {self.obj_size_px}!"
+                f"{patch_mask.shape}, obj_mask: {obj_mask.shape}!"
             )
+        batch_size: int = len(images)
+        num_objs: int = len(obj_to_img)
+        if len(targets) != batch_size:
+            raise IndexError(
+                f"targets and images must have the same length ({len(targets)} "
+                f"vs {batch_size})!"
+            )
+        if any(len(inpt) != num_objs for inpt in (transform_mat, alpha, beta)):
+            raise IndexError(
+                "Transform data must have length equal to the number of objects"
+                f" ({num_objs})!"
+            )
+        for inpt in (adv_patch, patch_mask, obj_mask):
+            if len(inpt) not in (num_objs, 1):
+                raise IndexError("Patch and masks must have ")
 
         # Apply relighting transform (brightness and contrast)
-        adv_patch.mul_(self.alpha).add_(self.beta)
+        adv_patch.mul_(alpha).add_(beta)
         adv_patch.clamp_(0, 1)
 
         # Apply extra lighting augmentation on patch
-        adv_patch = self.aug_light(adv_patch)
+        adv_patch = aug_light(adv_patch)
         adv_patch.clamp_(0, 1)
 
         # Combine patch_mask with adv_patch as alpha channel
-        rgba_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=0)
+        rgba_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=1)
         # Crop with sign_mask and patch_mask
-        rgba_patch *= self.obj_mask * patch_mask
+        rgba_patch *= obj_mask * patch_mask
 
         # Apply extra geometric augmentation on patch
         rgba_patch: BatchImageTensorRGBA
-        rgba_patch, _ = self.aug_geo(rgba_patch)
-        rgba_patch = img_util.coerce_rank(rgba_patch, 4)
+        rgba_patch, _ = aug_geo(rgba_patch)
 
         # Apply transform on RGBA patch
-        warped_patch: BatchImageTensorRGBA = self.transform_fn(rgba_patch)
-        warped_patch.squeeze_(0)
+        warped_patch: BatchImageTensorRGBA = kornia_tf.warp_perspective(
+            rgba_patch,
+            transform_mat,
+            images.shape[-2:],
+            mode=tf_params["interp"],
+            padding_mode="zeros",
+        )
         warped_patch.clamp_(0, 1)
 
+        # Add patches from same image together
+        per_img_patches: list[BatchImageTensorRGBA] = []
+        for i in range(batch_size):
+            per_img_patches.append(
+                warped_patch[obj_to_img == i].sum(0, keepdim=True)
+            )
+        per_img_patches = torch.cat(per_img_patches, dim=0)
+        assert len(per_img_patches) == batch_size
+
         # Place patch on object using alpha channel
-        alpha_mask = warped_patch[-1:]
-        warped_patch: ImageTensor = warped_patch[:-1]
+        alpha_mask = per_img_patches[:, -1:]
+        warped_patch: BatchImageTensor = per_img_patches[:, :-1]
         final_img: ImageTensor = (
             1 - alpha_mask
-        ) * image + alpha_mask * warped_patch
+        ) * images + alpha_mask * warped_patch
 
-        return final_img, target
+        return final_img, targets
+
+    def aggregate_params(self, params_dict):
+        params = {
+            "transform_mat": self.transform_mat,
+            "alpha": self.alpha,
+            "beta": self.beta,
+            "obj_mask": self.obj_mask,
+        }
+        for name, value in params.items():
+            if name in params_dict:
+                params_dict[name].append(value)
+            else:
+                params_dict[name] = [value]

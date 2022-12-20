@@ -13,7 +13,11 @@ from torch import optim
 
 from adv_patch_bench.attacks import base_attack
 from adv_patch_bench.transforms import render_image
-from adv_patch_bench.utils.types import ImageTensor, MaskTensor, Target
+from adv_patch_bench.utils.types import (
+    BatchImageTensor,
+    BatchMaskTensor,
+    Target,
+)
 
 
 class GradAttack(base_attack.DetectorAttackModule):
@@ -71,8 +75,8 @@ class GradAttack(base_attack.DetectorAttackModule):
     @abstractmethod
     def compute_loss(
         self,
-        delta: ImageTensor,
-        adv_img: list[ImageTensor],
+        delta: BatchImageTensor,
+        adv_img: BatchImageTensor,
         adv_target: list[Target],
         obj_class: int | None = None,
     ) -> torch.Tensor:
@@ -93,21 +97,23 @@ class GradAttack(base_attack.DetectorAttackModule):
     @torch.enable_grad()
     def _run_one(
         self,
+        rimg: render_image.RenderImage,
         z_delta: torch.Tensor,
-        rimgs: list[render_image.RenderImage],
+        patch_mask: BatchMaskTensor,
         batch_mode: bool = False,
-    ) -> torch.Tensor:
-        all_bg_idx: np.ndarray = np.arange(len(rimgs))
+    ) -> BatchImageTensor:
+        batch_size = len(z_delta)
+        all_bg_idx: np.ndarray = np.arange(batch_size)
 
         # Run PGD on inputs for specified number of steps
         for step in range(self._num_steps):
 
-            rimg_eot = rimgs
+            rimg_eot = rimg
             if not batch_mode:
                 # Randomly select RenderImages to attack this step
                 np.random.shuffle(all_bg_idx)
                 bg_idx = all_bg_idx[: self._num_eot]
-                rimg_eot = [rimgs[i] for i in bg_idx]
+                rimg_eot = [rimg[i] for i in bg_idx]
 
             z_delta.requires_grad_()
             # Determine how perturbation is projected
@@ -120,19 +126,22 @@ class GradAttack(base_attack.DetectorAttackModule):
                 delta = self._to_model_space(z_delta, 0, 1)
 
             # Load new adversarial patch to each RenderObject
-            adv_imgs = []
-            adv_targets = []
-            for rimg in rimg_eot:
-                robj = rimg.get_object()
-                robj.load_adv_patch(adv_patch=delta)
-                # Apply adversarial patch to each RenderImage
-                adv_img, adv_target = rimg.apply_objects()
-                adv_img = rimg.post_process_image(adv_img)
-                adv_imgs.append(adv_img)
-                adv_targets.append(adv_target)
+            # adv_imgs = []
+            # adv_targets = []
+            # for rimg in rimg_eot:
+            #     robj = rimg.get_object()
+            #     robj.load_adv_patch(adv_patch=delta)
+            #     # Apply adversarial patch to each RenderImage
+            #     adv_img, adv_target = rimg.apply_objects()
+            #     adv_img = rimg.post_process_image(adv_img)
+            #     adv_imgs.append(adv_img)
+            #     adv_targets.append(adv_target)
+
+            adv_img, adv_target = rimg.apply_objects(delta, patch_mask)
+            adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
 
             loss: torch.Tensor = self.compute_loss(
-                delta, adv_imgs, adv_targets, robj.obj_class
+                delta, adv_img, adv_target, rimg.obj_class
             )
             loss.backward()
             z_delta = self._step_opt(z_delta)
@@ -152,10 +161,10 @@ class GradAttack(base_attack.DetectorAttackModule):
     @torch.no_grad()
     def run(
         self,
-        rimgs: list[render_image.RenderImage],
-        patch_mask: MaskTensor | list[MaskTensor],
+        rimg: render_image.RenderImage,
+        patch_mask: BatchMaskTensor,
         batch_mode: bool = False,
-    ) -> ImageTensor:
+    ) -> BatchImageTensor:
         """Run gradient-based attack.
 
         Args:
@@ -169,26 +178,34 @@ class GradAttack(base_attack.DetectorAttackModule):
 
         batch_size: int = 1
         if batch_mode:
-            if not isinstance(patch_mask, list):
-                raise TypeError(
-                    "patch_mask must be list of tensors if batch_mode is True!"
-                )
-            if len(rimgs) != len(patch_mask):
+            if patch_mask.ndim < 4:
                 raise IndexError(
-                    "rimgs and patch_mask must have same lengths if batch_mode is True!"
+                    "patch_mask must have 4 dims if batch_mode is True!"
                 )
-            batch_size = len(rimgs)
+            if rimg.num_objs != len(patch_mask):
+                raise IndexError(
+                    f"Number of objects in rimg ({rimg.num_objs}) must be equal"
+                    f" to length of patch_mask ({len(patch_mask)}) if "
+                    "batch_mode is True!"
+                )
+            batch_size = len(patch_mask)
+
+        # Wrap with RenderImage -- already done
+
+        # Create patches for all instances to attack
+
+        # RenderImages apply patches in batch
 
         # Load patch_mask to all RenderObject first. This should be done once.
-        for i, rimg in enumerate(rimgs):
-            robj = rimg.get_object()
-            robj.load_adv_patch(
-                patch_mask=patch_mask[i] if batch_mode else patch_mask
-            )
+        # for i, rimg in enumerate(rimgs):
+        #     robj = rimg.get_object()
+        #     robj.load_adv_patch(
+        #         patch_mask=patch_mask[i] if batch_mode else patch_mask
+        #     )
 
         for _ in range(self._num_restarts):
             # Initialize adversarial perturbation
-            z_delta: ImageTensor = torch.zeros(
+            z_delta: BatchImageTensor = torch.zeros(
                 (batch_size, 3) + patch_mask.shape[-2:],
                 device=device,
                 dtype=torch.float32,
@@ -198,7 +215,9 @@ class GradAttack(base_attack.DetectorAttackModule):
             self._reset_run(z_delta)
             # Run attack once
             with EventStorage():
-                delta = self._run_one(z_delta, rimgs, batch_mode=batch_mode)
+                delta = self._run_one(
+                    rimg, z_delta, patch_mask, batch_mode=batch_mode
+                )
 
         # DEBUG
         # outt = non_max_suppression(out.detach(), conf_thres=0.25, iou_thres=0.45)
@@ -209,7 +228,7 @@ class GradAttack(base_attack.DetectorAttackModule):
         return delta.detach()
 
     def _setup_opt(
-        self, z_delta: ImageTensor
+        self, z_delta: BatchImageTensor
     ) -> tuple[optim.Optimizer | None, optim.lr_scheduler._LRScheduler | None]:
         # Set up optimizer
         if self._optimizer_name == "sgd":
@@ -236,7 +255,7 @@ class GradAttack(base_attack.DetectorAttackModule):
 
         return opt, lr_schedule
 
-    def _step_opt(self, z_delta: ImageTensor) -> ImageTensor:
+    def _step_opt(self, z_delta: BatchImageTensor) -> BatchImageTensor:
         if self._optimizer == "pgd":
             grad = z_delta.grad.detach()
             grad = torch.sign(grad)

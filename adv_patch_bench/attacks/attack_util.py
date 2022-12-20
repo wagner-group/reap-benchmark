@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 import torch
 import torchvision
 
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.attacks import base_attack, patch_mask_util
 from adv_patch_bench.attacks.dpatch import dpatch_detectron
 from adv_patch_bench.attacks.rp2 import rp2_detectron, rp2_yolo
@@ -74,8 +75,8 @@ def prep_adv_patch(
     if attack_type == "none":
         return None, None
 
-    adv_patch: ImageTensor
-    patch_mask: MaskTensor
+    adv_patch: ImageTensor | None = None
+    patch_mask: MaskTensor | None = None
 
     if attack_type == "load":
         if adv_patch_path is None:
@@ -84,31 +85,43 @@ def prep_adv_patch(
             )
         with open(adv_patch_path, "rb") as file:
             adv_patch, patch_mask = pickle.load(file)
-        return adv_patch, patch_mask
+    else:
+        if patch_size_mm is None or obj_size_px is None or obj_size_mm is None:
+            raise ValueError(
+                "patch_size_mm, obj_size_px, obj_size_mm must be specified when "
+                'attack_type is not "none" or "load".'
+            )
 
-    if patch_size_mm is None or obj_size_px is None or obj_size_mm is None:
-        raise ValueError(
-            "patch_size_mm, obj_size_px, obj_size_mm must be specified when "
-            'attack_type is not "none" or "load".'
+        # Generate new patch mask from given sizes
+        patch_mask = patch_mask_util.gen_patch_mask(
+            patch_size_mm,
+            obj_size_px,
+            obj_size_mm,
         )
 
-    # Generate new patch mask from given sizes
-    patch_mask = patch_mask_util.gen_patch_mask(
-        patch_size_mm,
-        obj_size_px,
-        obj_size_mm,
+        if attack_type == "debug":
+            # Load 'arrow on checkboard' patch if specified (for debug)
+            debug_patch_path: str = DEFAULT_PATH_DEBUG_PATCH
+            loaded_image: torch.Tensor = torchvision.io.read_image(debug_patch_path)
+            adv_patch = loaded_image.float()[:3, :, :] / 255
+        elif attack_type == "random":
+            # Patch with uniformly random pixels between [0, 1]
+            adv_patch = torch.rand((3,) + obj_size_px)
+
+    pad_size = (obj_size_px[1], obj_size_px[1])
+    if adv_patch is not None:
+        adv_patch = img_util.resize_and_pad(
+            obj=adv_patch,
+            resize_size=pad_size,
+            pad_size=pad_size,
+            keep_aspect_ratio=True,
+        )
+    patch_mask = img_util.resize_and_pad(
+        obj=patch_mask,
+        resize_size=pad_size,
+        pad_size=pad_size,
+        keep_aspect_ratio=True,
+        is_binary=True,
     )
-
-    if attack_type == "per-sign":
-        return None, patch_mask
-
-    if attack_type == "debug":
-        # Load 'arrow on checkboard' patch if specified (for debug)
-        debug_patch_path: str = DEFAULT_PATH_DEBUG_PATCH
-        loaded_image: torch.Tensor = torchvision.io.read_image(debug_patch_path)
-        adv_patch = loaded_image.float()[:3, :, :] / 255
-    elif attack_type == "random":
-        # Patch with uniformly random pixels between [0, 1]
-        adv_patch = torch.rand((3,) + obj_size_px)
 
     return adv_patch, patch_mask

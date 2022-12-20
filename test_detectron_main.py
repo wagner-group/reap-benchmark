@@ -199,9 +199,9 @@ def main() -> None:
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):
         log.info("Loading saved attack config from %s...", attack_config_path)
-        with open(attack_config_path, "r", encoding="utf-8") as f:
+        with open(attack_config_path, "r", encoding="utf-8") as file:
             # pylint: disable=unexpected-keyword-arg
-            config_attack = yaml.safe_load(f, Loader=yaml.FullLoader)
+            config_attack = yaml.safe_load(file, Loader=yaml.FullLoader)
     else:
         config_attack = config["attack"]
 
