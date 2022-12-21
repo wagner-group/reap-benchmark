@@ -8,7 +8,8 @@ from typing import Any
 import torch
 from torch import nn
 
-from adv_patch_bench.utils.types import ImageTensor
+from adv_patch_bench.transforms import render_image
+from adv_patch_bench.utils.types import BatchImageTensor, BatchMaskTensor
 
 
 class DetectorAttackModule(nn.Module):
@@ -46,7 +47,12 @@ class DetectorAttackModule(nn.Module):
         self._core_model.train(self._is_training)
 
     @abc.abstractmethod
-    def run(self, *args, **kwargs) -> ImageTensor:
+    def run(
+        self,
+        rimg: render_image.RenderImage,
+        patch_mask: BatchMaskTensor,
+        batch_mode: bool = False,
+    ) -> BatchImageTensor:
         """Run attack.
 
         Returns:
@@ -54,6 +60,6 @@ class DetectorAttackModule(nn.Module):
         """
         raise NotImplementedError("run() must be implemented!")
 
-    def forward(self, *args, **kwargs) -> ImageTensor:
+    def forward(self, *args, **kwargs) -> BatchImageTensor:
         """Run attack with forward."""
         return self.run(*args, **kwargs)

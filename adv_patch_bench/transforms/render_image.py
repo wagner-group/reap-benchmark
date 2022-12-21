@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -14,11 +15,14 @@ from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchMaskTensor,
+    DetectronSample,
     ImageTensor,
     ImageTensorDet,
     Target,
     TransformFn,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RenderImage:
@@ -58,7 +62,6 @@ class RenderImage:
         Raises:
             ValueError: Invalid img_mode.
         """
-        self._dataset: str = dataset
         self._interp: str = interp
         self._is_detectron: bool = "instances" in samples[0]
 
@@ -76,7 +79,7 @@ class RenderImage:
 
         # Expect int image [0-255] and resize if size does not match img_size
         images: list[ImageTensor] = []
-        self._tf_params = {}
+        self.tf_params: dict[str, torch.Tensor | Any] = {}
         obj_to_img = []
         self._robj_fn = {
             "reap": reap_object.ReapObject,
@@ -90,6 +93,7 @@ class RenderImage:
             images.append(image.to(device))
 
             if mode in ("reap", "mtsd"):
+                found_obj = False
                 for obj in sample["annotations"]:
                     cat_id = obj["category_id"]
                     wrong_class = cat_id == bg_class or (
@@ -99,17 +103,25 @@ class RenderImage:
                         continue
                     if any(point[2] != 2 for point in obj["keypoints"]):
                         continue
+                    found_obj = True
                     self.obj_classes.append(cat_id)
                     robj: RenderObject = self._robj_fn(
                         obj_dict=obj,
-                        dataset=self._dataset,
+                        dataset=dataset,
                         obj_class=obj["category_id"],
                         device=device,
                         image=image,
                         **robj_kwargs,
                     )
-                    robj.aggregate_params(self._tf_params)
+                    robj.aggregate_params(self.tf_params)
                     obj_to_img.append(i)
+                if not found_obj:
+                    logger.warning(
+                        "No valid object is found in image %d/%d. Consider "
+                        "removing this image.",
+                        i,
+                        len(samples),
+                    )
             else:
                 # TODO: Set self.num_objs
                 raise NotImplementedError()
@@ -118,13 +130,13 @@ class RenderImage:
         self.samples = samples
         self.num_objs: int = len(self.obj_classes)
 
-        for name, params in self._tf_params.items():
-            self._tf_params[name] = torch.cat(params, dim=0)
-        self._tf_params["obj_transforms"] = RenderObject.get_augmentation(
+        for name, params in self.tf_params.items():
+            self.tf_params[name] = torch.cat(params, dim=0)
+        self.tf_params["obj_transforms"] = RenderObject.get_augmentation(
             robj_kwargs.get("patch_aug_params"), interp
         )
-        self._tf_params["obj_to_img"] = torch.tensor(obj_to_img, device=device)
-        self._tf_params["interp"] = interp
+        self.tf_params["obj_to_img"] = torch.tensor(obj_to_img, device=device)
+        self.tf_params["interp"] = interp
 
         # Init augmentation transform for image
         self._aug_geo_img: TransformFn = util._identity
@@ -164,10 +176,31 @@ class RenderImage:
     #     )
     #     return image
 
+    def _slice_images_and_params(
+        self, obj_indices: torch.Tensor
+    ) -> tuple[BatchImageTensor, list[DetectronSample], dict[str, Any]]:
+        if obj_indices is None:
+            return self.images, self.samples, self.tf_params
+        tf_params = {}
+        for key, val in self.tf_params.items():
+            if isinstance(val, torch.Tensor):
+                tf_params[key] = val.index_select(0, obj_indices)
+            else:
+                tf_params[key] = val
+        obj_to_img = tf_params["obj_to_img"]
+        img_indices = torch.unique(obj_to_img)
+        for i, img_idx in enumerate(img_indices):
+            # This should be correct because torch.unique() sorts values
+            obj_to_img[obj_to_img == img_idx] = i
+        images = self.images.index_select(0, img_indices)
+        samples = [self.samples[int(i)] for i in img_indices]
+        return images, samples, tf_params
+
     def apply_objects(
         self,
         adv_patch: BatchImageTensor | None = None,
         patch_mask: BatchMaskTensor | None = None,
+        obj_indices: list[int] | None = None,
     ) -> tuple[BatchImageTensor, list[Target]]:
         """Render adversarial patches (or objects) on image.
 
@@ -177,20 +210,20 @@ class RenderImage:
             image: Image with patches (or synthetic objects) applied.
             target: Updated target labels to account for applied object if any.
         """
+        images, samples, tf_params = self._slice_images_and_params(obj_indices)
+
         if adv_patch is None or patch_mask is None:
-            return self.images, self.samples
+            return images, samples
 
         images, targets = self._robj_fn.apply_objects(
-            self.images,
-            self.samples,
+            images,
+            samples,
             adv_patch,
             patch_mask,
-            self._tf_params,
+            tf_params,
         )
-
         # Apply augmentation on the entire image
         images = self._aug_geo_img(images)
-
         return images, targets
 
     def post_process_image(

@@ -21,7 +21,7 @@ from adv_patch_bench.evaluators import detectron_evaluator
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 from hparams import LABEL_LIST
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 formatter = logging.Formatter("[%(levelname)s] %(asctime)s: %(message)s")
 
 _EVAL_PARAMS = [
@@ -117,14 +117,14 @@ def _compute_metrics(
         tp: np.ndarray = tp_full[iou_idx, :, max_f1_idx]
         fp: np.ndarray = fp_full[iou_idx, :, max_f1_idx]
         conf_thres = scores_thres[max_f1_idx]
-        log.debug(
+        logger.debug(
             "max_f1_idx: %d, max_f1: %.4f, conf_thres: %.3f.",
             max_f1_idx,
             max_f1,
             conf_thres,
         )
     else:
-        log.debug("Using specified conf_thres of %f...", conf_thres)
+        logger.debug("Using specified conf_thres of %f...", conf_thres)
 
         tp_full = np.zeros((num_ious, num_classes))
         fp_full = np.zeros_like(tp_full)
@@ -146,12 +146,12 @@ def _compute_metrics(
     # Compute combined metrics, ignoring class
     recall_cmb = tp.sum() / (num_gts_per_class.sum() + eps)
 
-    log.debug("num_gts_per_class: %s", str(num_gts_per_class))
-    log.debug("tp: %s", str(tp))
-    log.debug("fp: %s", str(fp))
-    log.debug("precision: %s", str(pr))
-    log.debug("recall: %s", str(rc))
-    log.debug("recall_cmb: %s", str(recall_cmb))
+    logger.debug("num_gts_per_class: %s", str(num_gts_per_class))
+    logger.debug("tp: %s", str(tp))
+    logger.debug("fp: %s", str(fp))
+    logger.debug("precision: %s", str(pr))
+    logger.debug("recall: %s", str(rc))
+    logger.debug("recall_cmb: %s", str(recall_cmb))
 
     return tp, fp, conf_thres
 
@@ -187,8 +187,9 @@ def _dump_results(results: Dict[str, Any]) -> None:
             f"split{config_base['split_file_hash']}.pkl"
         ),
     )
-    with open(result_path, "wb") as f:
-        pickle.dump(results, f)
+    with open(result_path, "wb") as file:
+        pickle.dump(results, file)
+    logger.info("Results are saved at %s", result_dir)
 
 
 def main() -> None:
@@ -198,7 +199,7 @@ def main() -> None:
 
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):
-        log.info("Loading saved attack config from %s...", attack_config_path)
+        logger.info("Loading saved attack config from %s...", attack_config_path)
         with open(attack_config_path, "r", encoding="utf-8") as file:
             # pylint: disable=unexpected-keyword-arg
             config_attack = yaml.safe_load(file, Loader=yaml.FullLoader)
@@ -220,7 +221,7 @@ def main() -> None:
         dataloader,
         class_names=class_names,
     )
-    log.info("=> Running attack...")
+    logger.info("=> Running attack...")
     _, metrics = evaluator.run()
 
     eval_cfg = _normalize_dict(config_base)
@@ -249,7 +250,7 @@ def main() -> None:
         metrics["syn_fn"] = int(fn)
         metrics["syn_tpr"] = tp / total_num_patches
         metrics["syn_fnr"] = fn / total_num_patches
-        log.info(
+        logger.info(
             "[Syn] Total: %4d\nTP: %4d (%.4f)\nFN: %4d (%.4f)\n",
             metrics["syn_total"],
             metrics["syn_tp"],
@@ -273,14 +274,14 @@ def main() -> None:
         for key, value in metrics.items():
             if "syn" in key or not isinstance(value, (int, float, str, bool)):
                 continue
-            log.info("%s: %s", key, str(value))
+            logger.info("%s: %s", key, str(value))
 
-        log.info("          tp   fp   num_gt")
+        logger.info("          tp   fp   num_gt")
         tp_all = 0
         fp_all = 0
         total = 0
         for i, (t, f, num_gt) in enumerate(zip(tp, fp, num_gts_per_class)):
-            log.info("Class %2d: %4d %4d %4d", i, int(t), int(f), int(num_gt))
+            logger.info("Class %2d: %4d %4d %4d", i, int(t), int(f), int(num_gt))
             metrics[f"TP-{class_names[i]}"] = t
             metrics[f"FP-{class_names[i]}"] = f
             tp_all += t
@@ -288,7 +289,7 @@ def main() -> None:
             total += num_gt
         metrics["TPR-all"] = tp_all / total
         metrics["FPR-all"] = fp_all / total
-        log.info("Total num patches: %d", metrics["total_num_patches"])
+        logger.info("Total num patches: %d", metrics["total_num_patches"])
         _dump_results(results)
 
 
@@ -303,13 +304,13 @@ if __name__ == "__main__":
     log_level: int = logging.DEBUG if config_base["debug"] else logging.WARNING
 
     # Set up logger
-    log.setLevel(log_level)
+    logger.setLevel(log_level)
     file_handler = logging.FileHandler(
         os.path.join(config_base["result_dir"], "results.log"), mode="a"
     )
     file_handler.setFormatter(formatter)
-    log.addHandler(file_handler)
-    log.info(config)
+    logger.addHandler(file_handler)
+    logger.info(config)
 
     dt_log = logging.getLogger("detectron2")
     dt_log.setLevel(log_level)

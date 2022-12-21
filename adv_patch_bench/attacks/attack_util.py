@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pickle
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import detectron2
 import torch
@@ -32,7 +32,6 @@ def setup_attack(
     config_attack: Optional[Dict[Any, str]] = None,
     is_detectron: bool = True,
     model: Optional[torch.nn.Module] = None,
-    input_size: Tuple[int, int] = (1536, 2048),
     verbose: bool = False,
 ) -> base_attack.DetectorAttackModule:
     """Set up attack object."""
@@ -51,7 +50,6 @@ def setup_attack(
     return attack_fn(
         combined_config_attack,
         model,
-        input_size=input_size,
         verbose=verbose,
     )
 
@@ -143,7 +141,7 @@ def prep_adv_patch_all_classes(
     patch_size_mm: tuple[int, float, float] | None = None,
     obj_width_px: int = 64,
 ) -> tuple[list[BatchImageTensor | None], list[BatchMaskTensor | None]]:
-
+    """Prepare adversarial patches and masks for all classes."""
     metadata = detectron2.data.MetadataCatalog.get(dataset)
     obj_dim_dict = metadata.get("obj_dim_dict")
     size_mm_dict = obj_dim_dict.get("size_mm")

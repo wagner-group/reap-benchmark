@@ -216,5 +216,4 @@ class ReapDatasetMapper:
                 obj[key] = dataset_dict["annotations"][i][key]
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos
-
         return dataset_dict

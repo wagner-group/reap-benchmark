@@ -77,7 +77,6 @@ class DetectronEvaluator:
         self._input_format: str = global_cfg.INPUT.FORMAT
         self._metadata = MetadataCatalog.get(self._dataset)
         self._verbose: bool = config_eval["verbose"]
-        # self._debug: bool = config_eval["debug"]
 
         interp: str = config_eval["interp"]
         self._img_size: SizePx = config_eval["img_size"]
@@ -85,20 +84,14 @@ class DetectronEvaluator:
         self._num_eval: int | None = (
             len(dataloader) if num_eval is None else num_eval
         )
-        # self._conf_thres: float = config_eval["conf_thres"]
         self._class_names: List[str] = class_names
         self._obj_class: int = config_eval["obj_class"]
-        # self._other_sign_class: int = config_eval["other_sign_class"]
-        # TODO(feature): Make this an option
-        self._fixed_input_size = True
 
         # Common keyword args for constructing RenderImage
         self._rimg_kwargs: Dict[str, Any] = {
-            "img_size": self._img_size if self._fixed_input_size else None,
             "img_mode": self._input_format,
             "interp": interp,
             "img_aug_prob_geo": config_eval["img_aug_prob_geo"],
-            # "is_detectron": True,
             "device": self._device,
             "obj_class": self._obj_class,
             "mode": "synthetic" if self._synthetic else "reap",
@@ -141,7 +134,6 @@ class DetectronEvaluator:
                 "syn_scale": config_eval["syn_scale"],
                 "syn_3d_dist": config_eval["syn_3d_dist"],
                 "syn_colorjitter": config_eval["syn_colorjitter"],
-                # "is_detectron": True,
             }
         else:
             self._robj_fn = reap_object.ReapObject
@@ -268,14 +260,7 @@ class DetectronEvaluator:
                 b["file_name"].split("/")[-1] for b in batch
             ]
             image_ids: list[int] = [b["image_id"] for b in batch]
-            img_df: pd.DataFrame = self._anno_df[
-                self._anno_df["filename"].isin(filenames)
-            ]
             filenames = [name.split(".")[0] for name in filenames]
-
-            if self._annotated_signs_only and img_df.empty:
-                # Skip image if there's no annotation
-                continue
 
             rimg: render_image.RenderImage = render_image.RenderImage(
                 dataset=self._dataset,
@@ -286,7 +271,7 @@ class DetectronEvaluator:
 
             if self._synthetic:
                 # Attacking synthetic signs
-                # TODO
+                # TODO(synthetic)
                 raise NotImplementedError()
                 # rimg.create_object(None, self._robj_fn, self._robj_kwargs)
                 # robj = rimg.get_object()
@@ -324,7 +309,6 @@ class DetectronEvaluator:
             # Perform inference on perturbed image. For REAP, COCO evaluator
             # requires ouput in original size, but synthetic object requires
             # custom evaluator so we simply use the image size.
-            # TODO: remove
             outputs: list[dict[str, Any]] = self.predict(img_render_det)
 
             # Evaluate outputs and save predictions

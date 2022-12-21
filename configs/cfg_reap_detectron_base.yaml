@@ -35,6 +35,8 @@ base:
   # REAP benchmark params
   reap_transform_mode: 'perspective'  # Transform mode for patch during eval
   reap_use_relight: True
+  reap_relight_method: "percentile"
+  reap_relight_percentile: 10
 
   # Synthetic benchmark params
   syn_obj_width_px: 64
@@ -64,7 +66,7 @@ attack:
     patch_dim: 64
     num_bg: 50  # Number of backgrounds attacker uses to generate patch
     # Additional augmentation for patch
-    aug_prob_geo: 1
+    aug_prob_geo: 0
     aug_rotate: 15
     aug_translate: 0.1
     aug_scale: 1

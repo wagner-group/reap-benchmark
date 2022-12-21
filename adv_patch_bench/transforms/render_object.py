@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any
 
 import numpy as np
+from detectron2.data import MetadataCatalog
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import util
 from adv_patch_bench.utils.types import MaskTensor, SizePx
-from hparams import DATASETS, INTERPS, OBJ_DIM_DICT
+from hparams import INTERPS
 
 
 class RenderObject:
@@ -25,7 +26,7 @@ class RenderObject:
         dataset: str = "reap",
         obj_class: int | None = None,
         # img_size: SizePx = (1536, 2048),
-        obj_size_px: SizePx = (64, 64),
+        obj_size_px: SizePx = SizePx((64, 64)),
         interp: str = "bilinear",
         device: Any = "cuda",
         use_box_mode: bool = False,
@@ -58,20 +59,17 @@ class RenderObject:
             ValueError: Given obj_class_name from df_row does not match any
                 known label from given dataset.
         """
-        del kwargs  # Unused
-
-        # TODO(feature): We should decouple model from transforms, but this
-        # likely involves writing another wrapper for the models.
-        # self._is_detectron = is_detectron
+        _ = kwargs  # Unused
 
         # Check dataset
-        if dataset not in DATASETS:
+        metadata = MetadataCatalog.get(dataset)
+        if metadata is None:
             raise ValueError(
                 f"dataset {dataset} is unknown! New dataset must provide "
                 "metadata in hparams.py."
             )
-        self._dataset: str = dataset
-        self.obj_class: int = obj_class
+        self._metadata = metadata.get("obj_dim_dict")
+        self._obj_class: int = obj_class
 
         # Check interp
         if interp not in INTERPS:
@@ -81,13 +79,13 @@ class RenderObject:
         self._interp: str = interp
         self._device: Any = device
 
-        self.obj_size_px: SizePx = obj_size_px
+        self._obj_size_px: SizePx = obj_size_px
         # self.img_size: SizePx = img_size
         # self.img_size_orig: SizePx = img_size_orig
         # self.img_hw_ratio: Tuple[float, float] = img_hw_ratio
         # self.img_pad_size: SizePx = img_pad_size
-        self.hw_ratio: Tuple[float, float] = OBJ_DIM_DICT[dataset]["hw_ratio"][
-            self.obj_class
+        self._hw_ratio: tuple[float, float] = self._metadata["hw_ratio"][
+            self._obj_class
         ]
 
         # Generate object mask and source points for geometric transforms
@@ -95,20 +93,9 @@ class RenderObject:
         self.obj_mask: MaskTensor = mask_src[0].to(device)
         self.src_points: np.ndarray = mask_src[1]
 
-        # Default values of relighting transform
-        # self.alpha: torch.Tensor = img_util.coerce_rank(
-        #     torch.tensor(1.0, device=device), 3
-        # )
-        # self.beta: torch.Tensor = img_util.coerce_rank(
-        #     torch.tensor(0.0, device=device), 3
-        # )
-
-        # self.adv_patch: Optional[ImageTensor] = None
-        # self.patch_mask: Optional[MaskTensor] = None
-
     @staticmethod
     def get_augmentation(patch_aug_params, interp):
-        # Initialize augmentation for patch and object
+        """Initialize augmentation for patch and object."""
         if patch_aug_params is None:
             patch_aug_params = {}
         transforms = util.get_transform_fn(
@@ -125,15 +112,18 @@ class RenderObject:
 
     def _get_obj_mask(
         self, use_box_mode: bool = False
-    ) -> Tuple[MaskTensor, np.ndarray]:
+    ) -> tuple[MaskTensor, np.ndarray]:
         """Generate binary object mask and corresponding source points.
 
         Returns:
             Object mask, source points for geometric transform.
         """
-        shape: str = OBJ_DIM_DICT[self._dataset]["shape"][self.obj_class]
+        shape: str = self._metadata["shape"][self._obj_class]
         obj_mask, src = util.gen_sign_mask(
-            shape, self.hw_ratio, self.obj_size_px[1], use_box_mode=use_box_mode
+            shape,
+            self._hw_ratio,
+            self._obj_size_px[1],
+            use_box_mode=use_box_mode,
         )
         obj_mask = obj_mask.float()
         obj_mask = img_util.coerce_rank(obj_mask, 4)

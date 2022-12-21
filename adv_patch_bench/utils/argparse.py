@@ -22,6 +22,8 @@ _TRANSFORM_PARAMS: List[str] = [
     "interp",
     "reap_transform_mode",
     "reap_use_relight",
+    "reap_relight_method",
+    "reap_relight_percentile",
     "syn_obj_width_px",
     "syn_rotate",
     "syn_scale",
@@ -288,26 +290,26 @@ def reap_args_parser(
         action="store_true",
         help="If True, apply relighting transform to patch.",
     )
-    # TODO(deprecated):
-    # parser.add_argument(
-    #     "--min-area",
-    #     type=float,
-    #     default=0,
-    #     help=(
-    #         "(DEPRECATED) Minimum area for labels. if a label has area > "
-    #         "min_area, predictions correspoing to this target will be discarded"
-    #     ),
-    # )
-    # TODO(deprecated): DEPRECATED: is this stil used?
-    # parser.add_argument(
-    #     "--min-pred-area",
-    #     type=float,
-    #     default=0,
-    #     help=(
-    #         "Minimum area for predictions. If predicion has area < min_area and"
-    #         " that prediction is not matched by any gt, it will be discarded."
-    #     ),
-    # )
+    parser.add_argument(
+        "--reap-relight-method",
+        type=str,
+        default="percentile",
+        help=(
+            "Method for calculating relighting params. This option is used "
+            "during MTSD training at the moment. REAP relighting params are "
+            "pre-computed."
+        ),
+    )
+    parser.add_argument(
+        "--reap-relight-percentile",
+        type=int,
+        default=10,
+        help=(
+            "Percentile of pixels considered as min and max of the scaling "
+            'range. Only used when reap_relight_method is "percentile". '
+            "Defaults to 10.0."
+        ),
+    )
 
     # TODO(YOLO): make general, not only detectron
     parser.add_argument(
@@ -939,7 +941,6 @@ def setup_detectron_cfg(
     # is that every image has its longer side (could be width or height) 2048.
     cfg.INPUT.MAX_SIZE_TEST = max(config_base["img_size"])
     cfg.INPUT.MIN_SIZE_TEST = cfg.INPUT.MAX_SIZE_TEST
-    cfg.INPUT.CUSTOM_IMG_SIZE = config_base["img_size"]
 
     # Model config
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = NUM_CLASSES[dataset]

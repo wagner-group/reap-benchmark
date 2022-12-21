@@ -56,11 +56,15 @@ class ReapObject(render_object.RenderObject):
 
         # # Get REAP relighting transform params
         if use_patch_relight:
-            alpha = torch.tensor(obj_dict["alpha"], device=self._device)
-            beta = torch.tensor(obj_dict["beta"], device=self._device)
+            alpha = torch.tensor(
+                obj_dict["alpha"], device=self._device, dtype=torch.float32
+            )
+            beta = torch.tensor(
+                obj_dict["beta"], device=self._device, dtype=torch.float32
+            )
         else:
-            alpha = torch.tensor(1.0, device=self._device)
-            beta = torch.tensor(0.0, device=self._device)
+            alpha = torch.tensor(1.0, device=self._device, dtype=torch.float32)
+            beta = torch.tensor(0.0, device=self._device, dtype=torch.float32)
         self.alpha: torch.Tensor = img_util.coerce_rank(alpha, 4)
         self.beta: torch.Tensor = img_util.coerce_rank(beta, 4)
 
@@ -170,10 +174,17 @@ class ReapObject(render_object.RenderObject):
             )
         for inpt in (adv_patch, patch_mask, obj_mask):
             if len(inpt) not in (num_objs, 1):
-                raise IndexError("Patch and masks must have ")
+                raise IndexError(
+                    "Patch and masks must have the same length as the number "
+                    f"of objects but see {len(inpt)} vs {num_objs}!"
+                )
 
         # Apply relighting transform (brightness and contrast)
-        adv_patch.mul_(alpha).add_(beta)
+        if adv_patch.is_leaf:
+            adv_patch = adv_patch * alpha
+        else:
+            adv_patch.mul_(alpha)
+        adv_patch.add_(beta)
         adv_patch.clamp_(0, 1)
 
         # Apply extra lighting augmentation on patch
@@ -199,7 +210,9 @@ class ReapObject(render_object.RenderObject):
         warped_patch.clamp_(0, 1)
 
         # Add patches from same image together
-        per_img_patches: list[BatchImageTensorRGBA] = []
+        # per_img_patches = warped_patch
+        # if obj_to_img is not None:
+        per_img_patches = []
         for i in range(batch_size):
             per_img_patches.append(
                 warped_patch[obj_to_img == i].sum(0, keepdim=True)

@@ -197,8 +197,8 @@ def train(cfg, config, model, attack):
             cfg,
             is_train=True,
             img_size=config_base["img_size"],
-            relight_method="percentile",
-            relight_percentile=10.0,
+            relight_method=config_base["reap_relight_method"],
+            relight_percentile=config_base["reap_relight_percentile"],
         ),
     )
     logger.info("Starting training from iteration %d", start_iter)
@@ -301,7 +301,6 @@ def main(config):
         config_attack=config["attack"],
         is_detectron=True,
         model=model,
-        input_size=config["base"]["img_size"],
         verbose=config["base"]["verbose"],
     )
 

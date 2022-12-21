@@ -1,5 +1,7 @@
 """Register and load MTSD dataset."""
 
+from __future__ import annotations
+
 import json
 import os
 import pathlib
@@ -215,7 +217,7 @@ def register_mtsd(
     mtsd_anno: Dict[str, Any] = get_mtsd_anno(
         data_path, use_color, use_mtsd_original_labels, class_names
     )
-    bg_class_id: int = len(class_names) - 1
+    bg_class: int = len(class_names) - 1
 
     label_map: pd.DataFrame = mtsd_anno["mtsd_label_to_class_index"]
     if use_mtsd_original_labels:
@@ -232,7 +234,7 @@ def register_mtsd(
             lambda s=split: get_mtsd_dict(
                 split=s,
                 data_path=data_path,
-                bg_class=bg_class_id,
+                bg_class=bg_class,
                 ignore_bg_class=ignore_bg_class,
                 **mtsd_anno,
             ),
@@ -244,5 +246,5 @@ def register_mtsd(
                 (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
             ],
             obj_dim_dict=OBJ_DIM_DICT[f"mtsd_{color}"],
-            bg_class=bg_class_id,
+            bg_class=bg_class,
         )

@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import LABEL_LIST
+from hparams import LABEL_LIST, OBJ_DIM_DICT
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
@@ -243,4 +243,6 @@ def register_mapillary(
             keypoint_flip_map=[
                 (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
             ],
+            obj_dim_dict=OBJ_DIM_DICT[f"mapillary_{color}"],
+            bg_class=bg_class,
         )

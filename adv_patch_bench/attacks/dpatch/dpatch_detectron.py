@@ -8,7 +8,7 @@ import torch
 from detectron2 import structures
 
 from adv_patch_bench.attacks.rp2 import rp2_detectron
-from adv_patch_bench.utils.types import ImageTensor, Target
+from adv_patch_bench.utils.types import BatchImageTensor, Target
 
 
 class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
@@ -16,9 +16,9 @@ class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
 
     def _loss_func(
         self,
-        adv_imgs: list[ImageTensor],
+        adv_imgs: BatchImageTensor,
         adv_targets: list[Target],
-        obj_class: int | None = None,
+        # obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute DPatch loss for Faster R-CNN models.
 
@@ -31,7 +31,7 @@ class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
         Returns:
             Loss for attacker to minimize.
         """
-        _ = obj_class  # Unused
+        # _ = obj_class  # Unused
         inputs: list[dict[str, Any]] = adv_targets
         instances: list[structures.Instances] = []
         device = self._core_model.device
@@ -56,7 +56,7 @@ class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
             features,
             proposals,
             compute_loss=True,
-            # gt_instances=instances,
+            gt_instances=instances,
         )
 
         # TODO(feature): Custom weights on losses

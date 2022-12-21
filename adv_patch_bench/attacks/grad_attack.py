@@ -6,7 +6,6 @@ import time
 from abc import abstractmethod
 from typing import Any
 
-import numpy as np
 import torch
 from detectron2.utils.events import EventStorage
 from torch import optim
@@ -102,47 +101,58 @@ class GradAttack(base_attack.DetectorAttackModule):
         patch_mask: BatchMaskTensor,
         batch_mode: bool = False,
     ) -> BatchImageTensor:
-        batch_size = len(z_delta)
-        all_bg_idx: np.ndarray = np.arange(batch_size)
+        bg_idx: torch.Tensor | None = None
+        delta = z_delta
+        # Initialize religting params
+        if self._use_var_change_ab or "pgd" in self._optimizer_name:
+            beta = rimg.tf_params["beta"].clone()
+            half_alpha = rimg.tf_params["alpha"] / 2
+            # Temporary set alphas and betas to 1 and 0 so patch does not get
+            # rescaled again
+            rimg.tf_params["beta"].zero_()
+            rimg.tf_params["alpha"].fill_(1)
+        else:
+            beta = torch.zeros_like(rimg.tf_params["beta"])
+            half_alpha = torch.ones_like(rimg.tf_params["beta"]) / 2
 
         # Run PGD on inputs for specified number of steps
         for step in range(self._num_steps):
+            # Randomly select RenderImages to attack this step
+            if not batch_mode and self._num_eot < rimg.num_objs:
+                bg_idx = torch.randperm(rimg.num_objs, device=z_delta.device)
+                bg_idx = bg_idx[: self._num_eot]
+                # DEBUG: Fix bg_idx to debug
+                # bg_idx = torch.zeros(1, device=z_delta.device, dtype=torch.long)
 
-            rimg_eot = rimg
-            if not batch_mode:
-                # Randomly select RenderImages to attack this step
-                np.random.shuffle(all_bg_idx)
-                bg_idx = all_bg_idx[: self._num_eot]
-                rimg_eot = [rimg[i] for i in bg_idx]
-
-            z_delta.requires_grad_()
-            # Determine how perturbation is projected
-            if self._use_var_change_ab:
-                # TODO(feature): Does not work when num_eot > 1
-                robj = rimg_eot[0].get_object()
-                alpha, beta = robj.alpha, robj.beta
-                delta = self._to_model_space(z_delta, beta, alpha + beta)
+            if "pgd" in self._optimizer_name:
+                cur_half_alpha, cur_beta = self._select_tensors(
+                    bg_idx, half_alpha, beta
+                )
+                delta = delta.detach()
+                delta = torch.maximum(delta, cur_beta)
+                delta = torch.minimum(delta, cur_beta + 2 * cur_half_alpha)
+                delta.requires_grad_()
             else:
-                delta = self._to_model_space(z_delta, 0, 1)
+                self._optimizer.zero_grad()
+                z_delta.requires_grad_()
+                delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
 
-            # Load new adversarial patch to each RenderObject
-            # adv_imgs = []
-            # adv_targets = []
-            # for rimg in rimg_eot:
-            #     robj = rimg.get_object()
-            #     robj.load_adv_patch(adv_patch=delta)
-            #     # Apply adversarial patch to each RenderImage
-            #     adv_img, adv_target = rimg.apply_objects()
-            #     adv_img = rimg.post_process_image(adv_img)
-            #     adv_imgs.append(adv_img)
-            #     adv_targets.append(adv_target)
-
-            adv_img, adv_target = rimg.apply_objects(delta, patch_mask)
+            # Apply patch with transforms and compute loss
+            adv_img, adv_target = rimg.apply_objects(
+                adv_patch=delta, patch_mask=patch_mask, obj_indices=bg_idx
+            )
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
-
             loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
             loss.backward()
-            z_delta = self._step_opt(z_delta)
+
+            # Update perturbation
+            if "pgd" in self._optimizer_name:
+                grad = delta.grad.detach()
+                grad = torch.sign(grad)
+                delta.detach_()
+                delta -= self._step_size * grad
+            else:
+                self._optimizer.step()
 
             if self._lr_schedule is not None:
                 self._lr_schedule.step(loss)
@@ -154,6 +164,9 @@ class GradAttack(base_attack.DetectorAttackModule):
         #     if not os.path.exists(f'tmp/{idx}/test_adv_img_{step}.png'):
         #         os.makedirs(f'tmp/{idx}/', exist_ok=True)
         #     torchvision.utils.save_image(adv_img[idx], f'tmp/{idx}/test_adv_img_{step}.png')
+        if self._use_var_change_ab:
+            rimg.tf_params["beta"] = beta
+            rimg.tf_params["alpha"] = half_alpha * 2
         return delta
 
     @torch.no_grad()
@@ -182,24 +195,11 @@ class GradAttack(base_attack.DetectorAttackModule):
                 )
             if rimg.num_objs != len(patch_mask):
                 raise IndexError(
-                    f"Number of objects in rimg ({rimg.num_objs}) must be equal"
-                    f" to length of patch_mask ({len(patch_mask)}) if "
+                    f"Number of objects in rimg ({rimg.num_objs}) must be "
+                    f"equal to length of patch_mask ({len(patch_mask)}) if "
                     "batch_mode is True!"
                 )
             batch_size = len(patch_mask)
-
-        # Wrap with RenderImage -- already done
-
-        # Create patches for all instances to attack
-
-        # RenderImages apply patches in batch
-
-        # Load patch_mask to all RenderObject first. This should be done once.
-        # for i, rimg in enumerate(rimgs):
-        #     robj = rimg.get_object()
-        #     robj.load_adv_patch(
-        #         patch_mask=patch_mask[i] if batch_mode else patch_mask
-        #     )
 
         for _ in range(self._num_restarts):
             # Initialize adversarial perturbation
@@ -208,7 +208,12 @@ class GradAttack(base_attack.DetectorAttackModule):
                 device=device,
                 dtype=torch.float32,
             )
-            z_delta.uniform_(0, 1)
+            z_delta.uniform_(-1, 1)
+
+            if not batch_mode:
+                z_delta = z_delta.expand(self._num_eot, -1, -1, -1)
+                patch_mask = patch_mask.expand(self._num_eot, -1, -1, -1)
+
             # Set up optimizer
             self._reset_run(z_delta)
             # Run attack once
@@ -253,29 +258,28 @@ class GradAttack(base_attack.DetectorAttackModule):
 
         return opt, lr_schedule
 
-    def _step_opt(self, z_delta: BatchImageTensor) -> BatchImageTensor:
-        if self._optimizer == "pgd":
-            grad = z_delta.grad.detach()
-            grad = torch.sign(grad)
-            z_delta = z_delta.detach() - self._step_size * grad
-            z_delta.clamp_(0, 1)
-        else:
-            self._optimizer.step()
-        return z_delta
+    @staticmethod
+    def _select_tensors(indices, *args):
+        if indices is None:
+            return args
+        return [tensor.index_select(0, indices) for tensor in args]
 
-    def _to_model_space(self, x, x_min, x_max):
+    def _to_input_space(
+        self,
+        images: torch.Tensor,
+        half_alpha: torch.Tensor,
+        beta: torch.Tensor,
+        indices: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """Transforms an input from the attack space to the model space."""
-        if "pgd" in self._attack_mode:
-            return x
-
+        half_alpha, beta = self._select_tensors(indices, half_alpha, beta)
         # from (-inf, +inf) to (-1, +1)
-        x = torch.tanh(x)
-
-        # map from (-1, +1) to (min_, max_)
-        a = (x_min + x_max) / 2
-        b = (x_max - x_min) / 2
-        x = x * b + a
-        return x
+        images = torch.tanh(images)
+        # map from (-1, +1) to (low, high)
+        # Need to copy images here since torch.tanh needs output to compute grad
+        images = images * half_alpha
+        images.add_(half_alpha).add_(beta)
+        return images
 
     def _print_loss(self, loss: torch.Tensor, step: int) -> None:
         if self._ema_loss is None:
@@ -286,7 +290,7 @@ class GradAttack(base_attack.DetectorAttackModule):
                 + (1 - self._ema_const) * loss.item()
             )
 
-        if step % 100 == 0 and self._verbose:
+        if step % 10 == 0 and self._verbose:
             print(
                 f"step: {step:4d}  loss: {self._ema_loss:.4f}  "
                 f"time: {time.time() - self._start_time:.2f}s"
