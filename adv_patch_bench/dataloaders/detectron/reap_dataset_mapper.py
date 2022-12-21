@@ -1,6 +1,6 @@
 """Registers datasets, and defines other dataloading utilities.
 
-Code is taken directly from
+Code is adapted from
 https://github.com/yizhe-ang/detectron2-1/blob/master/detectron2_1/datasets.py
 """
 
@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import logging
 
+import detectron2
 import numpy as np
 import torch
 from detectron2.data import detection_utils as utils
@@ -16,33 +17,10 @@ from detectron2.data import transforms as T
 from detectron2.structures import BoxMode
 
 import adv_patch_bench.utils.image as img_util
-
-# Define dataset paths
-# data_dir = Path("data")
-
-# benign_data_dir = data_dir / "benign_data"
-# benign_img_dir = benign_data_dir / "benign_database"
-# eval_img_dir = benign_data_dir / "eval_imgs"
-
-# benign_train_coco_path = benign_data_dir / "coco_train.json"
-# benign_test_coco_path = benign_data_dir / "coco_test.json"
-# benign_eval_coco_path = benign_data_dir / "coco_eval.json"
-# benign_bet365_coco_path = benign_data_dir / "coco_bet365.json"
-
-# # Register benign train and test sets
-# register_coco_instances(
-#     "benign_train", {}, benign_train_coco_path, benign_img_dir
-# )
-# register_coco_instances(
-#     "benign_test", {}, benign_test_coco_path, benign_img_dir
-# )
-# register_coco_instances("benign_eval", {}, benign_eval_coco_path, eval_img_dir)
-# register_coco_instances(
-#     "benign_bet365", {}, benign_bet365_coco_path, benign_img_dir
-# )
+from adv_patch_bench.utils.types import SizePx
 
 
-def _build_transform_gen(cfg, is_train):
+def _build_transform_gen(cfg: detectron2.config.CfgNode, is_train: bool):
     """Create a list of :class:`TransformGen` from config.
 
     Now it includes only resizing.
@@ -80,12 +58,19 @@ class ReapDatasetMapper:
     training data.
     """
 
-    def __init__(self, cfg, is_train=True):
-        """Initialize benign data mapper.
+    def __init__(
+        self,
+        cfg: detectron2.config.CfgNode,
+        is_train: bool = True,
+        img_size: SizePx | None = None,
+    ) -> None:
+        """Initialize REAP data mapper.
 
         Args:
             cfg: Detectron2 config.
             is_train: Whether we are training. Defaults to True.
+            img_size: Resize all images to this fixed size instead of just
+                loading the original size. Defaults to None.
         """
         if cfg.INPUT.CROP.ENABLED and is_train:
             self.crop_gen = T.RandomCrop(
@@ -123,6 +108,7 @@ class ReapDatasetMapper:
                 else cfg.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TEST
             )
         self.is_train = is_train
+        self._img_size: SizePx = img_size
 
     def __call__(self, dataset_dict):
         """Modify sample directly loaded from Detectron2 dataset.
@@ -139,11 +125,12 @@ class ReapDatasetMapper:
         image = utils.read_image(
             dataset_dict["file_name"], format=self.img_format
         )
+        # Convert to torch.Tensor to resize/pad and convert back to numpy
         image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
         image = img_util.resize_and_pad(
             obj=image,
-            resize_size=(1536, 2048),  # FIXME
-            pad_size=(1536, 2048),
+            resize_size=self._img_size,
+            pad_size=self._img_size,
             keep_aspect_ratio=True,
         )
         image = image.permute(1, 2, 0).numpy()
@@ -171,8 +158,8 @@ class ReapDatasetMapper:
         image_shape = image.shape[:2]  # h, w
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
-        # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
-        # Therefore it's important to use torch.Tensor.
+        # but not efficient on large generic data structures due to the use of
+        # pickle & mp.Queue. Therefore it's important to use torch.Tensor.
         dataset_dict["image"] = torch.as_tensor(
             np.ascontiguousarray(image.transpose(2, 0, 1))
         )
@@ -187,13 +174,6 @@ class ReapDatasetMapper:
                 proposal_topk=self.proposal_topk,
                 min_box_size=self.proposal_min_box_size,
             )
-
-        # HACK Keep annotations for test
-        # if not self.is_train:
-        #     # USER: Modify this if you want to keep them for some reason.
-        #     dataset_dict.pop("annotations", None)
-        #     dataset_dict.pop("sem_seg_file_name", None)
-        #     return dataset_dict
 
         if "annotations" in dataset_dict:
             # USER: Modify this if you want to keep them for some reason.
@@ -214,13 +194,6 @@ class ReapDatasetMapper:
                 for obj in dataset_dict["annotations"]
                 if obj.get("iscrowd", 0) == 0
             ]
-            # for anno in annos:
-            #     if "keypoints" in anno:
-            #         if anno["keypoints"].shape != (4, 3):
-            #             print(annos)
-            #             print(dataset_dict["file_name"])
-            #             raise NotImplementedError()
-            #         anno["keypoints"] = np.array(anno["keypoints"])
             instances = utils.annotations_to_instances(
                 annos, image_shape, mask_format=self.mask_format
             )

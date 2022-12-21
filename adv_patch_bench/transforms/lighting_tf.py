@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 from sklearn.cluster import KMeans
 
@@ -64,8 +62,8 @@ def _find_canonical_kmean(img: np.ndarray):
 
 
 def _find_min_max(
-    img: np.ndarray, method: str = "percentile", q: float = 5.0
-) -> tuple[float]:
+    img: np.ndarray, method: str = "percentile", percentile: float = 10.0
+) -> tuple[float, float]:
     """Find "high" and "low" values of pixels in img.
 
     High/low values can be defined as some q-percentile pixels in img or based
@@ -74,8 +72,8 @@ def _find_min_max(
     Args:
         img: Image as Numpy array.
         method: Method of finding high and low values.
-        q: Percentile used to determine high/low values (only used when method
-            is "percentile").
+        percentile: Percentile used to determine high/low values (only used when
+            method is "percentile").
 
     Returns:
         Tuple of high and low values.
@@ -86,31 +84,41 @@ def _find_min_max(
     assert method in ("percentile", "kmean")
 
     if method == "percentile":
-        assert 0 <= q <= 100
-        q = q if q < 50 else 100 - q
-        min_ = np.percentile(img, q)
-        max_ = np.percentile(img, 100 - q)
+        assert 0 <= percentile <= 100
+        percentile = min(percentile, 100 - percentile)
+        min_ = np.nanpercentile(img, percentile)
+        max_ = np.nanpercentile(img, 100 - percentile)
 
     if method == "kmean":
-        print("Currently, k-mean method is unused as it does not work well.")
         # Take top and bottom centers as max and min
         centers, _ = _run_kmean(img, keep_channel=False)
         max_ = centers.max()
         min_ = centers.min()
+        raise NotImplementedError(
+            "Currently, k-mean method is unused as it does not work well."
+        )
 
     return min_, max_
 
 
-def compute_relight_params(img: np.ndarray) -> Tuple[float]:
+def compute_relight_params(
+    img: np.ndarray, method: str | None = "percentile", percentile: float = 10.0
+) -> tuple[float, float]:
     """Compute params of relighting transform.
 
     Args:
         img: Image as Numpy array.
+        method: Method to use for computing the relighting params. Defaults to
+            percentile.
+        percentile: Percentile of pixels considered as min and max of scaling
+            range. Only used when method is "percentile". Defaults to 10.0.
 
     Returns:
         Relighting transform params, alpha and beta.
     """
-    min_, max_ = _find_min_max(img, method="percentile", q=10.0)
+    if img.size == 0 or method is None or method == "none":
+        return 1.0, 0.0
+    min_, max_ = _find_min_max(img, method=method, percentile=percentile)
     beta: float = min_
     alpha: float = max_ - beta
     return alpha, beta

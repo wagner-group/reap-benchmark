@@ -526,7 +526,7 @@ def reap_args_parser(
     _update_syn_obj_size(config)
     _update_patch_size(config)
     _update_attack_transforms(config)
-    _update_save_dir(config, is_detectron)
+    _update_save_dir(config, is_detectron=is_detectron, is_train=is_train)
     _update_result_dir(config)
 
     if config["base"]["debug"]:
@@ -746,7 +746,9 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
 
 
 def _update_save_dir(
-    config: Dict[str, Dict[str, Any]], is_detectron: bool
+    config: Dict[str, Dict[str, Any]],
+    is_detectron: bool = True,
+    is_train: bool = False,
 ) -> None:
     """Create folder for saving eval results and set save_dir in config.
 
@@ -838,10 +840,16 @@ def _update_save_dir(
             exp_name += name_from_cfg
         else:
             exp_name = name_from_cfg
+    exp_name = f"train_{exp_name}" if is_train else exp_name
     config_base["name"] = exp_name
 
-    class_name = LABEL_LIST[config_base["dataset"]][config_base["obj_class"]]
-    save_dir = os.path.join(config_base["base_dir"], exp_name, class_name)
+    if not is_train:
+        class_name = LABEL_LIST[config_base["dataset"]][
+            config_base["obj_class"]
+        ]
+        save_dir = os.path.join(config_base["base_dir"], exp_name, class_name)
+    else:
+        save_dir = os.path.join(config_base["base_dir"], exp_name)
     os.makedirs(save_dir, exist_ok=True)
     config_base["save_dir"] = save_dir
 
@@ -931,10 +939,11 @@ def setup_detectron_cfg(
     # is that every image has its longer side (could be width or height) 2048.
     cfg.INPUT.MAX_SIZE_TEST = max(config_base["img_size"])
     cfg.INPUT.MIN_SIZE_TEST = cfg.INPUT.MAX_SIZE_TEST
+    cfg.INPUT.CUSTOM_IMG_SIZE = config_base["img_size"]
 
     # Model config
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = NUM_CLASSES[dataset]
-    cfg.OUTPUT_DIR = config_base["base_dir"]
+    cfg.OUTPUT_DIR = config_base["save_dir"]
     cfg.SEED = config_base["seed"]
     weight_path = config_base["weights"]
     if isinstance(config_base["weights"], list):

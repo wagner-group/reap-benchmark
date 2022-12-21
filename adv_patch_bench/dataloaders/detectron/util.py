@@ -68,6 +68,7 @@ def _get_filename_from_id(
 def get_dataloader(
     config_base: dict[str, Any]
 ) -> tuple[torch.data.utils.DataLoader, set[str]]:
+    """Get eval dataloader from base config."""
     dataset: str = config_base["dataset"]
     split_file_path: str = config_base["split_file_path"]
 
@@ -89,8 +90,9 @@ def get_dataloader(
 
     dataloader = custom_build.build_detection_test_loader(
         data_dicts,
-        mapper=reap_dataset_mapper.ReapDatasetMapper(global_cfg, is_train=False),
-        # mapper=None,
+        mapper=reap_dataset_mapper.ReapDatasetMapper(
+            global_cfg, is_train=False, img_size=config_base["img_size"]
+        ),
         batch_size=config_base["batch_size"],
         num_workers=global_cfg.DATALOADER.NUM_WORKERS,
         pin_memory=True,
@@ -123,7 +125,7 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
     class_names: List[str] = detectron2.data.MetadataCatalog.get(
         base_dataset
     ).get("thing_classes")
-    bg_class_id: int = len(class_names) - 1
+    bg_class: int = len(class_names) - 1
     # Load annotation if specified
     anno_df: Optional[pd.DataFrame] = None
     if config_base["annotated_signs_only"]:
@@ -142,10 +144,11 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
 
     data_dict: List[DetectronSample] = _LOAD_DATASET[base_dataset](
         split=split,
-        base_path=base_path,
-        bg_class_id=bg_class_id,
+        data_path=base_path,
+        bg_class=bg_class,
         ignore_bg_class=False,
         anno_df=anno_df,
+        img_size=config_base["img_size"],
         **mtsd_anno,
     )
     return data_dict
@@ -177,6 +180,7 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
             base_path=base_data_path,
             synthetic=base_dataset == "synthetic",
             anno_df=anno_df,
+            img_size=config_base["img_size"],
         )
     elif base_dataset == "mtsd":
         mtsd.register_mtsd(
@@ -191,6 +195,7 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
             use_color=use_color,
             ignore_bg_class=False,
             anno_df=anno_df,
+            img_size=config_base["img_size"],
         )
     else:
         raise NotImplementedError(f"Dataset {base_dataset} is not supported!")

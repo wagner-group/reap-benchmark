@@ -174,7 +174,8 @@ def train(cfg, config, model, attack):
         else []
     )
 
-    # Create patch mask
+    # Create patch masks (and load adv_patches if attack-type is load)
+    logger.info("Preparing adversarial patches and masks (if applicable)...")
     adv_patches, patch_masks = attack_util.prep_adv_patch_all_classes(
         dataset=train_dataset,
         attack_type=config_base["attack_type"],
@@ -192,7 +193,13 @@ def train(cfg, config, model, attack):
     data_loader = build_detection_train_loader(
         cfg,
         sampler=sampler,
-        mapper=mtsd_dataset_mapper.MtsdDatasetMapper(cfg, is_train=True),
+        mapper=mtsd_dataset_mapper.MtsdDatasetMapper(
+            cfg,
+            is_train=True,
+            img_size=config_base["img_size"],
+            relight_method="percentile",
+            relight_percentile=10.0,
+        ),
     )
     logger.info("Starting training from iteration %d", start_iter)
     with EventStorage(start_iter) as storage:
@@ -200,6 +207,7 @@ def train(cfg, config, model, attack):
             storage.iter = iteration
 
             if use_attack:
+                # Create image wrapper that handles tranforms
                 rimg: RenderImage = RenderImage(
                     dataset=config["base"]["dataset"],
                     samples=data,
@@ -207,10 +215,13 @@ def train(cfg, config, model, attack):
                     **rimg_kwargs,
                 )
                 if rimg.num_objs > 0:
+                    # Collect patch mask for each class because relative patch
+                    # size varies between classes
                     cur_patch_mask = [patch_masks[i] for i in rimg.obj_classes]
                     cur_patch_mask = torch.cat(cur_patch_mask, dim=0)
                     assert len(cur_patch_mask) == rimg.num_objs
                     if config_base["attack_type"] == "per-sign":
+                        # Generate per-sign patch for adversarial training
                         cur_adv_patch = attack(
                             rimg, cur_patch_mask, batch_mode=True
                         )
@@ -278,13 +289,14 @@ def train(cfg, config, model, attack):
 def main(config):
     """Main function."""
     cfg = setup_detectron_cfg(config, is_train=True)
-    # Register data. This has to be called by every process.
+    # Register data. This has to be called by every process for some reason.
     data_util.register_dataset(config["base"])
 
+    logger.info("Building model...")
     model = build_model(cfg)
     logger.info("Model:\n%s", model)
 
-    # TODO: no attack
+    # Set up attack for adversarial training
     attack = attack_util.setup_attack(
         config_attack=config["attack"],
         is_detectron=True,
@@ -294,6 +306,7 @@ def main(config):
     )
 
     if config["base"]["eval_only"]:
+        logger.info("Running evaluation only...")
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=config["base"]["resume"]
         )
@@ -306,6 +319,7 @@ def main(config):
         )
 
     train(cfg, config, model, attack)
+    logger.info("Start final testing...")
     return evaluate(cfg, config, model)
 
 

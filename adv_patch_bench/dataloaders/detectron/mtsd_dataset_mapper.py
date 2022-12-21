@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 
+import detectron2
 import numpy as np
 import torch
 from detectron2.data import detection_utils as utils
@@ -13,6 +14,7 @@ from detectron2.structures import BoxMode
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.dataloaders.detectron import reap_dataset_mapper
 from adv_patch_bench.transforms.lighting_tf import compute_relight_params
+from adv_patch_bench.utils.types import DetectronSample
 
 
 class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
@@ -22,18 +24,28 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
     training data.
     """
 
-    # def __init__(self, cfg, is_train=True):
-    #     """Initialize benign data mapper.
+    def __init__(
+        self,
+        cfg: detectron2.config.CfgNode,
+        relight_method: str = "percentile",
+        relight_percentile: float = 10.0,
+        **kwargs,
+    ) -> None:
+        """Initialize MtsdDatasetMapper. See ReapDatasetMapper for args.
 
-    #     Args:
-    #         cfg: Detectron2 config.
-    #         is_train: Whether we are training. Defaults to True.
-    #     """
-    #     super().__init__(cfg, is_train=is_train)
-    #     # TODO:
-    #     self.keypoint_on = False
+        Args:
+            cfg: Detectron2 config.
+            relight_method: Method for computing relighting params. Defaults to
+                "percentile".
+            relight_percentile: Percentile of pixels to use as min/max of the
+                scaling range. See transforms.lighting_tf._find_min_max() for
+                more detail. Defaults to 10.0.
+        """
+        super().__init__(cfg, **kwargs)
+        self._relight_method: str = relight_method
+        self._relight_percentile: float = relight_percentile
 
-    def __call__(self, dataset_dict):
+    def __call__(self, dataset_dict: DetectronSample):
         """Modify sample directly loaded from Detectron2 dataset.
 
         Args:
@@ -49,18 +61,18 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
             dataset_dict["file_name"], format=self.img_format
         )
         image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
-        # print("before:", image.shape)
-        image, scales, padding = img_util.resize_and_pad(
-            obj=image,
-            resize_size=(1536, 2048),  # FIXME
-            pad_size=(1536, 2048),
-            keep_aspect_ratio=True,
-            return_params=True,
-        )
-        # print("after:", image.shape)
-        image = image.permute(1, 2, 0).numpy()
-        dataset_dict["width"] = 2048
-        dataset_dict["height"] = 1536
+        scales, padding = [1, 1], [0] * 4
+        if self._img_size is not None:
+            image, scales, padding = img_util.resize_and_pad(
+                obj=image,
+                resize_size=self._img_size,
+                pad_size=self._img_size,
+                keep_aspect_ratio=True,
+                return_params=True,
+            )
+            image = image.permute(1, 2, 0).numpy()
+            dataset_dict["width"] = self._img_size[1]
+            dataset_dict["height"] = self._img_size[0]
         utils.check_image_size(dataset_dict, image)
 
         if "annotations" not in dataset_dict:
@@ -92,12 +104,9 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
 
         image_shape = image.shape[:2]  # h, w
 
-        # FIXME: Transform is applied after crop???
-        # print("mapper", image_shape)
-
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
-        # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
-        # Therefore it's important to use torch.Tensor.
+        # but not efficient on large generic data structures due to the use of
+        # pickle & mp.Queue. Therefore it's important to use torch.Tensor.
         image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
         dataset_dict["image"] = image
 
@@ -120,10 +129,14 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 if not self.keypoint_on:
                     anno.pop("keypoints", None)
 
-                xmin, ymin, xmax, ymax = anno["bbox"]
-                obj = image[:, int(ymin) : int(ymax), int(xmin) : int(xmax)]
-                # TODO: set percentile
-                anno["alpha"], anno["beta"] = compute_relight_params(obj / 255)
+                xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
+                obj = image[:, ymin:ymax, xmin:xmax]
+                # Compute relighting params from cropped object
+                anno["alpha"], anno["beta"] = compute_relight_params(
+                    obj / 255,
+                    method=self._relight_method,
+                    percentile=self._relight_percentile,
+                )
                 anno["keypoints"] = np.array(
                     [
                         [xmin, ymin, 2],

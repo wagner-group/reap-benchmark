@@ -1,5 +1,7 @@
 """Register and load Mapillary Vistas dataset."""
 
+from __future__ import annotations
+
 import os
 import pathlib
 from typing import Any, Dict, List, Optional
@@ -10,7 +12,7 @@ from detectron2.structures import BoxMode
 from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.utils.types import DetectronSample
+from adv_patch_bench.utils.types import DetectronSample, SizePx
 from hparams import LABEL_LIST
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
@@ -18,13 +20,14 @@ _NUM_KEYPOINTS = 4
 
 
 def get_mapillary_dict(
-    split: str,
-    base_path: str,
-    bg_class_id: int,
+    split: str = "train",
+    data_path: str = "./",
+    bg_class: int = 10,
     ignore_bg_class: bool = False,
-    anno_df: Optional[pd.DataFrame] = None,
+    anno_df: pd.DataFrame | None = None,
+    img_size: SizePx | None = None,
     **kwargs,
-) -> List[DetectronSample]:
+) -> list[DetectronSample]:
     """Get Mapillary Vistas dataset as list of samples in Detectron2 format.
 
     Args:
@@ -36,6 +39,10 @@ def get_mapillary_dict(
             evaluation because this means background objects will not have a
             ground-truth bounding box. This will wrongly incur high FPR.
         anno_df: Transform annotation. Defaults to None.
+        img_size: Desired image size (height, width). Note that images are not
+            resized here but by DatasetMapper instead. So if a corresponding
+            DatasetMapper is not called properly, bbox and keypoints may be
+            wrong. Defaults to None.
 
     Raises:
         ValueError: split is not among _ALLOWED_SPLITS.
@@ -48,13 +55,15 @@ def get_mapillary_dict(
         raise ValueError(
             f"split must be among {_ALLOWED_SPLITS}, but it is {split}!"
         )
+    if img_size is not None:
+        new_height, new_width = img_size
 
     mapillary_split: Dict[str, str] = {
         "train": "training",
         "test": "validation",
         "combined": "combined",
     }[split]
-    bpath: pathlib.Path = pathlib.Path(base_path)
+    bpath: pathlib.Path = pathlib.Path(data_path)
     label_path: pathlib.Path = bpath / mapillary_split / "detectron_labels"
     img_path: pathlib.Path = bpath / mapillary_split / "images"
 
@@ -63,7 +72,6 @@ def get_mapillary_dict(
         str(f) for f in label_path.iterdir() if f.is_file()
     ]
     label_files = sorted(label_files)
-
     img_df: Optional[pd.DataFrame] = None
 
     for idx, label_file in enumerate(tqdm(label_files)):
@@ -82,20 +90,19 @@ def get_mapillary_dict(
         record: DetectronSample = {
             "file_name": str(img_path / jpg_filename),
             "image_id": idx,
-            "width": width,
-            "height": height,
+            "width": new_width if img_size is not None else width,
+            "height": new_height if img_size is not None else height,
         }
 
-        # FIXME
-        _, scales, padding = img_util.resize_and_pad(
-            orig_size=(height, width),
-            resize_size=(1536, 2048),
-            pad_size=(1536, 2048),
-            keep_aspect_ratio=True,
-            return_params=True,
-        )
-        record["width"] = 2048
-        record["height"] = 1536
+        scales, padding = [1, 1], [0] * 4
+        if img_size is not None:
+            _, scales, padding = img_util.resize_and_pad(
+                orig_size=(height, width),
+                resize_size=img_size,
+                pad_size=img_size,
+                keep_aspect_ratio=True,
+                return_params=True,
+            )
 
         # Populate record or sample with its objects
         objs: List[Dict[str, Any]] = []
@@ -122,14 +129,14 @@ def get_mapillary_dict(
                     # the unannotated ones to "other" or background class.
                     # We cannot simply remove them because it will incur a false
                     # positive.
-                    class_id = bg_class_id
+                    class_id = bg_class
 
             # Remove "other" objects
-            if ignore_bg_class and class_id == bg_class_id:
+            if ignore_bg_class and class_id == bg_class:
                 continue
 
-            assert 0 <= class_id <= bg_class_id, (
-                f"class_id {class_id} seems to be out of range ({bg_class_id} "
+            assert 0 <= class_id <= bg_class, (
+                f"class_id {class_id} seems to be out of range ({bg_class} "
                 "max) Something went wrong."
             )
 
@@ -145,11 +152,7 @@ def get_mapillary_dict(
                 "beta": None,
             }
 
-            if (
-                obj_df is not None
-                and not obj_df.empty
-                and class_id != bg_class_id
-            ):
+            if obj_df is not None and not obj_df.empty and class_id != bg_class:
                 # Include REAP annotation if exists
                 tgt_points = obj_df["tgt_points"].values[0]
                 keypoints = []
@@ -159,7 +162,7 @@ def get_mapillary_dict(
                         f"keypoints but found {len(tgt_points)}!"
                     )
                     print(obj_df)
-                    assert class_id == bg_class_id
+                    assert class_id == bg_class
                     tgt_points = tgt_points[:_NUM_KEYPOINTS]
                 for tgt in tgt_points:
                     keypoints.extend(
@@ -194,7 +197,8 @@ def register_mapillary(
     base_path: str = "~/data/",
     use_color: bool = False,
     ignore_bg_class: bool = False,
-    anno_df: Optional[pd.DataFrame] = None,
+    anno_df: pd.DataFrame | None = None,
+    img_size: SizePx | None = None,
 ) -> None:
     """Register Mapillary Vistas dataset on Detectron2.
 
@@ -205,13 +209,17 @@ def register_mapillary(
             Defaults to False.
         anno_df: Annotation DataFrame. If specified, only samples present in
             anno_df will be sampled.
+        img_size: Desired image size (height, width). Note that images are not
+            resized here but by DatasetMapper instead. So if a corresponding
+            DatasetMapper is not called properly, bbox and keypoints may be
+            wrong. Defaults to None.
     """
     color: str = "color" if use_color else "no_color"
     dataset: str = f"mapillary_{color}"
     data_path = os.path.join(base_path, "mapillary_vistas", color)
 
     class_names: List[str] = LABEL_LIST[dataset]
-    bg_idx: int = len(class_names) - 1
+    bg_class: int = len(class_names) - 1
     thing_classes: List[str] = class_names
     if ignore_bg_class:
         thing_classes = thing_classes[:-1]
@@ -221,11 +229,12 @@ def register_mapillary(
         DatasetCatalog.register(
             dataset_with_split,
             lambda s=split: get_mapillary_dict(
-                s,
-                data_path,
-                bg_idx,
+                split=s,
+                data_path=data_path,
+                bg_class=bg_class,
                 ignore_bg_class=ignore_bg_class,
                 anno_df=anno_df,
+                img_size=img_size,
             ),
         )
         MetadataCatalog.get(dataset_with_split).set(

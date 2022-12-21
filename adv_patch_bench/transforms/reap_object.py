@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any
 
 import cv2
 import kornia.geometry.transform as kornia_tf
@@ -129,11 +129,11 @@ class ReapObject(render_object.RenderObject):
     @staticmethod
     def apply_objects(
         images: BatchImageTensor,
-        targets: Target,
+        targets: list[Target],
         adv_patch: BatchImageTensor,
         patch_mask: BatchMaskTensor,
         tf_params: dict[str, Any],
-    ) -> Tuple[ImageTensor, Target]:
+    ) -> tuple[ImageTensor, Target]:
         """Apply adversarial patch to image using REAP approach.
 
         Args:
@@ -207,20 +207,22 @@ class ReapObject(render_object.RenderObject):
         per_img_patches = torch.cat(per_img_patches, dim=0)
         assert len(per_img_patches) == batch_size
 
-        alpha_mask = per_img_patches[:, -1:]
+        alpha_mask: BatchImageTensor = per_img_patches[:, -1:]
         warped_patch: BatchImageTensor = per_img_patches[:, :-1]
         num_overlap_pixels = (alpha_mask > 1).sum().item()
         if num_overlap_pixels > 0:
+            # This only happens when two or more patches overlap. Ideally we
+            # should select one patch to be on top covering the others, but
+            # this is usually rare enough that we can fix by just clipping.
             alpha_mask.clamp_max_(1)
             warped_patch.clamp_max_(1)
             print(
                 f"=> {num_overlap_pixels} pixels overlap! If this number is "
-                "large, it is likely that either the geometric transformation "
-                "is wrong."
+                "large, geometric transformation is likely wrong."
             )
 
         # Place patch on object using alpha channel
-        final_img: ImageTensor = (
+        final_img: BatchImageTensor = (
             1 - alpha_mask
         ) * images + alpha_mask * warped_patch
 

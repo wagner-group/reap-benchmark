@@ -10,16 +10,15 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from tqdm import tqdm
 
-# import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DEFAULT_PATH_MTSD_LABEL,
     LABEL_LIST,
+    OBJ_DIM_DICT,
     OLD_TO_NEW_LABELS,
     PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
     TS_COLOR_OFFSET_DICT,
-    OBJ_DIM_DICT,
 )
 
 _ALLOWED_SPLITS = ("train", "test", "val")
@@ -81,7 +80,7 @@ def get_mtsd_dict(
     json_files: Optional[List[str]] = None,
     duplicate_files_df: Optional[pd.DataFrame] = None,
     mtsd_label_to_class_index: Optional[Dict[str, int]] = None,
-    bg_class_id: int = 10,
+    bg_class: int = 10,
     ignore_bg_class: bool = False,
     **kwargs,
 ) -> List[DetectronSample]:
@@ -151,33 +150,16 @@ def get_mtsd_dict(
             "height": height,
         }
 
-        # FIXME: This may have to be used with MtsdDatasetMapper?
-        # _, scales, padding = img_util.resize_and_pad(
-        #     orig_size=(height, width),
-        #     resize_size=(1536, 2048),
-        #     pad_size=(1536, 2048),
-        #     keep_aspect_ratio=True,
-        #     return_params=True,
-        # )
-        # record["width"] = 2048
-        # record["height"] = 1536
-
         # Populate record or sample with its objects
         objs: List[Dict[str, Any]] = []
         for obj in anno["objects"]:
             class_index: int = mtsd_label_to_class_index.get(
-                obj["label"], bg_class_id
+                obj["label"], bg_class
             )
             # Remove labels for small or "other" objects
-            if ignore_bg_class and class_index == bg_class_id:
+            if ignore_bg_class and class_index == bg_class:
                 continue
             obj: Dict[str, Any] = {
-                # "bbox": [
-                #     obj["bbox"]["xmin"] * scales[1] + padding[0],
-                #     obj["bbox"]["ymin"] * scales[0] + padding[1],
-                #     obj["bbox"]["xmax"] * scales[1] + padding[0],
-                #     obj["bbox"]["ymax"] * scales[0] + padding[1],
-                # ],
                 "bbox": [
                     obj["bbox"]["xmin"],
                     obj["bbox"]["ymin"],
@@ -250,7 +232,7 @@ def register_mtsd(
             lambda s=split: get_mtsd_dict(
                 split=s,
                 data_path=data_path,
-                bg_class_id=bg_class_id,
+                bg_class=bg_class_id,
                 ignore_bg_class=ignore_bg_class,
                 **mtsd_anno,
             ),
