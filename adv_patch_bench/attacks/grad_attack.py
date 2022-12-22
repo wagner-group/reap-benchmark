@@ -194,6 +194,15 @@ class GradAttack(base_attack.DetectorAttackModule):
                     "batch_mode is True!"
                 )
             batch_size = len(patch_mask)
+        else:
+            if "pgd" in self._optimizer_name and rimg.num_objs > 1:
+                # TODO(feature): We can allow this if alphas and betas are the
+                # same for all objects.
+                raise ValueError(
+                    "PGD optimizer cannot be used in non-batch mode with more "
+                    f"than one obects ({rimg.num_objs}). PGD clipping should "
+                    "be fixed so it cannot depend on multiple objects."
+                )
 
         for _ in range(self._num_restarts):
             # Initialize adversarial perturbation
@@ -202,7 +211,7 @@ class GradAttack(base_attack.DetectorAttackModule):
                 device=device,
                 dtype=torch.float32,
             )
-            z_delta.uniform_(-1, 1)
+            z_delta.uniform_(0 if "pgd" in self._optimizer_name else -1, 1)
 
             if not batch_mode:
                 z_delta = z_delta.expand(self._num_eot, -1, -1, -1)
