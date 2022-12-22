@@ -84,6 +84,7 @@ def get_mtsd_dict(
     mtsd_label_to_class_index: Optional[Dict[str, int]] = None,
     bg_class: int = 10,
     ignore_bg_class: bool = False,
+    skip_bg_only: bool = True,
     **kwargs,
 ) -> List[DetectronSample]:
     """Get MTSD dataset as list of samples in Detectron2 format.
@@ -154,6 +155,7 @@ def get_mtsd_dict(
 
         # Populate record or sample with its objects
         objs: List[Dict[str, Any]] = []
+        non_bg_found = False
         for obj in anno["objects"]:
             class_index: int = mtsd_label_to_class_index.get(
                 obj["label"], bg_class
@@ -161,6 +163,8 @@ def get_mtsd_dict(
             # Remove labels for small or "other" objects
             if ignore_bg_class and class_index == bg_class:
                 continue
+            if class_index != bg_class:
+                non_bg_found = True
             obj: Dict[str, Any] = {
                 "bbox": [
                     obj["bbox"]["xmin"],
@@ -178,7 +182,7 @@ def get_mtsd_dict(
             objs.append(obj)
 
         # Skip images with no object of interest
-        if len(objs) == 0:
+        if (skip_bg_only and not non_bg_found) or len(objs) == 0:
             continue
 
         record["annotations"] = objs
@@ -192,6 +196,7 @@ def register_mtsd(
     use_color: bool = False,
     use_mtsd_original_labels: bool = False,
     ignore_bg_class: bool = False,
+    skip_bg_only: bool = True,
 ) -> None:
     """Register MTSD dataset on Detectron2.
 
@@ -202,6 +207,7 @@ def register_mtsd(
             REAP annotations. Default to False.
         ignore_bg_class: Whether to ignore background class (last class index).
             Defaults to False.
+        skip_bg_only: # TODO(document)
     """
     color: str
     if use_mtsd_original_labels:
@@ -236,6 +242,7 @@ def register_mtsd(
                 data_path=data_path,
                 bg_class=bg_class,
                 ignore_bg_class=ignore_bg_class,
+                skip_bg_only=skip_bg_only,
                 **mtsd_anno,
             ),
         )

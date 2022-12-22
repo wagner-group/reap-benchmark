@@ -11,7 +11,7 @@ def _gen_mask_rect(
     patch_size_mm: tuple[int, float, float],
     obj_size_px: SizePx,
     obj_size_mm: SizeMM,
-    shift_height_mm: float | None = None,
+    patch_height: str | float | None = None,
 ) -> MaskTensor:
     """Generate rectangular patch mask at the bottom of the object.
 
@@ -27,7 +27,7 @@ def _gen_mask_rect(
     Returns:
         Binary mask of patch.
     """
-    if shift_height_mm is not None and shift_height_mm < 0:
+    if isinstance(patch_height, (int, float)) and patch_height < 0:
         raise ValueError("shift_height_mm must be non-negative!")
     patch_mask: MaskTensor = torch.zeros(
         (1,) + obj_size_px, dtype=torch.float32
@@ -40,8 +40,11 @@ def _gen_mask_rect(
 
     # Define patch location and size
     mid_height, mid_width = obj_h_px // 2, obj_w_px // 2
-    if shift_height_mm is not None:
-        shift_mm = shift_height_mm
+    if isinstance(patch_height, (int , float)):
+        shift_mm = patch_height
+    elif patch_height == "middle":
+        mid_height = 0
+        shift_mm = obj_h_mm / 2
     else:
         shift_mm = (obj_h_mm - patch_h_mm) / 2
     patch_y_shift = round(shift_mm / obj_h_mm * obj_h_px)
@@ -72,7 +75,7 @@ def gen_patch_mask(
     patch_size_mm: tuple[int, float, float],
     obj_size_px: SizePx,
     obj_size_mm: SizeMM,
-    shift_height_mm: float | None = None,
+    patch_height: str | float | None = None,
 ) -> MaskTensor:
     """Generate digital patch mask with given real patch_size_mm.
 
@@ -109,7 +112,7 @@ def gen_patch_mask(
         patch_size_mm,
         obj_size_px,
         obj_size_mm,
-        shift_height_mm=shift_height_mm,
+        patch_height=patch_height,
     )
 
     return patch_mask

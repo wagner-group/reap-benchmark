@@ -60,6 +60,7 @@ def prep_adv_patch(
     patch_size_mm: tuple[int, float, float] | None = None,
     obj_size_px: SizePx | None = None,
     obj_size_mm: SizeMM | None = None,
+    patch_height: str | float | None = "bottom",
 ) -> tuple[BatchImageTensor | None, BatchMaskTensor | None]:
     """Load and prepare adversarial patch along with its mask.
 
@@ -101,6 +102,7 @@ def prep_adv_patch(
             patch_size_mm,
             obj_size_px,
             obj_size_mm,
+            patch_height=patch_height,
         )
 
         if attack_type == "debug":
@@ -140,6 +142,7 @@ def prep_adv_patch_all_classes(
     adv_patch_paths: list[str] | None = None,
     patch_size_mm: tuple[int, float, float] | None = None,
     obj_width_px: int = 64,
+    patch_height: str | float | None = "bottom",
 ) -> tuple[list[BatchImageTensor | None], list[BatchMaskTensor | None]]:
     """Prepare adversarial patches and masks for all classes."""
     metadata = detectron2.data.MetadataCatalog.get(dataset)
@@ -161,6 +164,7 @@ def prep_adv_patch_all_classes(
             patch_size_mm=patch_size_mm,
             obj_size_px=obj_size_px,
             obj_size_mm=size_mm_dict[i],
+            patch_height=patch_height,
         )
         adv_patches.append(adv_patch)
         patch_masks.append(patch_mask)

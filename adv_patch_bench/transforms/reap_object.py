@@ -11,6 +11,7 @@ import torch
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
+from adv_patch_bench.transforms.util import identity, identity_with_params
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchImageTensorRGBA,
@@ -137,6 +138,7 @@ class ReapObject(render_object.RenderObject):
         adv_patch: BatchImageTensor,
         patch_mask: BatchMaskTensor,
         tf_params: dict[str, Any],
+        suppress_aug: bool = False,
     ) -> tuple[ImageTensor, Target]:
         """Apply adversarial patch to image using REAP approach.
 
@@ -153,7 +155,9 @@ class ReapObject(render_object.RenderObject):
         beta = tf_params["beta"]
         obj_to_img = tf_params["obj_to_img"]
         obj_mask = tf_params["obj_mask"]
-        aug_geo, _, aug_light = tf_params["obj_transforms"]
+        aug_geo, aug_light = identity_with_params, identity
+        if not suppress_aug:
+            aug_geo, _, aug_light = tf_params["obj_transforms"]
 
         if adv_patch.shape[-2:] != patch_mask.shape[-2:] != obj_mask.shape[-2:]:
             raise ValueError(
@@ -192,12 +196,13 @@ class ReapObject(render_object.RenderObject):
 
         # Combine patch_mask with adv_patch as alpha channel
         rgba_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=1)
-        # Crop with sign_mask and patch_mask
-        rgba_patch *= obj_mask * patch_mask
+        # Crop with patch_mask
+        rgba_patch *= patch_mask
 
         # Apply extra geometric augmentation on patch
         rgba_patch: BatchImageTensorRGBA
         rgba_patch, _ = aug_geo(rgba_patch)
+        rgba_patch *= obj_mask
 
         # Apply transform on RGBA patch
         warped_patch: BatchImageTensorRGBA = kornia_tf.warp_perspective(

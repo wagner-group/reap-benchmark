@@ -72,6 +72,7 @@ class RenderImage:
         self.img_mode: str = img_mode
         self._mode: str = mode
         self.obj_classes: list[int] = []
+        self.obj_ids: list[str] = []
         # self._img_size: SizePx = img_size
 
         if robj_kwargs is None:
@@ -90,11 +91,12 @@ class RenderImage:
             image: ImageTensor = sample["image"].float() / 255
             # image = self._resize_image(image)
             image = image.flip(0) if img_mode == "BGR" else image
+            file_name = sample["file_name"].split("/")[-1]
             images.append(image.to(device))
 
             if mode in ("reap", "mtsd"):
                 temp_num_objs = len(self.obj_classes)
-                for obj in sample["annotations"]:
+                for oid, obj in enumerate(sample["annotations"]):
                     cat_id = obj["category_id"]
                     wrong_class = cat_id == bg_class or (
                         cat_id != obj_class and obj_class >= 0
@@ -114,6 +116,7 @@ class RenderImage:
                     )
                     robj.aggregate_params(self.tf_params)
                     obj_to_img.append(i)
+                    self.obj_ids.append(f"{file_name}-{oid}")
                 if temp_num_objs == len(self.obj_classes):
                     logger.warning(
                         "No valid object is found in image %d/%d. Consider "
@@ -138,7 +141,7 @@ class RenderImage:
         self.tf_params["interp"] = interp
 
         # Init augmentation transform for image
-        self._aug_geo_img: TransformFn = util._identity
+        self._aug_geo_img: TransformFn = util.identity
         if img_aug_prob_geo is not None and img_aug_prob_geo > 0:
             self._aug_geo_img = K.RandomResizedCrop(
                 self.images.shape[-2:],
@@ -200,6 +203,7 @@ class RenderImage:
         adv_patch: BatchImageTensor | None = None,
         patch_mask: BatchMaskTensor | None = None,
         obj_indices: list[int] | None = None,
+        suppress_aug: bool = False,
     ) -> tuple[BatchImageTensor, list[Target]]:
         """Render adversarial patches (or objects) on image.
 
@@ -220,9 +224,11 @@ class RenderImage:
             adv_patch,
             patch_mask,
             tf_params,
+            suppress_aug=suppress_aug,
         )
         # Apply augmentation on the entire image
-        images = self._aug_geo_img(images)
+        if not suppress_aug:
+            images = self._aug_geo_img(images)
         return images, targets
 
     def post_process_image(

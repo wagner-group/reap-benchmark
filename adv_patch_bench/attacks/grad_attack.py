@@ -15,6 +15,7 @@ from adv_patch_bench.transforms import render_image
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchMaskTensor,
+    ImageTensor,
     Target,
 )
 
@@ -169,6 +170,7 @@ class GradAttack(base_attack.DetectorAttackModule):
         rimg: render_image.RenderImage,
         patch_mask: BatchMaskTensor,
         batch_mode: bool = False,
+        init_adv_patch: list[ImageTensor | None] | None = None,
     ) -> BatchImageTensor:
         """Run gradient-based attack.
 
@@ -204,6 +206,10 @@ class GradAttack(base_attack.DetectorAttackModule):
                     "be fixed so it cannot depend on multiple objects."
                 )
 
+        if init_adv_patch is None:
+            init_adv_patch = [None] * batch_size
+        assert len(init_adv_patch) == batch_size
+
         for _ in range(self._num_restarts):
             # Initialize adversarial perturbation
             z_delta: BatchImageTensor = torch.zeros(
@@ -212,6 +218,10 @@ class GradAttack(base_attack.DetectorAttackModule):
                 dtype=torch.float32,
             )
             z_delta.uniform_(0 if "pgd" in self._optimizer_name else -1, 1)
+
+            for i, init_patch in enumerate(init_adv_patch):
+                if init_patch is not None:
+                    z_delta[i] = self._to_opt_space(init_patch.to(device))
 
             if not batch_mode:
                 z_delta = z_delta.expand(self._num_eot, -1, -1, -1)
@@ -282,6 +292,16 @@ class GradAttack(base_attack.DetectorAttackModule):
         # Need to copy images here since torch.tanh needs output to compute grad
         images = images * half_alpha
         images.add_(half_alpha).add_(beta)
+        return images
+
+    def _to_opt_space(self, images):
+        if "pgd" in self._optimizer_name:
+            return images
+        EPS = 1e-6
+        assert (images >= 0 & images <= 1).all()
+        images = images * 2 - 1
+        images.clamp_(-1 + EPS, 1 - EPS)
+        images.arctanh_()
         return images
 
     def _print_loss(self, loss: torch.Tensor, step: int) -> None:

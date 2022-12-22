@@ -57,7 +57,9 @@ import adv_patch_bench.dataloaders.detectron.util as data_util
 from adv_patch_bench.attacks import attack_util
 from adv_patch_bench.dataloaders.detectron import mtsd_dataset_mapper
 from adv_patch_bench.transforms.render_image import RenderImage
+from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
+from adv_patch_bench.utils.types import BatchImageTensor
 
 logger = logging.getLogger("detectron2")
 
@@ -148,6 +150,10 @@ def train(cfg, config, model, attack):
         "reap_transform_mode": config_base["reap_transform_mode"],
         "reap_use_relight": config_base["reap_use_relight"],
     }
+    # Get augmentation for mask only
+    _, aug_mask, aug_color = RenderObject.get_augmentation(
+        config["attack"]["common"], "nearest"
+    )
 
     model.train()
     optimizer = build_optimizer(cfg, model)
@@ -181,12 +187,14 @@ def train(cfg, config, model, attack):
         attack_type=config_base["attack_type"],
         patch_size_mm=config_base["patch_size_mm"],
         obj_width_px=config_base["obj_size_px"][1],
+        patch_height="middle",
     )
     for i, (adv_patch, patch_mask) in enumerate(zip(adv_patches, patch_masks)):
         if adv_patch is not None:
             adv_patches[i] = adv_patch.to(model.device)
         if patch_mask is not None:
             patch_masks[i] = patch_mask.to(model.device)
+    adv_patch_cache = {}
 
     sampler = _get_sampler(cfg)
     # pylint: disable=missing-kwoa,too-many-function-args
@@ -209,7 +217,7 @@ def train(cfg, config, model, attack):
             if use_attack:
                 # Create image wrapper that handles tranforms
                 rimg: RenderImage = RenderImage(
-                    dataset=config["base"]["dataset"],
+                    dataset=cfg.DATASETS.TRAIN[0],
                     samples=data,
                     robj_kwargs=robj_kwargs,
                     **rimg_kwargs,
@@ -220,16 +228,29 @@ def train(cfg, config, model, attack):
                     cur_patch_mask = [patch_masks[i] for i in rimg.obj_classes]
                     cur_patch_mask = torch.cat(cur_patch_mask, dim=0)
                     assert len(cur_patch_mask) == rimg.num_objs
+                    cur_patch_mask = aug_mask(cur_patch_mask)
                     if config_base["attack_type"] == "per-sign":
+                        # Load cached adversarial patches
+                        init_adv_patch = [
+                            adv_patch_cache.get(oid) for oid in rimg.obj_ids
+                        ]
                         # Generate per-sign patch for adversarial training
-                        cur_adv_patch = attack(
-                            rimg, cur_patch_mask, batch_mode=True
+                        cur_adv_patch: BatchImageTensor = attack(
+                            rimg,
+                            cur_patch_mask,
+                            batch_mode=True,
+                            init_adv_patch=init_adv_patch,
                         )
+                        # Cache generated adversarial patches for next epoch
+                        adv_patch_cpu = cur_adv_patch.cpu()
+                        for patch, oid in zip(adv_patch_cpu, rimg.obj_ids):
+                            adv_patch_cache[oid] = patch.cpu()
                     else:
                         cur_adv_patch = [
                             adv_patches[i] for i in rimg.obj_classes
                         ]
                         cur_adv_patch = torch.cat(cur_adv_patch, dim=0)
+                    cur_adv_patch = aug_color(cur_adv_patch)
                     img_render, data = rimg.apply_objects(
                         cur_adv_patch, cur_patch_mask
                     )

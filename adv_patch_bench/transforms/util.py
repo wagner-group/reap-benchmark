@@ -20,16 +20,16 @@ from adv_patch_bench.utils.types import (
 _KeyPoints = NewType("_KeyPoints", List[Tuple[float, float]])
 
 
-def _identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
+def identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
     """Identity transform function."""
     return inputs
 
 
-def _identity_with_params(
+def identity_with_params(
     inputs: ImageTensor | BatchImageTensor,
 ) -> tuple[BatchImageTensor, None]:
     """Indentity function that also returns None param."""
-    inputs = _identity(inputs)
+    inputs = identity(inputs)
     return inputs, None
 
 
@@ -230,8 +230,8 @@ def get_transform_fn(
         geometric for mask, and (iii) lighting for object.
     """
     # Geometric transform
-    geo_transform: TransformParamFn = _identity_with_params
-    mask_transform: TransformFn = _identity
+    geo_transform: TransformParamFn = identity_with_params
+    mask_transform: TransformFn = identity
 
     if prob_geo is not None and prob_geo > 0:
         if syn_3d_dist is not None and syn_3d_dist > 0:
@@ -261,7 +261,7 @@ def get_transform_fn(
         )
 
     # Lighting transform (color jitter)
-    light_transform: TransformFn = _identity
+    light_transform: TransformFn = identity
     if (
         prob_colorjitter is not None
         and prob_colorjitter > 0
