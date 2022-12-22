@@ -93,7 +93,7 @@ class RenderImage:
             images.append(image.to(device))
 
             if mode in ("reap", "mtsd"):
-                found_obj = False
+                temp_num_objs = len(self.obj_classes)
                 for obj in sample["annotations"]:
                     cat_id = obj["category_id"]
                     wrong_class = cat_id == bg_class or (
@@ -103,7 +103,6 @@ class RenderImage:
                         continue
                     if any(point[2] != 2 for point in obj["keypoints"]):
                         continue
-                    found_obj = True
                     self.obj_classes.append(cat_id)
                     robj: RenderObject = self._robj_fn(
                         obj_dict=obj,
@@ -115,7 +114,7 @@ class RenderImage:
                     )
                     robj.aggregate_params(self.tf_params)
                     obj_to_img.append(i)
-                if not found_obj:
+                if temp_num_objs == len(self.obj_classes):
                     logger.warning(
                         "No valid object is found in image %d/%d. Consider "
                         "removing this image.",

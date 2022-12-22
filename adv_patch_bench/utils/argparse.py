@@ -91,6 +91,9 @@ def reap_args_parser(
         ),
     )
     parser.add_argument(
+        "--batch-size", type=int, default=1, help="Batch size (defaults to 1)."
+    )
+    parser.add_argument(
         "--eval-mode",
         type=str,
         default="drop",
@@ -341,10 +344,6 @@ def reap_args_parser(
             type=str,
             default=root / "data/coco128.yaml",
             help="dataset.yaml path",
-        )
-
-        parser.add_argument(
-            "--batch-size", type=int, default=32, help="batch size"
         )
         parser.add_argument(
             "--imgsz",

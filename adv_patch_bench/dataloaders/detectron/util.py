@@ -15,10 +15,12 @@ from detectron2.config import global_cfg
 from detectron2.data.datasets.coco import convert_to_coco_json
 from detectron2.utils.file_io import PathManager
 from pycocotools.coco import COCO
+from torch.utils.data.sampler import Sampler
 
 from adv_patch_bench.dataloaders import reap_util
 from adv_patch_bench.dataloaders.detectron import (
     custom_build,
+    custom_sampler,
     mapillary,
     mtsd,
     reap,
@@ -66,7 +68,8 @@ def _get_filename_from_id(
 
 
 def get_dataloader(
-    config_base: dict[str, Any]
+    config_base: dict[str, Any],
+    sampler: Sampler | str | None = None,
 ) -> tuple[torch.data.utils.DataLoader, set[str]]:
     """Get eval dataloader from base config."""
     dataset: str = config_base["dataset"]
@@ -88,6 +91,14 @@ def get_dataloader(
         class_file_names = set(_get_filename_from_id(data_dicts, img_ids))
         split_file_names = split_file_names.intersection(class_file_names)
 
+    if sampler == "shuffle":
+        num_samples: int = (
+            len(split_file_names)
+            if split_file_path is not None
+            else len(data_dicts)
+        )
+        sampler = custom_sampler.ShuffleInferenceSampler(num_samples)
+
     dataloader = custom_build.build_detection_test_loader(
         data_dicts,
         mapper=reap_dataset_mapper.ReapDatasetMapper(
@@ -97,6 +108,7 @@ def get_dataloader(
         num_workers=global_cfg.DATALOADER.NUM_WORKERS,
         pin_memory=True,
         split_file_names=split_file_names,
+        sampler=sampler,
     )
 
     return dataloader, split_file_names

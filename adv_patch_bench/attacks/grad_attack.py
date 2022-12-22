@@ -158,12 +158,6 @@ class GradAttack(base_attack.DetectorAttackModule):
                 self._lr_schedule.step(loss)
             self._print_loss(loss, step)
 
-        # DEBUG
-        # import os
-        # for idx in range(self.num_eot):
-        #     if not os.path.exists(f'tmp/{idx}/test_adv_img_{step}.png'):
-        #         os.makedirs(f'tmp/{idx}/', exist_ok=True)
-        #     torchvision.utils.save_image(adv_img[idx], f'tmp/{idx}/test_adv_img_{step}.png')
         if self._use_var_change_ab:
             rimg.tf_params["beta"] = beta
             rimg.tf_params["alpha"] = half_alpha * 2

@@ -169,13 +169,18 @@ def get_mapillary_dict(
                         (
                             tgt[0] * scales[1] + padding[0],
                             tgt[1] * scales[0] + padding[1],
+                            2,
                         )
                     )
-                    keypoints.append(2)
                 if len(tgt_points) == _NUM_KEYPOINTS - 1:
-                    keypoints.append(sum(tgt[0] for tgt in tgt_points) / 3)
-                    keypoints.append(sum(tgt[1] for tgt in tgt_points) / 3)
-                    keypoints.append(2)
+                    keypoints.extend(
+                        (
+                            sum(keypoints[i] for i in [0, 3, 6]) / 3,
+                            sum(keypoints[i] for i in [1, 4, 7]) / 3,
+                            2,
+                        )
+                    )
+                assert len(keypoints) == _NUM_KEYPOINTS * 3 and all(keypoints[i] == 2 for i in [2, 5, 8, 11])
                 obj["keypoints"] = keypoints
                 obj["alpha"] = obj_df["alpha"].values
                 obj["beta"] = obj_df["beta"].values
