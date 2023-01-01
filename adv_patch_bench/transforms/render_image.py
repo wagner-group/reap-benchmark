@@ -92,7 +92,8 @@ class RenderImage:
             # image = self._resize_image(image)
             image = image.flip(0) if img_mode == "BGR" else image
             file_name = sample["file_name"].split("/")[-1]
-            images.append(image.to(device))
+            images.append(image)
+            sample["instances"] = sample["instances"].to(device)
 
             if mode in ("reap", "mtsd"):
                 temp_num_objs = len(self.obj_classes)
@@ -128,7 +129,7 @@ class RenderImage:
                 # TODO: Set self.num_objs
                 raise NotImplementedError()
 
-        self.images = torch.stack(images, dim=0)
+        self.images = torch.stack(images, dim=0).to(device, non_blocking=True)
         self.samples = samples
         self.num_objs: int = len(self.obj_classes)
 
