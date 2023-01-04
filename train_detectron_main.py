@@ -85,7 +85,7 @@ def _get_sampler(cfg):
         )
     )
     # This line is the fix
-    repeat_factors = repeat_factors.long().float()
+    repeat_factors = repeat_factors.long()
     sampler = RepeatFactorTrainingSampler(repeat_factors)
     return sampler
 
