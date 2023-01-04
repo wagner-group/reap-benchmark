@@ -18,7 +18,6 @@ class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
         self,
         adv_imgs: BatchImageTensor,
         adv_targets: list[Target],
-        # obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute DPatch loss for Faster R-CNN models.
 
@@ -31,7 +30,6 @@ class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
         Returns:
             Loss for attacker to minimize.
         """
-        # _ = obj_class  # Unused
         inputs: list[dict[str, Any]] = adv_targets
         instances: list[structures.Instances] = []
         device = self._core_model.device

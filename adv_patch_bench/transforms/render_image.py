@@ -93,6 +93,7 @@ class RenderImage:
             image = image.flip(0) if img_mode == "BGR" else image
             file_name = sample["file_name"].split("/")[-1]
             images.append(image.to(device))
+            sample["instances"] = sample["instances"].to(device)
 
             if mode in ("reap", "mtsd"):
                 temp_num_objs = len(self.obj_classes)
@@ -128,9 +129,12 @@ class RenderImage:
                 # TODO: Set self.num_objs
                 raise NotImplementedError()
 
-        self.images = torch.stack(images, dim=0)
+        self.images = torch.stack(images, dim=0).to(device, non_blocking=True)
         self.samples = samples
         self.num_objs: int = len(self.obj_classes)
+        self.file_names: list[str] = [
+            s["file_name"].split("/")[-1] for s in samples
+        ]
 
         for name, params in self.tf_params.items():
             self.tf_params[name] = torch.cat(params, dim=0)
@@ -214,6 +218,7 @@ class RenderImage:
             target: Updated target labels to account for applied object if any.
         """
         images, samples, tf_params = self._slice_images_and_params(obj_indices)
+        orig_images = images
 
         if adv_patch is None or patch_mask is None:
             return images, samples
@@ -229,6 +234,14 @@ class RenderImage:
         # Apply augmentation on the entire image
         if not suppress_aug:
             images = self._aug_geo_img(images)
+
+        if images.isnan().any():
+            # DEBUG
+            print(
+                "NaN value(s) found in rendered images! Returning originals..."
+            )
+            images = orig_images
+
         return images, targets
 
     def post_process_image(

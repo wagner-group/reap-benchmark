@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import cv2
@@ -22,6 +23,8 @@ from adv_patch_bench.utils.types import (
 )
 
 _VALID_TRANSFORM_MODE = ("perspective", "translate_scale")
+
+logger = logging.getLogger(__name__)
 
 
 class ReapObject(render_object.RenderObject):
@@ -234,11 +237,12 @@ class ReapObject(render_object.RenderObject):
             # this is usually rare enough that we can fix by just clipping.
             alpha_mask.clamp_max_(1)
             warped_patch.clamp_max_(1)
-            print(
-                f"=> {num_overlap_pixels} pixels overlap! If this number is "
-                "large, geometric transformation is likely wrong."
+            logger.debug(
+                "  %d pixels overlap! If this number is large, geometric "
+                "transformation is likely wrong.",
+                num_overlap_pixels,
             )
-            print([t["file_name"].split("/")[-1] for t in targets])
+            logger.debug(str([t["file_name"].split("/")[-1] for t in targets]))
             # print(transform_mat)
             # img = (1 - alpha_mask) * images + alpha_mask * warped_patch
             # transform_mat[0] @ torch.tensor([0, 0, 1], device="cuda", dtype=torch.float32)
@@ -252,6 +256,13 @@ class ReapObject(render_object.RenderObject):
         final_img: BatchImageTensor = (
             1 - alpha_mask
         ) * images + alpha_mask * warped_patch
+
+        if final_img.isnan().any():
+            # DEBUG
+            print(
+                "NaN value(s) found in REAP rendered images! Returning originals..."
+            )
+            final_img = images
 
         return final_img, targets
 

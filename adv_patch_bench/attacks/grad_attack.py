@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from abc import abstractmethod
 from typing import Any
@@ -18,6 +19,8 @@ from adv_patch_bench.utils.types import (
     ImageTensor,
     Target,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class GradAttack(base_attack.DetectorAttackModule):
@@ -78,7 +81,6 @@ class GradAttack(base_attack.DetectorAttackModule):
         delta: BatchImageTensor,
         adv_img: BatchImageTensor,
         adv_target: list[Target],
-        # obj_class: int | None = None,
     ) -> torch.Tensor:
         """Compute loss on perturbed image.
 
@@ -145,6 +147,13 @@ class GradAttack(base_attack.DetectorAttackModule):
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
             loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
             loss.backward()
+            if loss.isnan().any() or delta.grad.isnan().any():
+                logger.warning(
+                    "NaN loss or grad detected (involved image names: %s)! "
+                    "Skipping this attack step.",
+                    str(rimg.file_names),
+                )
+                continue
 
             # Update perturbation
             if "pgd" in self._optimizer_name:
@@ -298,7 +307,7 @@ class GradAttack(base_attack.DetectorAttackModule):
         if "pgd" in self._optimizer_name:
             return images
         EPS = 1e-6
-        assert (images >= 0 & images <= 1).all()
+        assert ((images >= 0) & (images <= 1)).all()
         images = images * 2 - 1
         images.clamp_(-1 + EPS, 1 - EPS)
         images.arctanh_()
@@ -314,8 +323,10 @@ class GradAttack(base_attack.DetectorAttackModule):
             )
 
         if step % 10 == 0 and self._verbose:
-            print(
-                f"step: {step:4d}  loss: {self._ema_loss:.4f}  "
-                f"time: {time.time() - self._start_time:.2f}s"
+            logger.debug(
+                "step: %4d  loss: %.4f  time: %.2fs",
+                step,
+                self._ema_loss,
+                time.time() - self._start_time,
             )
             self._start_time = time.time()

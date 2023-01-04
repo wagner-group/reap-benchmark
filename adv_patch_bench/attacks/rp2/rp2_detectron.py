@@ -116,7 +116,7 @@ class RP2AttackDetectron(rp2_yolo.RP2AttackYOLO):
         class_logits = class_logits.split(num_inst_per_image, dim=0)
 
         gt_boxes = [i["instances"].gt_boxes.to(device) for i in inputs]
-        gt_classes = [i["instances"].gt_classes for i in inputs]
+        gt_classes = [i["instances"].gt_classes.to(device) for i in inputs]
         objectness_logits = [x.objectness_logits for x in proposals]
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
@@ -396,10 +396,11 @@ def _filter_positive_proposals_single(
         Filtered target boxes and corresponding class labels.
     """
     n_proposals: int = len(proposal_boxes)
+    device = class_logits.device
 
     proposal_gt_ious: torch.Tensor = structures.pairwise_iou(
         proposal_boxes, gt_boxes
-    )
+    ).to(device)
 
     # Pair each proposed box in proposal_boxes with a ground-truth box in
     # gt_boxes, i.e., find ground-truth box with highest IoU.
@@ -411,7 +412,8 @@ def _filter_positive_proposals_single(
 
     # Get class of paired gt_box
     gt_classes_repeat = gt_classes.repeat(n_proposals, 1)
-    idx = torch.arange(n_proposals)
+    idx = torch.arange(n_proposals, device=device)
+    paired_gt_idx = paired_gt_idx.to(device)
     paired_gt_classes = gt_classes_repeat[idx, paired_gt_idx]
 
     cond = iou_cond
