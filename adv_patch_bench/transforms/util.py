@@ -256,7 +256,7 @@ def get_transform_fn(
         and syn_colorjitter > 0
     ):
         # Hue can't be change much; Otherwise, the color becomes wrong
-        light_transform: TransformFn = K.ColorJitter(
+        light_transform: TransformFn = K.ColorJiggle(
             brightness=syn_colorjitter,
             contrast=syn_colorjitter,
             saturation=syn_colorjitter,

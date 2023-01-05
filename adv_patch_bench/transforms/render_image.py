@@ -203,6 +203,7 @@ class RenderImage:
             tf_params,
             suppress_aug=suppress_aug,
         )
+
         # Apply augmentation on the entire image
         if not suppress_aug:
             images = self._aug_geo_img(images)

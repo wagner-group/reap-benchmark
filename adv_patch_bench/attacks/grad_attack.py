@@ -151,9 +151,9 @@ class GradAttack(base_attack.DetectorAttackModule):
             assert not delta.isnan().any(), "NaN perturbation 3"
             loss.backward()
             assert not delta.isnan().any(), "NaN perturbation 4"
-            if loss.isnan().any() or delta.grad.isnan().any():
+            if loss.isnan().any():
                 logger.warning(
-                    "NaN loss or grad detected (involved image names: %s)! "
+                    "NaN loss detected (involved image names: %s)! "
                     "Skipping this attack step.",
                     str(rimg.file_names),
                 )
@@ -161,11 +161,17 @@ class GradAttack(base_attack.DetectorAttackModule):
 
             # Update perturbation
             if "pgd" in self._optimizer_name:
+                if delta.grad.isnan().any():
+                    logger.warning("NaN grad!")
+                    break
                 grad = delta.grad.detach()
                 grad = torch.sign(grad)
                 delta.detach_()
                 delta -= self._step_size * grad
             else:
+                if z_delta.grad.isnan().any():
+                    logger.warning("NaN grad!")
+                    break
                 self._optimizer.step()
 
             if self._lr_schedule is not None:

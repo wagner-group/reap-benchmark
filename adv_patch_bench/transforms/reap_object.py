@@ -18,7 +18,6 @@ from adv_patch_bench.utils.types import (
     BatchImageTensorRGBA,
     BatchMaskTensor,
     ImageTensor,
-    ImageTensorRGBA,
     Target,
 )
 
@@ -199,12 +198,13 @@ class ReapObject(render_object.RenderObject):
         adv_patch = aug_light(adv_patch)
 
         # Combine patch_mask with adv_patch as alpha channel
-        rgba_patch: ImageTensorRGBA = torch.cat([adv_patch, patch_mask], dim=1)
+        rgba_patch: BatchImageTensorRGBA = torch.cat(
+            [adv_patch, patch_mask], dim=1
+        )
         # Crop with patch_mask
         rgba_patch *= patch_mask
 
         # Apply extra geometric augmentation on patch
-        rgba_patch: BatchImageTensorRGBA
         rgba_patch = aug_geo(rgba_patch)
         rgba_patch *= obj_mask
 
