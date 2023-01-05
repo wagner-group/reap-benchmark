@@ -132,11 +132,13 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
                 obj = image[:, ymin:ymax, xmin:xmax]
                 # Compute relighting params from cropped object
-                anno["alpha"], anno["beta"] = compute_relight_params(
+                alpha, beta = compute_relight_params(
                     obj / 255,
                     method=self._relight_method,
                     percentile=self._relight_percentile,
                 )
+                anno["alpha"] = alpha if 0 <= alpha <= 1 else 1.0
+                anno["beta"] = beta if -1 <= beta <= 1 else 0.0
                 anno["keypoints"] = np.array(
                     [
                         [xmin, ymin, 2],

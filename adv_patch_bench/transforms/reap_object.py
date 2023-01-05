@@ -219,8 +219,6 @@ class ReapObject(render_object.RenderObject):
         warped_patch.clamp_(0, 1)
 
         # Add patches from same image together
-        # per_img_patches = warped_patch
-        # if obj_to_img is not None:
         per_img_patches = []
         for i in range(batch_size):
             per_img_patches.append(
@@ -257,13 +255,6 @@ class ReapObject(render_object.RenderObject):
         final_img: BatchImageTensor = (
             1 - alpha_mask
         ) * images + alpha_mask * warped_patch
-
-        # DEPRECATED: This is checked by render image
-        # if final_img.isnan().any():
-        #     logger.warning(
-        #         "NaN value(s) found in REAP rendered images! Returning originals..."
-        #     )
-        #     final_img = images
 
         return final_img, targets
 

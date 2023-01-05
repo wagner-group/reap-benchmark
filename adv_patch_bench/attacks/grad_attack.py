@@ -58,13 +58,15 @@ class GradAttack(base_attack.DetectorAttackModule):
         self.targeted: bool = False
 
         # Use change of variable on delta with alpha and beta.
-        # Mostly used with per-sign or real attack.
+        # Mostly used with per-sign or real attack. Only makes difference when
+        # PGD is used as optimizer.
         self._use_var_change_ab: bool = "var_change_ab" in self._attack_mode
-        if self._use_var_change_ab:
-            # Does not work when num_eot > 1
-            assert (
-                self._num_eot == 1
-            ), "When use_var_change_ab is used, num_eot can only be set to 1."
+        if self._use_var_change_ab and self._optimizer_name != "pgd":
+            logger.warning(
+                "var_change_ab mode only makes difference when optimizer is "
+                "pgd, but optimizer is currently set to %s!",
+                self._optimizer_name,
+            )
 
         self._ema_loss: float | None = None
         self._start_time = time.time()
@@ -106,11 +108,11 @@ class GradAttack(base_attack.DetectorAttackModule):
         bg_idx: torch.Tensor | None = None
         delta = z_delta
         # Initialize religting params
-        if self._use_var_change_ab or "pgd" in self._optimizer_name:
+        if self._use_var_change_ab:
             beta = rimg.tf_params["beta"].clone()
             half_alpha = rimg.tf_params["alpha"] / 2
             # Temporary set alphas and betas to 1 and 0 so patch does not get
-            # rescaled again
+            # rescaled again inside RenderObject
             rimg.tf_params["beta"].zero_()
             rimg.tf_params["alpha"].fill_(1)
         else:
@@ -126,31 +128,27 @@ class GradAttack(base_attack.DetectorAttackModule):
                 # DEBUG: Fix bg_idx to debug
                 # bg_idx = torch.zeros(1, device=z_delta.device, dtype=torch.long)
 
-            if "pgd" in self._optimizer_name:
-                cur_half_alpha, cur_beta = self._select_tensors(
-                    bg_idx, half_alpha, beta
-                )
-                delta = delta.detach()
-                delta = torch.maximum(delta, cur_beta)
-                delta = torch.minimum(delta, cur_beta + 2 * cur_half_alpha)
+            elif "pgd" in self._optimizer_name:
+                z_delta.detach_()
+                delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
                 delta.requires_grad_()
             else:
                 self._optimizer.zero_grad()
                 z_delta.requires_grad_()
                 delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
 
-            assert not delta.isnan().any(), "NaN perturbation 1"
+            assert not delta.isnan().any(), f"NaN perturbation 1 (step: {step})"
 
             # Apply patch with transforms and compute loss
             adv_img, adv_target = rimg.apply_objects(
                 adv_patch=delta, patch_mask=patch_mask, obj_indices=bg_idx
             )
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
-            assert not delta.isnan().any(), "NaN perturbation 2"
+            assert not delta.isnan().any(), f"NaN perturbation 2 (step: {step})"
             loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
-            assert not delta.isnan().any(), "NaN perturbation 3"
+            assert not delta.isnan().any(), f"NaN perturbation 3 (step: {step})"
             loss.backward()
-            assert not delta.isnan().any(), "NaN perturbation 4"
+            assert not delta.isnan().any(), f"NaN perturbation 4 (step: {step})"
             if loss.isnan().any():
                 logger.warning(
                     "NaN loss detected (involved image names: %s)! "
@@ -166,8 +164,7 @@ class GradAttack(base_attack.DetectorAttackModule):
                     break
                 grad = delta.grad.detach()
                 grad = torch.sign(grad)
-                delta.detach_()
-                delta -= self._step_size * grad
+                z_delta -= self._step_size * grad
             else:
                 if z_delta.grad.isnan().any():
                     logger.warning("NaN grad!")
@@ -183,8 +180,9 @@ class GradAttack(base_attack.DetectorAttackModule):
             rimg.tf_params["alpha"] = half_alpha * 2
 
         assert (
-            not delta.isnan().any()
-        ), "Getting NaN perturbation; Something went wrong!"
+            not z_delta.isnan().any()
+        ), "NaN perturbation; Something went wrong!"
+        delta = self._to_input_space(z_delta)
         return delta
 
     @torch.no_grad()
@@ -303,12 +301,19 @@ class GradAttack(base_attack.DetectorAttackModule):
     def _to_input_space(
         self,
         images: torch.Tensor,
-        half_alpha: torch.Tensor,
-        beta: torch.Tensor,
+        half_alpha: torch.Tensor | float = 0.5,
+        beta: torch.Tensor | float = 0.0,
         indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Transforms an input from the attack space to the model space."""
         half_alpha, beta = self._select_tensors(indices, half_alpha, beta)
+        if self._optimizer_name == "pgd":
+            if isinstance(half_alpha, float):
+                images = images.clamp(beta, beta + 2 * half_alpha)
+            else:
+                images = torch.maximum(images, beta)
+                images = torch.minimum(images, beta + 2 * half_alpha)
+            return images
         # from (-inf, +inf) to (-1, +1)
         images = torch.tanh(images)
         # map from (-1, +1) to (low, high)
