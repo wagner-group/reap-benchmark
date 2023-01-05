@@ -23,6 +23,7 @@ from adv_patch_bench.utils.types import (
 )
 
 _VALID_TRANSFORM_MODE = ("perspective", "translate_scale")
+_EPS = 1e-6
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,7 @@ class ReapObject(render_object.RenderObject):
         else:
             adv_patch.mul_(alpha)
         adv_patch.add_(beta)
-        adv_patch.clamp_(0, 1)
+        adv_patch.clamp_(0 + _EPS, 1 - _EPS)
 
         # Apply extra lighting augmentation on patch
         adv_patch = aug_light(adv_patch)
@@ -257,12 +258,12 @@ class ReapObject(render_object.RenderObject):
             1 - alpha_mask
         ) * images + alpha_mask * warped_patch
 
-        if final_img.isnan().any():
-            # DEBUG
-            print(
-                "NaN value(s) found in REAP rendered images! Returning originals..."
-            )
-            final_img = images
+        # DEPRECATED: This is checked by render image
+        # if final_img.isnan().any():
+        #     logger.warning(
+        #         "NaN value(s) found in REAP rendered images! Returning originals..."
+        #     )
+        #     final_img = images
 
         return final_img, targets
 

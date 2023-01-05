@@ -20,6 +20,7 @@ from adv_patch_bench.utils.types import (
     Target,
 )
 
+_EPS = 1e-6
 logger = logging.getLogger(__name__)
 
 
@@ -79,17 +80,15 @@ class GradAttack(base_attack.DetectorAttackModule):
     def compute_loss(
         self,
         delta: BatchImageTensor,
-        adv_img: BatchImageTensor,
-        adv_target: list[Target],
+        adv_imgs: BatchImageTensor,
+        adv_targets: list[Target],
     ) -> torch.Tensor:
         """Compute loss on perturbed image.
 
         Args:
             delta: Adversarial patch.
-            adv_img: Perturbed image to compute loss on.
-            adv_target: Target label to compute loss on.
-            obj_class: Target object class. Usually ground-truth label for
-                untargeted attack, and target class for targeted attack.
+            adv_imgs: Perturbed image to compute loss on.
+            adv_targets: Target label to compute loss on.
 
         Returns:
             Loss for attacker to minimize.
@@ -140,20 +139,25 @@ class GradAttack(base_attack.DetectorAttackModule):
                 z_delta.requires_grad_()
                 delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
 
+            assert not delta.isnan().any(), "NaN perturbation 1"
+
             # Apply patch with transforms and compute loss
             adv_img, adv_target = rimg.apply_objects(
                 adv_patch=delta, patch_mask=patch_mask, obj_indices=bg_idx
             )
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
+            assert not delta.isnan().any(), "NaN perturbation 2"
             loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
+            assert not delta.isnan().any(), "NaN perturbation 3"
             loss.backward()
+            assert not delta.isnan().any(), "NaN perturbation 4"
             if loss.isnan().any() or delta.grad.isnan().any():
                 logger.warning(
                     "NaN loss or grad detected (involved image names: %s)! "
                     "Skipping this attack step.",
                     str(rimg.file_names),
                 )
-                continue
+                break
 
             # Update perturbation
             if "pgd" in self._optimizer_name:
@@ -171,6 +175,10 @@ class GradAttack(base_attack.DetectorAttackModule):
         if self._use_var_change_ab:
             rimg.tf_params["beta"] = beta
             rimg.tf_params["alpha"] = half_alpha * 2
+
+        assert (
+            not delta.isnan().any()
+        ), "Getting NaN perturbation; Something went wrong!"
         return delta
 
     @torch.no_grad()
@@ -306,10 +314,11 @@ class GradAttack(base_attack.DetectorAttackModule):
     def _to_opt_space(self, images):
         if "pgd" in self._optimizer_name:
             return images
-        EPS = 1e-6
-        assert ((images >= 0) & (images <= 1)).all()
+        assert (
+            (images >= 0) & (images <= 1)
+        ).all(), "Given image must be between 0 and 1!"
         images = images * 2 - 1
-        images.clamp_(-1 + EPS, 1 - EPS)
+        images.clamp_(-1 + _EPS, 1 - _EPS)
         images.arctanh_()
         return images
 

@@ -154,34 +154,6 @@ class RenderImage:
                 resample=interp,
             )
 
-    # def _resize_image(self, image: ImageTensor) -> tuple[ImageTensor, SizePx]:
-    #     """Resize or pad image to self.img_size.
-
-    #     Args:
-    #         image: Image tensor to resize or pad.
-
-    #     Returns:
-    #         image: Resized or padded image.
-    #         pad_size: Tuple of top and left padding.
-    #     """
-    #     # if width != self.img_size[1]:
-    #     #     raise ValueError(
-    #     #         f"image of shape {image.shape} is not compatible with img_size "
-    #     #         f"{self.img_size}!"
-    #     #     )
-    #     image = img_util.resize_and_pad(
-    #         obj=image,
-    #         resize_size=self._img_size,
-    #         pad_size=self._img_size,
-    #         interp=self._interp,
-    #         keep_aspect_ratio=True,
-    #     )
-    #     assert image.shape[-2:] == self._img_size, (
-    #         f"Image shape is {image.shape} but img_size is {self._img_size}. "
-    #         "Image resize went wrong!"
-    #     )
-    #     return image
-
     def _slice_images_and_params(
         self, obj_indices: torch.Tensor
     ) -> tuple[BatchImageTensor, list[DetectronSample], dict[str, Any]]:
@@ -236,8 +208,7 @@ class RenderImage:
             images = self._aug_geo_img(images)
 
         if images.isnan().any():
-            # DEBUG
-            print(
+            logger.warning(
                 "NaN value(s) found in rendered images! Returning originals..."
             )
             images = orig_images

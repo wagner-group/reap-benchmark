@@ -63,6 +63,8 @@ from adv_patch_bench.utils.types import BatchImageTensor
 
 logger = logging.getLogger("detectron2")
 
+_EPS = 1e-6
+
 
 def _get_sampler(cfg):
     """Define a custom process to get training sampler.
@@ -151,7 +153,7 @@ def train(cfg, config, model, attack):
         "reap_use_relight": config_base["reap_use_relight"],
     }
     # Get augmentation for mask only
-    _, aug_mask, aug_color = RenderObject.get_augmentation(
+    _, trn_aug_mask, trn_aug_color = RenderObject.get_augmentation(
         config["attack"]["common"], "nearest"
     )
 
@@ -228,7 +230,7 @@ def train(cfg, config, model, attack):
                     cur_patch_mask = [patch_masks[i] for i in rimg.obj_classes]
                     cur_patch_mask = torch.cat(cur_patch_mask, dim=0)
                     assert len(cur_patch_mask) == rimg.num_objs
-                    cur_patch_mask = aug_mask(cur_patch_mask)
+                    cur_patch_mask = trn_aug_mask(cur_patch_mask)
                     if config_base["attack_type"] == "per-sign":
                         # Load cached adversarial patches
                         init_adv_patch = [
@@ -250,7 +252,9 @@ def train(cfg, config, model, attack):
                             adv_patches[i] for i in rimg.obj_classes
                         ]
                         cur_adv_patch = torch.cat(cur_adv_patch, dim=0)
-                    cur_adv_patch = aug_color(cur_adv_patch)
+
+                    cur_adv_patch.clamp_(0 + _EPS, 1 - _EPS)
+                    cur_adv_patch = trn_aug_color(cur_adv_patch)
                     img_render, data = rimg.apply_objects(
                         cur_adv_patch, cur_patch_mask
                     )
