@@ -251,11 +251,7 @@ def get_transform_fn(
             }
             transform_fn = K.RandomAffine
 
-        geo_transform = transform_fn(
-            return_transform=True,
-            resample=interp,
-            **transform_params,
-        )
+        geo_transform = transform_fn(resample=interp, **transform_params)
         mask_transform = transform_fn(
             resample=kornia.constants.Resample.NEAREST, **transform_params
         )

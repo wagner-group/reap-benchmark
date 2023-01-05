@@ -205,7 +205,7 @@ class ReapObject(render_object.RenderObject):
 
         # Apply extra geometric augmentation on patch
         rgba_patch: BatchImageTensorRGBA
-        rgba_patch, _ = aug_geo(rgba_patch)
+        rgba_patch = aug_geo(rgba_patch)
         rgba_patch *= obj_mask
 
         # Apply transform on RGBA patch
