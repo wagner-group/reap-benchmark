@@ -12,7 +12,7 @@ import torch
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
-from adv_patch_bench.transforms.util import identity, identity_with_params
+from adv_patch_bench.transforms.util import identity
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchImageTensorRGBA,
@@ -159,7 +159,7 @@ class ReapObject(render_object.RenderObject):
         beta = tf_params["beta"]
         obj_to_img = tf_params["obj_to_img"]
         obj_mask = tf_params["obj_mask"]
-        aug_geo, aug_light = identity_with_params, identity
+        aug_geo, aug_light = identity, identity
         if not suppress_aug:
             aug_geo, _, aug_light = tf_params["obj_transforms"]
 

@@ -14,7 +14,6 @@ from adv_patch_bench.utils.types import (
     BatchImageTensor,
     ImageTensor,
     TransformFn,
-    TransformParamFn,
 )
 
 _KeyPoints = NewType("_KeyPoints", List[Tuple[float, float]])
@@ -23,14 +22,6 @@ _KeyPoints = NewType("_KeyPoints", List[Tuple[float, float]])
 def identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
     """Identity transform function."""
     return inputs
-
-
-def identity_with_params(
-    inputs: ImageTensor | BatchImageTensor,
-) -> tuple[BatchImageTensor, None]:
-    """Indentity function that also returns None param."""
-    inputs = identity(inputs)
-    return inputs, None
 
 
 def _gen_rect_mask(
@@ -230,7 +221,7 @@ def get_transform_fn(
         geometric for mask, and (iii) lighting for object.
     """
     # Geometric transform
-    geo_transform: TransformParamFn = identity_with_params
+    geo_transform: TransformFn = identity
     mask_transform: TransformFn = identity
 
     if prob_geo is not None and prob_geo > 0:
