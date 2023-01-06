@@ -196,7 +196,16 @@ def train(cfg, config, model, attack):
             adv_patches[i] = adv_patch.to(model.device)
         if patch_mask is not None:
             patch_masks[i] = patch_mask.to(model.device)
+
+    # Initialize and load cached adv_patch_cache when resuming
     adv_patch_cache = {}
+    cache_file_name = f"{cfg.OUTPUT_DIR}/trn_adv_patch_cache.pt"
+    if (
+        start_iter > 10
+        and config_base["attack_type"] == "per-sign"
+        and os.path.isfile(cache_file_name)
+    ):
+        adv_patch_cache = torch.load(cache_file_name)
 
     sampler = _get_sampler(cfg)
     # pylint: disable=missing-kwoa,too-many-function-args
@@ -273,7 +282,9 @@ def train(cfg, config, model, attack):
 
             loss_dict = model(data)
             losses = sum(loss_dict.values())
-            assert torch.isfinite(losses).all(), loss_dict
+            assert torch.isfinite(
+                losses
+            ).all(), f"Loss diverges; Something went wrong\n{loss_dict}"
 
             loss_dict_reduced = {
                 k: v.item() for k, v in comm.reduce_dict(loss_dict).items()
@@ -308,6 +319,9 @@ def train(cfg, config, model, attack):
                 for writer in writers:
                     writer.write()
             periodic_checkpointer.step(iteration)
+            if (iteration + 1) % periodic_checkpointer.period == 0:
+                # Manually checkpoint cached adv patch
+                torch.save(adv_patch_cache, cache_file_name)
 
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
