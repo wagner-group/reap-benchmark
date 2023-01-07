@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import detectron2
 import numpy as np
 import torch
 from detectron2.data import build_detection_train_loader
@@ -76,6 +77,9 @@ def main():
     cfg = setup_detectron_cfg(config, is_train=True)
     # Register data. This has to be called by every process for some reason.
     data_util.register_dataset(config["base"])
+    data_dicts = detectron2.data.DatasetCatalog.get(
+        config_base["dataset"] + "_train"
+    )
     # pylint: disable=missing-kwoa,too-many-function-args
     data_loader = build_detection_train_loader(
         cfg,
@@ -86,9 +90,10 @@ def main():
             relight_method=config_base["reap_relight_method"],
             relight_percentile=config_base["reap_relight_percentile"],
         ),
+        sampler=detectron2.data.samplers.InferenceSampler(len(data_dicts)),
     )
 
-    bbox_sizes: list[list[float]] = []
+    bbox_sizes = []
     for _, data in enumerate(tqdm(data_loader)):
         for sample in data:
             bbox = sample["instances"].gt_boxes
@@ -97,18 +102,19 @@ def main():
             assert (width > 0).all() and (height > 0).all()
             sizes = torch.stack([height, width], dim=0).T.tolist()
             bbox_sizes.extend(sizes)
+    bbox_sizes = np.array(bbox_sizes)
 
     print(f"Total number of bounding boxes: {len(bbox_sizes)}")
-    out = run_kmeans_ious(bbox_sizes, k=NUM_CLUSTERS)
-    print(f"Boxes: {out}")
-    print(f"Accuracy: {avg_iou(bbox_sizes, out) * 100:.2f}%")
+    anchors = run_kmeans_ious(bbox_sizes, k=NUM_CLUSTERS)
+    print(f"Boxes:\n  {anchors}")
+    print(f"Accuracy: {avg_iou(bbox_sizes, anchors) * 100:.2f}%")
 
-    final_anchors = np.around(out[:, 0] * out[:, 1], decimals=2).tolist()
-    print(f"Before Sort area:\n {final_anchors}")
-    idx = np.argsort(final_anchors)[::-1]
-    print(f"After Sort area:\n {sorted(final_anchors)}")
-    out = out[idx]
-    print(f"Final anchor: {[list(np.array(a, dtype=np.int)) for a in out]}")
+    areas = np.around(anchors[:, 0] * anchors[:, 1], decimals=2).tolist()
+    print(f"Area before sorted:\n  {areas}")
+    idx = np.argsort(areas)[::-1]
+    print(f"Area after sorted:\n  {sorted(areas)}")
+    final_anchors = anchors[idx].round().astype(np.int32).tolist()
+    print(f"Final anchor: {final_anchors}")
 
 
 if __name__ == "__main__":

@@ -23,8 +23,12 @@ class RP2AttackYOLO(grad_attack.GradAttack):
         """
         # TODO: Get obj_class from targets instead
         # Compute logits, loss, gradients
-        out, _ = self._core_model(adv_imgs, val=True)
-        conf = out[:, :, 4:5] * out[:, :, 5:]
+        # losses contain total_loss, iou_loss, conf_loss, cls_loss, l1_loss
+        outputs, _ = self._core_model(adv_imgs, compute_loss=True)
+        # TODO: filter targets by obj_class
+        import pdb
+        pdb.set_trace()
+        conf = outputs[:, :, 4:5] * outputs[:, :, 5:]
         conf, labels = conf.max(-1)
         if obj_class is not None:
             loss = 0
