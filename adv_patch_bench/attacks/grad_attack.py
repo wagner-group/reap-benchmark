@@ -137,18 +137,13 @@ class GradAttack(base_attack.DetectorAttackModule):
                 z_delta.requires_grad_()
                 delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
 
-            assert not delta.isnan().any(), f"NaN perturbation 1 (step: {step})"
-
             # Apply patch with transforms and compute loss
             adv_img, adv_target = rimg.apply_objects(
                 adv_patch=delta, patch_mask=patch_mask, obj_indices=bg_idx
             )
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
-            assert not delta.isnan().any(), f"NaN perturbation 2 (step: {step})"
             loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
-            assert not delta.isnan().any(), f"NaN perturbation 3 (step: {step})"
             loss.backward()
-            assert not delta.isnan().any(), f"NaN perturbation 4 (step: {step})"
             if loss.isnan().any():
                 logger.warning(
                     "NaN loss detected (involved image names: %s)! "
