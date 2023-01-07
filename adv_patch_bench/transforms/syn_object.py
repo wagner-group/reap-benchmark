@@ -56,7 +56,7 @@ class SynObject(render_object.RenderObject):
         resized_obj_mask: MaskTensor = img_util.resize_and_pad(
             self.obj_mask,
             pad_size=self.img_size,
-            resize_size=self.obj_size_px,
+            resize_size=self._obj_size_px,
             is_binary=True,
         )
         self.resized_obj_mask: BatchMaskTensor = img_util.coerce_rank(
@@ -103,7 +103,7 @@ class SynObject(render_object.RenderObject):
         # Resize to obj_size_px and pad to img_size
         patch_or_mask: _ImageOrMask = img_util.resize_and_pad(
             patch_or_mask,
-            resize_size=self.obj_size_px,
+            resize_size=self._obj_size_px,
             pad_size=self.img_size,
             is_binary=is_mask,
             interp=self._interp,
@@ -139,7 +139,7 @@ class SynObject(render_object.RenderObject):
 
         # Verify aspect ratio of loaded syn_obj
         obj_hw_ratio: float = syn_obj.shape[1] / syn_obj.shape[2]
-        if abs(self.hw_ratio - obj_hw_ratio) > 1e-3:
+        if abs(self._hw_ratio - obj_hw_ratio) > 1e-3:
             raise ValueError(
                 f"Aspect ratio of loaded object is {obj_hw_ratio:.4f}, but it "
                 f"should be {obj_hw_ratio:.4f}!"
@@ -149,7 +149,7 @@ class SynObject(render_object.RenderObject):
         resized_syn_obj: ImageTensor = img_util.resize_and_pad(
             syn_obj,
             pad_size=self.img_size,
-            resize_size=self.obj_size_px,
+            resize_size=self._obj_size_px,
             is_binary=False,
             interp=self._interp,
         )
@@ -177,7 +177,7 @@ class SynObject(render_object.RenderObject):
         # Create new instance with only synthetic oject
         new_instances = structures.Instances(instances.image_size)
         new_instances.gt_boxes = structures.Boxes(tensor_bbox)
-        new_instances.gt_classes = torch.tensor([self.obj_class])
+        new_instances.gt_classes = torch.tensor([self._obj_class])
 
         # Concatenate new instance to existing one
         new_target["instances"] = structures.Instances.cat(
@@ -187,7 +187,7 @@ class SynObject(render_object.RenderObject):
         # Also update annotations for visualization
         new_anno: Dict[str, Any] = {
             "bbox": new_bbox,
-            "category_id": self.obj_class,
+            "category_id": self._obj_class,
             "bbox_mode": target["annotations"][0]["bbox_mode"],
         }
         new_target["annotations"].append(new_anno)
@@ -204,7 +204,7 @@ class SynObject(render_object.RenderObject):
         h, w = self.img_size
         label = [
             target[0],  # Index of image in batch
-            self.obj_class,
+            self._obj_class,
             (x_min + w_obj / 2) / w,  # relative center x
             (y_min + h_obj / 2) / h,  # relative center y
             w_obj / w,  # relative width

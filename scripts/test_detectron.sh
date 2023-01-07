@@ -1,65 +1,63 @@
 #!/bin/bash
 
 # Detector test script
-GPU=1
+GPU=3
 NUM_GPU=1
 NUM_WORKERS=24
 
 # Dataset and model params
-DATASET=mapillary-combined-no_color # Options: mapillary-combined-no_color, mtsd-no_color
-MODEL=faster_rcnn_R_50_FPN_mtsd_no_color_2
+DATASET="mapillary-combined-no_color" # Options: mapillary-combined-no_color, mtsd-no_color
+MODEL="faster_rcnn_R_50_FPN_mtsd_no_color_2"
 MODEL_PATH=~/adv-patch-bench/detectron_output/$MODEL/model_best.pth
 DETECTRON_CONFIG_PATH=./configs/faster_rcnn_R_50_FPN_3x.yaml
 CONF_THRES=0.634
-IMG_SIZE=1536,2048 # sizes: (1536,2048), (3040,4032)
+IMG_SIZE="1536,2048" # sizes: (1536,2048), (3040,4032)
 NUM_TEST_SYN=5000
 
 # Attack params
-MASK_SIZE=10x20
+MASK_SIZE="10x20"
 SYN_OBJ_SIZE=64
 ATK_CONFIG_PATH=./configs/attack_config.yaml
-CSV_PATH=mapillary_vistas_final_merged.csv
+CSV_PATH="mapillary_vistas_final_merged.csv"
 BG_PATH=~/data/mtsd_v2_fully_annotated/test/
 
-INTERP=bilinear
-TF_MODE=perspective
-EXP_NAME=synthetic-${MASK_SIZE}-obj${SYN_OBJ_SIZE}-pd64-ld0.1  # TODO: rename
-CLEAN_EXP_NAME=no_patch_syn_${SYN_OBJ_SIZE}
+INTERP="bilinear"
+TF_MODE="perspective"
+EXP_NAME=synthetic-"${MASK_SIZE}-obj${SYN_OBJ_SIZE}-pd64-ld0.1"  # TODO: rename
+CLEAN_EXP_NAME="no_patch_syn_${SYN_OBJ_SIZE}"
 
 # TODO
-NUM_TEST_SYN=500
-MASK_SIZE=2_10x20
-EXP_NAME=synthetic-${MASK_SIZE}-obj${SYN_OBJ_SIZE}-pd64-ld0.1
+# NUM_TEST_SYN=500
+# MASK_SIZE="2_10x20"
+# EXP_NAME="synthetic-${MASK_SIZE}-obj${SYN_OBJ_SIZE}-pd64-ld0.1"
 
-# Temp
-BG_FILES=bg_filenames_octagon-915.0.txt
 
 CUDA_VISIBLE_DEVICES=$GPU python -u gen_patch_detectron.py \
         --num-gpus $NUM_GPU --config-file $DETECTRON_CONFIG_PATH --interp $INTERP \
         --dataset $DATASET --padded-imgsz $IMG_SIZE --tgt-csv-filepath $CSV_PATH \
-        --attack-config-path "$ATK_CONFIG_PATH" --obj-class 2 \
-        --name "$EXP_NAME" --bg-dir $BG_PATH --transform-mode $TF_MODE \
+        --attack-config-path "$ATK_CONFIG_PATH" --obj-class 0 \
+        --name "$EXP_NAME" \
         --weights $MODEL_PATH --workers $NUM_WORKERS --mask-name "$MASK_SIZE" \
-        --img-txt-path $BG_FILES --save-images --obj-size $SYN_OBJ_SIZE \
+        --save-images --obj-size $SYN_OBJ_SIZE \
         --annotated-signs-only --synthetic --verbose
 
-CUDA_VISIBLE_DEVICES=$GPU python -u test_detectron.py \
-        --num-gpus $NUM_GPU --config-file $DETECTRON_CONFIG_PATH --interp $INTERP \
-        --dataset $DATASET --padded-imgsz $IMG_SIZE --eval-mode drop \
-        --tgt-csv-filepath $CSV_PATH --attack-config-path "$ATK_CONFIG_PATH" \
-        --name "$EXP_NAME" --obj-class 2 --conf-thres $CONF_THRES \
-        --mask-name "$MASK_SIZE" --weights $MODEL_PATH --workers $NUM_WORKERS \
-        --transform-mode $TF_MODE --img-txt-path $BG_FILES --attack-type load \
-        --annotated-signs-only --synthetic --obj-size $SYN_OBJ_SIZE \
-        --num-test $NUM_TEST_SYN
+# CUDA_VISIBLE_DEVICES=$GPU python -u test_detectron.py \
+#         --num-gpus $NUM_GPU --config-file $DETECTRON_CONFIG_PATH --interp $INTERP \
+#         --dataset $DATASET --padded-imgsz $IMG_SIZE --eval-mode drop \
+#         --tgt-csv-filepath $CSV_PATH --attack-config-path "$ATK_CONFIG_PATH" \
+#         --name "$EXP_NAME" --obj-class 2 --conf-thres $CONF_THRES \
+#         --mask-name "$MASK_SIZE" --weights $MODEL_PATH --workers $NUM_WORKERS \
+#         --transform-mode $TF_MODE --img-txt-path $BG_FILES --attack-type load \
+#         --annotated-signs-only --synthetic --obj-size $SYN_OBJ_SIZE \
+#         --num-test $NUM_TEST_SYN
 
-CUDA_VISIBLE_DEVICES=$GPU python -u test_detectron.py \
-    --num-gpus $NUM_GPU --config-file $DETECTRON_CONFIG_PATH --name $CLEAN_EXP_NAME \
-    --padded-imgsz $IMG_SIZE --tgt-csv-filepath $CSV_PATH --dataset $DATASET \
-    --attack-config-path "$ATK_CONFIG_PATH" --workers $NUM_WORKERS --interp $INTERP \
-    --weights $MODEL_PATH --eval-mode drop --annotated-signs-only \
-    --obj-class 2 --obj-size $SYN_OBJ_SIZE --conf-thres $CONF_THRES \
-    --img-txt-path $BG_FILES --num-test $NUM_TEST_SYN --synthetic
+# CUDA_VISIBLE_DEVICES=$GPU python -u test_detectron.py \
+#     --num-gpus $NUM_GPU --config-file $DETECTRON_CONFIG_PATH --name $CLEAN_EXP_NAME \
+#     --padded-imgsz $IMG_SIZE --tgt-csv-filepath $CSV_PATH --dataset $DATASET \
+#     --attack-config-path "$ATK_CONFIG_PATH" --workers $NUM_WORKERS --interp $INTERP \
+#     --weights $MODEL_PATH --eval-mode drop --annotated-signs-only \
+#     --obj-class 2 --obj-size $SYN_OBJ_SIZE --conf-thres $CONF_THRES \
+#     --img-txt-path $BG_FILES --num-test $NUM_TEST_SYN --synthetic
 
 # Evaluate on MTSD validation set and compute score thres.
 # We can then use this score to set CONF_THRES, but it is not necessary because
@@ -167,7 +165,7 @@ CUDA_VISIBLE_DEVICES=$GPU python -u test_detectron.py \
 # --syn-use-scale --syn-use-colorjitter
 # =========================================================================== #
 
-function syn_attack {
+syn_attack() {
 
     OBJ_CLASS=$1
 
@@ -228,7 +226,7 @@ function syn_attack {
     echo "Done with $OBJ_CLASS."
 }
 
-function syn_attack_all {
+syn_attack_all() {
     for i in {0..10}; do
         syn_attack "$i"
     done

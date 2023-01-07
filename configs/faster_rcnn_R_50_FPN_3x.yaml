@@ -19,32 +19,34 @@ SOLVER:
   # STEPS: (210000, 250000)
   # MAX_ITER: 270000
   BASE_LR: 0.01  # EDIT
-  STEPS: (50000, 70000, 90000)  # EDIT
-  MAX_ITER: 100000  # EDIT
-  IMS_PER_BATCH: 32
+  STEPS: (50000, 70000, 75000)  # EDIT
+  MAX_ITER: 80000  # EDIT
+  IMS_PER_BATCH: 12
 INPUT:
   RANDOM_FLIP: 'none'  # EDIT: traffic sign can be flipped?. Option: 'none' (orig), 'horizontal' (shape)
   # EDIT: follow MTSD paper: no resizing during training but crop to (1000, 1000)
-  MIN_SIZE_TRAIN: (0, )  # TODO: does this disables resizing? If not working, see https://github.com/facebookresearch/detectron2/issues/2275
-  MAX_SIZE_TRAIN: 5000
+  # TODO: does setting to 0 disables resizing? 
+  # If not working, see https://github.com/facebookresearch/detectron2/issues/2275
+  MIN_SIZE_TRAIN: (2048, )
+  MAX_SIZE_TRAIN: 2048  # Original training is 5000
   # Only used during traning
   CROP:
-    ENABLED: True
+    ENABLED: False
     TYPE: 'absolute'
     SIZE: (1000, 1000)
   # EDIT: Test with max size 2048 or 4000. This is slightly different from 
   # MTSD paper where images smaller than 2048 are not saled up.
   # Size of the smallest side of the image during testing. Set to zero to 
   # disable resize in testing.
-  MIN_SIZE_TEST: 4000  # This will be set by args during testing
+  MIN_SIZE_TEST: 2048  # This will be set by args during testing
   # Maximum size of the side of the image during testing
-  MAX_SIZE_TEST: 4000  # This will be set by args during testing
+  MAX_SIZE_TEST: 2048  # This will be set by args during testing
 DATALOADER:
-  NUM_WORKERS: 48
+  NUM_WORKERS: 24
   SAMPLER_TRAIN: 'RepeatFactorTrainingSampler'  # EDIT: default: 'TrainingSampler'
   REPEAT_THRESHOLD: 1.0  # EDIT: default: 0
 DATASETS:
-  TRAIN: ('mtsd_train', )  # EDIT
-  TEST: ('mtsd_val', )  # EDIT
+  TRAIN: ('mtsd_no_color_train', )  # EDIT
+  TEST: ('mtsd_no_color_val', )  # EDIT
 TEST:
-  EVAL_PERIOD: 2000
+  EVAL_PERIOD: 4000

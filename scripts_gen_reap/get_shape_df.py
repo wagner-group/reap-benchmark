@@ -23,7 +23,7 @@ import yaml
 from tqdm import tqdm
 
 from adv_patch_bench.utils.argparse import (
-    eval_args_parser,
+    reap_args_parser,
     setup_yolo_test_args,
 )
 
@@ -280,7 +280,7 @@ def run(
 
 
 def parse_opt():
-    opt = eval_args_parser(False, root=ROOT)
+    opt = reap_args_parser(False, root=ROOT)
     setup_yolo_test_args(opt, OTHER_SIGN_CLASS)
     opt.data = check_yaml(opt.data)  # check YAML
     opt.save_json |= opt.data.endswith("coco.yaml")

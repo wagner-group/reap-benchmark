@@ -34,8 +34,7 @@ pip install -r requirements.txt
 
 # Install packages with their latest version manually, e.g.,
 pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
-pip install scipy pandas scikit-learn pip seaborn 
-pip install numpy scipy pandas scikit-learn
+pip install scipy pandas scikit-learn pip seaborn
 pip install timm kornia==0.6.3 opencv-python albumentations
 
 # Detectron2 has to be installed afterward

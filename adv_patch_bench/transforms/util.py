@@ -7,32 +7,25 @@ from typing import List, NewType, Tuple
 import kornia
 import kornia.augmentation as K
 import numpy as np
+import torch
 
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     ImageTensor,
     TransformFn,
-    TransformParamFn,
 )
 
 _KeyPoints = NewType("_KeyPoints", List[Tuple[float, float]])
 
 
-def _identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
+def identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
     """Identity transform function."""
     return inputs
 
 
-def _identity_with_params(
-    inputs: ImageTensor | BatchImageTensor
-) -> tuple[BatchImageTensor, None]:
-    """Indentity function that also returns None param."""
-    inputs = _identity(inputs)
-    return inputs, None
-
-
 def _gen_rect_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate rectangular mask.
 
@@ -57,7 +50,7 @@ def _gen_rect_mask(
 
 
 def _gen_diamond_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate diamond mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -73,7 +66,7 @@ def _gen_diamond_mask(
 
 
 def _gen_circle_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate circle mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -85,7 +78,7 @@ def _gen_circle_mask(
 
 
 def _gen_triangle_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate triangle mask. See _gen_rect_mask()."""
     height = round(ratio * size)
@@ -96,7 +89,7 @@ def _gen_triangle_mask(
 
 
 def _gen_triangle_inverted_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate inverted triangle mask. See _gen_rect_mask()."""
     height = round(ratio * size)
@@ -107,7 +100,7 @@ def _gen_triangle_inverted_mask(
 
 
 def _gen_pentagon_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate pentagon mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -123,7 +116,7 @@ def _gen_pentagon_mask(
 
 
 def _gen_octagon_mask(
-    size: int, ratio: float | None = None
+    size: int, ratio: float = 1.0
 ) -> tuple[np.ndarray, _KeyPoints]:
     """Generate octagon mask. See _gen_rect_mask()."""
     del ratio  # Unused
@@ -144,8 +137,11 @@ def _gen_octagon_mask(
 
 
 def gen_sign_mask(
-    shape: str, hw_ratio: float, obj_width_px: int
-) -> tuple[np.ndarray, _KeyPoints]:
+    shape: str = "circle",
+    hw_ratio: float = 1.0,
+    obj_width_px: int = 64,
+    use_box_mode: bool = False,
+) -> tuple[torch.Tensor, _KeyPoints]:
     """Generate mask of object and source keypoints.
 
     The keypoints are a list of tuple (x, y) coordinates starting from the
@@ -172,7 +168,25 @@ def gen_sign_mask(
         "octagon": _gen_octagon_mask,
         "square": _gen_rect_mask,
     }
-    return shape_to_mask[shape](obj_width_px, ratio=hw_ratio)
+    mask, box = shape_to_mask[shape](obj_width_px, ratio=hw_ratio)
+    if use_box_mode:
+        # Use mask from the correct shape but use keypoints of box
+        _, box = _gen_rect_mask(obj_width_px, ratio=hw_ratio)
+
+    mask = torch.from_numpy(mask)
+    img_util.coerce_rank(mask, 4)
+    mask, scales, padding = img_util.resize_and_pad(
+        obj=mask,
+        resize_size=(obj_width_px, obj_width_px),
+        pad_size=(obj_width_px, obj_width_px),
+        is_binary=True,
+        keep_aspect_ratio=True,
+        return_params=True,
+    )
+    new_box = []
+    for x, y in box:
+        new_box.append((x * scales[1] + padding[0], y * scales[0] + padding[1]))
+    return mask, new_box
 
 
 def get_transform_fn(
@@ -207,8 +221,8 @@ def get_transform_fn(
         geometric for mask, and (iii) lighting for object.
     """
     # Geometric transform
-    geo_transform: TransformParamFn = _identity_with_params
-    mask_transform: TransformFn = _identity
+    geo_transform: TransformFn = identity
+    mask_transform: TransformFn = identity
 
     if prob_geo is not None and prob_geo > 0:
         if syn_3d_dist is not None and syn_3d_dist > 0:
@@ -228,17 +242,13 @@ def get_transform_fn(
             }
             transform_fn = K.RandomAffine
 
-        geo_transform = transform_fn(
-            return_transform=True,
-            resample=interp,
-            **transform_params,
-        )
+        geo_transform = transform_fn(resample=interp, **transform_params)
         mask_transform = transform_fn(
             resample=kornia.constants.Resample.NEAREST, **transform_params
         )
 
     # Lighting transform (color jitter)
-    light_transform: TransformFn = _identity
+    light_transform: TransformFn = identity
     if (
         prob_colorjitter is not None
         and prob_colorjitter > 0
@@ -246,7 +256,7 @@ def get_transform_fn(
         and syn_colorjitter > 0
     ):
         # Hue can't be change much; Otherwise, the color becomes wrong
-        light_transform: TransformFn = K.ColorJitter(
+        light_transform: TransformFn = K.ColorJiggle(
             brightness=syn_colorjitter,
             contrast=syn_colorjitter,
             saturation=syn_colorjitter,

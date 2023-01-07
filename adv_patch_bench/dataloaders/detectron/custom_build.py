@@ -2,12 +2,11 @@
 
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
+import detectron2.data.build as build
 import torch.utils.data as torchdata
 from detectron2.config import configurable
 from detectron2.data.common import DatasetFromList, MapDataset
 from detectron2.data.samplers import InferenceSampler
-
-import detectron2.data.build as build
 
 
 @configurable(from_config=build._test_loader_from_config)
