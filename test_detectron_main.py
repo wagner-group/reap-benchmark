@@ -234,8 +234,7 @@ def main() -> None:
     config_base["split_file_hash"] = _hash(str(sorted(split_file_names)))
 
     evaluator = detectron_evaluator.DetectronEvaluator(
-        config_base,
-        config_attack,
+        config,
         model,
         dataloader,
         class_names=class_names,

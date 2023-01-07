@@ -23,12 +23,12 @@ Tested with
 
 - `python >= 3.8`.
 - `cuda >= 11.2`.
-- `kornia == 0.6.3`: Using version `>= 0.6.4` will raise an error.
+- `kornia >= 0.6.9`.
 - See `requirements.txt` for all packages' version.
 
 We recommend creating a new python environment because `kornia` and `detectron2` seem to often mess up dependencies and result in a segmentation fault.
 
-```[bash]
+```bash
 # Install from requirements.txt file OR
 pip install -r requirements.txt
 
@@ -39,6 +39,12 @@ pip install timm kornia==0.6.3 opencv-python albumentations
 
 # Detectron2 has to be installed afterward
 pip install 'git+https://github.com/facebookresearch/detectron2.git'
+
+# Install YOLOv7 (required Detectron2)
+git clone https://github.com/jinfagang/yolov7_d2
+cd yolov7_d2
+pip install -e .
+pip install alfred-py
 ```
 
 - If there is any problem with `detectron2` installation (e.g., CUDA or `pytorch` version mismatch), see this [documentation](https://detectron2.readthedocs.io/en/latest/tutorials/install.html).
@@ -56,7 +62,7 @@ pip install 'git+https://github.com/facebookresearch/detectron2.git'
 - If you run into `Argument list too long` error, try to raise limit of argument stack size by `ulimit -S -s 100000000`. [link](https://unix.stackexchange.com/a/401797)
 <!-- - Test set: Combine Vistas training and validation. Symlink to `~/data/yolo_data/(images or labels)/test`. -->
 
-```[bash]
+```bash
 # Prepare MTSD dataset
 # Dataset should be extracted to ~/data/mtsd_v2_fully_annotated
 python prep_mtsd_for_yolo.py
@@ -77,7 +83,7 @@ ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/val val
 
 - `prep_mapillary.py`: Prepare Vistas dataset for YOLOv5 using a pre-trained classifier to determine classes of the signs. May require substantial memory to run. Insufficient memory can lead to the script getting killed with no error message.
 
-```[bash]
+```bash
 # Dataset should be extracted to ~/data/mapillary_vistas (use symlink if needed)
 CUDA_VISIBLE_DEVICES=0 python prep_mapillary.py --split train --resume PATH_TO_CLASSIFIER
 CUDA_VISIBLE_DEVICES=0 python prep_mapillary.py --split val --resume PATH_TO_CLASSIFIER

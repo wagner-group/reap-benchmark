@@ -10,9 +10,9 @@ import torch
 import torchvision
 
 import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.attacks import base_attack, patch_mask_util
-from adv_patch_bench.attacks.dpatch import dpatch_detectron
-from adv_patch_bench.attacks.rp2 import rp2_detectron, rp2_yolo
+from adv_patch_bench.attacks import base_attack, no_attack, patch_mask_util
+from adv_patch_bench.attacks.dpatch import dpatch_frcnn
+from adv_patch_bench.attacks.rp2 import rp2_frcnn, rp2_yolo
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchMaskTensor,
@@ -22,25 +22,34 @@ from adv_patch_bench.utils.types import (
 from hparams import DEFAULT_PATH_DEBUG_PATCH
 
 _ATTACK_DICT = {
-    "rp2-detectron": rp2_detectron.RP2AttackDetectron,
+    "none": no_attack.NoAttackModule,
+    "rp2-frcnn": rp2_frcnn.RP2AttackDetectron,
     "rp2-yolo": rp2_yolo.RP2AttackYOLO,
-    "dpatch-detectron": dpatch_detectron.DPatchAttackDetectron,
+    "dpatch-frcnn": dpatch_frcnn.DPatchAttackDetectron,
 }
 
 
 def setup_attack(
-    config_attack: Optional[Dict[Any, str]] = None,
-    is_detectron: bool = True,
+    config: Optional[Dict[Any, str]] = None,
     model: Optional[torch.nn.Module] = None,
     verbose: bool = False,
 ) -> base_attack.DetectorAttackModule:
     """Set up attack object."""
-    # TODO(feature): Add no_attack as an attack option.
+    config_attack = config["attack"]
     attack_name: str = config_attack["common"]["attack_name"]
-    if is_detectron:
-        attack_fn_name: str = f"{attack_name}-detectron"
-    else:
+
+    if config["base"]["attack_type"] == "none" or attack_name == "none":
+        attack_fn_name = "none"
+    elif "rcnn" in config["base"]["model_name"]:
+        attack_fn_name: str = f"{attack_name}-frcnn"
+    elif "yolo" in config["base"]["model_name"]:
         attack_fn_name: str = f"{attack_name}-yolo"
+    else:
+        raise ValueError(
+            f"Attack {attack_name} not supported for model "
+            f"{config['base']['model_name']}!"
+        )
+
     attack_fn = _ATTACK_DICT[attack_fn_name]
     combined_config_attack: Dict[str, Any] = {
         **config_attack["common"],

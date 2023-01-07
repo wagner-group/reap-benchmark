@@ -134,8 +134,7 @@ def _generate_adv_patch(
     )
 
     attack: base_attack.DetectorAttackModule = attack_util.setup_attack(
-        config_attack=config_attack,
-        is_detectron=True,
+        config=config,
         model=model,
         verbose=verbose,
     )

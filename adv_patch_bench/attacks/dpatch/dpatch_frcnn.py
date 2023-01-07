@@ -7,11 +7,11 @@ from typing import Any
 import torch
 from detectron2 import structures
 
-from adv_patch_bench.attacks.rp2 import rp2_detectron
+from adv_patch_bench.attacks.rp2 import rp2_frcnn
 from adv_patch_bench.utils.types import BatchImageTensor, Target
 
 
-class DPatchAttackDetectron(rp2_detectron.RP2AttackDetectron):
+class DPatchAttackDetectron(rp2_frcnn.RP2AttackDetectron):
     """DPatch Attack for Detectron2 models."""
 
     def _loss_func(
