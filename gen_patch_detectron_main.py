@@ -165,7 +165,6 @@ def main() -> None:
     """
     config_attack: dict[str, dict[str, Any]] = config["attack"]
     config_atk_common: dict[str, Any] = config_attack["common"]
-    # img_size: SizePx = config_base["img_size"]
     dataset: str = config_base["dataset"]
     split_file_path: str = config_base["split_file_path"]
     obj_class: int = config_base["obj_class"]

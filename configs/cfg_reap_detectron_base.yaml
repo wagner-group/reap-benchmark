@@ -100,9 +100,8 @@ attack:
     use_lr_schedule: False
     # var_change_ab: Use variable change on alpha, beta 
     # attack_mode: 'var_change_ab'
-    detectron:
-      obj_loss_const: 0
-      iou_thres: 0
+    obj_loss_const: 0
+    iou_thres: 0
 
   dpatch:
     attack_mode: ''
@@ -115,9 +114,8 @@ attack:
     use_lr_schedule: False
     # var_change_ab: Use variable change on alpha, beta 
     # attack_mode: 'var_change_ab'
-    detectron:
-      obj_loss_const: 0
-      iou_thres: 0
+    obj_loss_const: 0
+    iou_thres: 0
 
 # Shapeshifter attack
 # https://github.com/shangtse/robust-physical-attack/blob/master/Makefile#L76

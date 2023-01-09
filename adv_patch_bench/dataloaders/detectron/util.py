@@ -169,8 +169,6 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
 def register_dataset(config_base: Dict[str, Any]) -> None:
     """Register dataset for Detectron2.
 
-    TODO(yolo): Combine with YOLO dataloader.
-
     Args:
         config_base: Dictionary of eval config.
     """
