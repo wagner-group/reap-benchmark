@@ -32,6 +32,7 @@ class DetectorAttackModule(nn.Module):
         super().__init__()
         _ = attack_config, kwargs  # Unused
         self._core_model: torch.nn.Module = core_model
+        self._device: torch.device = core_model.device
         self._verbose: bool = verbose
         self._is_training: bool = False
 

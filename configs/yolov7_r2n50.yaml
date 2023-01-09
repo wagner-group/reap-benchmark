@@ -13,11 +13,18 @@ MODEL:
     DEPTH: 50
     OUT_FEATURES: ["res3", "res4", "res5"] # fpn produce 4 levels, only using 3 for now
   YOLO:
+    # ANCHORS:
+    #   [
+    #     [[116, 90], [156, 198], [373, 326]],
+    #     [[30, 61], [62, 45], [42, 119]],
+    #     [[10, 13], [16, 30], [33, 23]],
+    #   ]
+    # EDIT: Computed on MTSD with compute_anchors_main.py
     ANCHORS:
       [
-        [[116, 90], [156, 198], [373, 326]],
-        [[30, 61], [62, 45], [42, 119]],
-        [[10, 13], [16, 30], [33, 23]],
+        [[42, 39], [65, 70], [128, 138]], 
+        [[18, 16], [27, 25], [20, 50]], 
+        [[7, 8], [12, 11], [10, 24]],
       ]
     CLASSES: 80  # EDIT: Automatically changed in argparse.py
     # IN_FEATURES: ["res3", "res4", "res5"] # p3, p4, p5 from FPN

@@ -20,7 +20,9 @@ def build_model(cfg):
     from ``cfg``.
     """
     # Import our yolov7p to be registered in CUSTOM_META_ARCH_REGISTRY
-    import adv_patch_bench.models.yolov7p
+    # pylint: disable=unused-import,import-outside-toplevel
+    from adv_patch_bench.models import yolov6, yolov7, yolov7p
+    _ = yolov6, yolov7, yolov7p  # Unused imports
 
     meta_arch = cfg.MODEL.META_ARCHITECTURE
     # Search our custom registry first

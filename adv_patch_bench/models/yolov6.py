@@ -7,11 +7,9 @@ https://github.com/jinfagang/yolov7_d2/blob/main/yolov7/modeling/meta_arch/yolov
 from __future__ import annotations
 
 import logging
-import math
 
 import torch
 import torch.distributed as dist
-from alfred import print_shape
 from alfred.utils.log import logger
 from detectron2.modeling.backbone import build_backbone
 from detectron2.modeling.postprocessing import detector_postprocess
@@ -19,16 +17,12 @@ from detectron2.structures import Boxes, ImageList, Instances
 from detectron2.utils import comm
 from detectron2.utils.logger import log_first_n
 from torch import nn
-from yolov7.modeling.head.yolov6_head import (
-    ComputeLoss,
-    Detect,
-    build_effidehead_layer,
-)
 from yolov7.modeling.head.yolox_head import YOLOXHead
 from yolov7.modeling.neck.reppan import RepPANNeck
 from yolov7.modeling.neck.yolo_pafpn import YOLOPAFPN
 from yolov7.utils.boxes import BoxModeMy, postprocess
 
+from adv_patch_bench.models import yolov6_head
 from adv_patch_bench.models.custom_build import CUSTOM_META_ARCH_REGISTRY
 
 
@@ -95,8 +89,11 @@ class YOLOV6(nn.Module):
             )
 
         if self.head_type == "yolov6":
-            self.head = YOLOv6Head(
-                self.num_classes, channels_list=self.backbone.channels_list
+            self.head = yolov6_head.YOLOv6Head(
+                self.num_classes,
+                num_anchors=1,
+                num_layers=3,
+                in_channels=self.backbone.channels_list,
             )
         else:
             self.head = YOLOXHead(
@@ -235,7 +232,7 @@ class YOLOV6(nn.Module):
             image_ori_sizes = [batched_inputs.shape[1:3]]
         else:
             images, labels, image_ori_sizes = self.preprocess_image(
-                batched_inputs, compute_loss
+                batched_inputs, self.training or compute_loss
             )
             if labels is not None:
                 labels = labels.to(images.device)
@@ -252,11 +249,12 @@ class YOLOV6(nn.Module):
         if self.training or compute_loss:
             # print(labels)
             outputs, losses = self.head(
-                fpn_outs, labels, x, compute_loss=compute_loss
+                fpn_outs, labels=labels, compute_loss=compute_loss
             )
-            loss, iou_loss, conf_loss, cls_loss, l1_loss, _ = losses
+            # loss, iou_loss, conf_loss, cls_loss, l1_loss = losses
+            iou_loss, conf_loss, cls_loss, l1_loss = losses
             losses = {
-                "total_loss": loss,
+                # "total_loss": loss,
                 "iou_loss": iou_loss,
                 "conf_loss": conf_loss,
                 "cls_loss": cls_loss,
@@ -268,8 +266,8 @@ class YOLOV6(nn.Module):
 
         if self.training:
             return losses
-        if compute_loss:
-            return outputs, losses
+        # if compute_loss:
+        #     return outputs, losses
 
         if self.onnx_export:
             if not self.onnx_vis:
@@ -314,81 +312,6 @@ class YOLOV6(nn.Module):
             instances = detector_postprocess(results_per_image, height, width)
             processed_results.append({"instances": instances})
 
-        # if compute_loss:
-        #     return processed_results, outputs
-        return processed_results
-
-
-class YOLOv6Head(nn.Module):
-    """YOLOv6 head."""
-
-    def __init__(
-        self,
-        num_classes,
-        anchors=1,
-        num_layers=3,
-        channels_list=(256, 512, 1024),
-    ):
-        """Initialize YOLOv6 head."""
-        super().__init__()
-
-        self.num_anchors = anchors
-        self.num_classes = num_classes
-        self.decode_in_inference = True  # for deploy, set to False
-
-        self.cls_convs = nn.ModuleList()
-        self.reg_convs = nn.ModuleList()
-        self.cls_preds = nn.ModuleList()
-        self.reg_preds = nn.ModuleList()
-        self.obj_preds = nn.ModuleList()
-        self.stems = nn.ModuleList()
-
-        self.channels_list = channels_list
-        head_layers = build_effidehead_layer(
-            channels_list, self.num_anchors, num_classes
-        )
-        self.det_head = Detect(
-            num_classes, anchors, num_layers, head_layers=head_layers
-        )
-
-        self.use_l1 = False
-        self.compute_loss = ComputeLoss(iou_type="ciou")
-        self.onnx_export = False
-
-    def initialize_biases(self, prior_prob):
-        """Initialize conv bias according to given prior prob."""
-        for conv in self.cls_preds:
-            bias = conv.bias.view(self.n_anchors, -1)
-            bias.data.fill_(-math.log((1 - prior_prob) / prior_prob))
-            conv.bias = torch.nn.Parameter(bias.view(-1), requires_grad=True)
-
-        for conv in self.obj_preds:
-            bias = conv.bias.view(self.n_anchors, -1)
-            bias.data.fill_(-math.log((1 - prior_prob) / prior_prob))
-            conv.bias = torch.nn.Parameter(bias.view(-1), requires_grad=True)
-
-    def forward(self, xin, labels=None, imgs=None, compute_loss: bool = False):
-        """Forward pass."""
-        _ = imgs  # Unused
-        outputs = self.det_head(xin)
-        for output in outputs:
-            print_shape(output)
-        if self.training or compute_loss:
-            losses = self.compute_loss(outputs, labels)
-        if self.training:
-            return None, losses
-
-        # pylint: disable=invalid-name,attribute-defined-outside-init
-        self.hw = [x.shape[-2:] for x in outputs]
-        # [batch, n_anchors_all, 85]
-        outputs = torch.cat(
-            [x.flatten(start_dim=2) for x in outputs], dim=2
-        ).permute(0, 2, 1)
-        if self.decode_in_inference:
-            # pylint: disable=no-member
-            return self.compute_loss.decode_outputs(
-                outputs, dtype=xin[0].type()
-            )
         if compute_loss:
-            return outputs, losses
-        return outputs
+            return processed_results, outputs, losses
+        return processed_results

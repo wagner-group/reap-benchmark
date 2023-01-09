@@ -11,8 +11,8 @@ import torchvision
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.attacks import base_attack, no_attack, patch_mask_util
-from adv_patch_bench.attacks.dpatch import dpatch_frcnn
-from adv_patch_bench.attacks.rp2 import rp2_frcnn, rp2_yolo
+from adv_patch_bench.attacks.dpatch import dpatch_faster_rcnn
+from adv_patch_bench.attacks.rp2 import rp2_faster_rcnn, rp2_yolo
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchMaskTensor,
@@ -23,9 +23,9 @@ from hparams import DEFAULT_PATH_DEBUG_PATCH
 
 _ATTACK_DICT = {
     "none": no_attack.NoAttackModule,
-    "rp2-frcnn": rp2_frcnn.RP2AttackDetectron,
-    "rp2-yolo": rp2_yolo.RP2AttackYOLO,
-    "dpatch-frcnn": dpatch_frcnn.DPatchAttackDetectron,
+    "rp2-frcnn": rp2_faster_rcnn.RP2FasterRCNNAttack,
+    "rp2-yolo": rp2_yolo.RP2YOLOAttack,
+    "dpatch-frcnn": dpatch_faster_rcnn.DPatchFasterRCNNAttack,
 }
 
 
@@ -38,12 +38,13 @@ def setup_attack(
     config_attack = config["attack"]
     attack_name: str = config_attack["common"]["attack_name"]
 
+    attack_fn_name: str
     if config["base"]["attack_type"] == "none" or attack_name == "none":
         attack_fn_name = "none"
     elif "rcnn" in config["base"]["model_name"]:
-        attack_fn_name: str = f"{attack_name}-frcnn"
+        attack_fn_name = f"{attack_name}-frcnn"
     elif "yolo" in config["base"]["model_name"]:
-        attack_fn_name: str = f"{attack_name}-yolo"
+        attack_fn_name = f"{attack_name}-yolo"
     else:
         raise ValueError(
             f"Attack {attack_name} not supported for model "
