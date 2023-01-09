@@ -128,7 +128,7 @@ class GradAttack(base_attack.DetectorAttackModule):
                 # DEBUG: Fix bg_idx to debug
                 # bg_idx = torch.zeros(1, device=z_delta.device, dtype=torch.long)
 
-            elif "pgd" in self._optimizer_name:
+            if "pgd" in self._optimizer_name:
                 z_delta.detach_()
                 delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
                 delta.requires_grad_()

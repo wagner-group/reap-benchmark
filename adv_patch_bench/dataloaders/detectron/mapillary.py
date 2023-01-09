@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import pathlib
 from typing import Any, Dict, List, Optional
@@ -17,6 +18,8 @@ from hparams import LABEL_LIST, OBJ_DIM_DICT
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
+
+logger = logging.getLogger(__name__)
 
 
 def get_mapillary_dict(
@@ -51,6 +54,7 @@ def get_mapillary_dict(
         List of Mapillary Vistas samples in Detectron2 format.
     """
     _ = kwargs  # Unused
+    logger.info("Registering %s Mapillary Vistas data at %s", split, data_path)
     if split not in _ALLOWED_SPLITS:
         raise ValueError(
             f"split must be among {_ALLOWED_SPLITS}, but it is {split}!"
