@@ -41,7 +41,6 @@ from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 from hparams import LABEL_LIST
 
 logger = logging.getLogger(__name__)
-formatter = logging.Formatter("[%(levelname)s] %(asctime)s: %(message)s")
 
 _EVAL_PARAMS = [
     "conf_thres",
@@ -218,7 +217,9 @@ def main() -> None:
 
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):
-        logger.info("Loading saved attack config from %s...", attack_config_path)
+        logger.info(
+            "Loading saved attack config from %s...", attack_config_path
+        )
         with open(attack_config_path, "r", encoding="utf-8") as file:
             # pylint: disable=unexpected-keyword-arg
             config_attack = yaml.safe_load(file, Loader=yaml.FullLoader)
@@ -299,7 +300,9 @@ def main() -> None:
         fp_all = 0
         total = 0
         for i, (t, f, num_gt) in enumerate(zip(tp, fp, num_gts_per_class)):
-            logger.info("Class %2d: %4d %4d %4d", i, int(t), int(f), int(num_gt))
+            logger.info(
+                "Class %2d: %4d %4d %4d", i, int(t), int(f), int(num_gt)
+            )
             metrics[f"TP-{class_names[i]}"] = t
             metrics[f"FP-{class_names[i]}"] = f
             tp_all += t
@@ -319,10 +322,21 @@ if __name__ == "__main__":
 
     config_base: Dict[str, Any] = config["base"]
     seed: int = config_base["seed"]
-    log_level: int = logging.DEBUG if config_base["debug"] else logging.WARNING
 
-    # Set up logger
-    logger.setLevel(log_level)
+    # Set up logger to both stdout and log file
+    log_level: int = (
+        logging.DEBUG
+        if config_base["debug"] or config_base["verbose"]
+        else logging.WARNING
+    )
+    formatter = logging.Formatter(
+        "[%(asctime)s - %(name)s - %(levelname)s]: %(message)s"
+    )
+    logging.basicConfig(
+        stream=sys.stdout,
+        format=formatter,
+        level=log_level,
+    )
     file_handler = logging.FileHandler(
         os.path.join(config_base["result_dir"], "results.log"), mode="a"
     )

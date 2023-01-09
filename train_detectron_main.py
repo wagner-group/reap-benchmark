@@ -61,9 +61,8 @@ from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 from adv_patch_bench.utils.types import BatchImageTensor
 
-logger = logging.getLogger("detectron2")
-
 _EPS = 1e-6
+logger = logging.getLogger(__name__)
 
 
 def _get_sampler(cfg):
@@ -329,7 +328,16 @@ def train(cfg, config, model, attack):
 def main(config):
     """Main function."""
     cfg = setup_detectron_cfg(config, is_train=True)
-    # Register data. This has to be called by every process for some reason.
+
+    # Set logging config
+    logging.basicConfig(
+        stream=sys.stdout,
+        format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
+        level=logging.DEBUG
+        if config["base"]["debug"] or config["base"]["verbose"]
+        else logging.INFO,
+    )
+
     data_util.register_dataset(config["base"])
 
     logger.info("Building model...")

@@ -22,18 +22,13 @@ class RP2BaseAttack(grad_attack.GradAttack):
     ) -> None:
         """Initialize RP2BaseAttack.
 
-        TODO(feature): Currently, we assume that Detectron2 models are
-        Faster R-CNN so loss function and params are specific to Faster R-CNN.
-        We should implement attack on Faster R-CNN as subclass of Detectron2.
-
         Args:
             attack_config: Dictionary of attack params.
             core_model: Traget model to attack.
         """
         super().__init__(attack_config, core_model, **kwargs)
-        detectron_config: dict[str, Any] = attack_config["detectron"]
-        self._detectron_obj_const: float = detectron_config["obj_loss_const"]
-        self._detectron_iou_thres: float = detectron_config["iou_thres"]
+        self._obj_const: float = attack_config["obj_loss_const"]
+        self._iou_thres: float = attack_config["iou_thres"]
 
     def compute_loss(
         self,
@@ -85,13 +80,11 @@ class RP2BaseAttack(grad_attack.GradAttack):
         adv_imgs: BatchImageTensor,
         adv_targets: list[Target],
     ) -> torch.Tensor:
-        """Compute loss for Faster R-CNN models on detectron2.
+        """Compute detection loss for RP2 attack.
 
         Args:
-            adv_img: Image to compute loss on.
-            adv_target: Target label to compute loss on.
-            obj_class: Target object class. Usually ground-truth label for
-                untargeted attack, and target class for targeted attack.
+            adv_imgs: Image to compute loss on.
+            adv_targets: Target label to compute loss on.
 
         Returns:
             Loss for attacker to minimize.
@@ -152,12 +145,12 @@ class RP2BaseAttack(grad_attack.GradAttack):
             if len(tgt_log) > 0 and len(tgt_lb) > 0:
                 # Ignore the background class on tgt_log
                 target_loss = F.cross_entropy(tgt_log, tgt_lb, reduction="mean")
-            if len(obj_log) > 0 and self._detectron_obj_const != 0:
+            if len(obj_log) > 0 and self._obj_const != 0:
                 obj_lb = torch.ones_like(obj_log)
                 obj_loss = F.binary_cross_entropy_with_logits(
                     obj_log, obj_lb, reduction="mean"
                 )
-            loss += target_loss + self._detectron_obj_const * obj_loss
+            loss += target_loss + self._obj_const * obj_loss
         return -loss
 
     def _pair_gt_proposals(
@@ -178,7 +171,7 @@ class RP2BaseAttack(grad_attack.GradAttack):
             pairs.append(
                 _filter_positive_proposals_single(
                     *inpt,
-                    iou_thres=self._detectron_iou_thres,
+                    iou_thres=self._iou_thres,
                     score_thres=self._min_conf,
                     use_correct_only=use_correct_only,
                 )
@@ -215,6 +208,10 @@ def _filter_positive_proposals_single(
         scores: Softmaxed scores for each proposal box.
         gt_boxes: Ground truth boxes.
         gt_classes: Ground truth classes.
+        iou_thres: IoU threshold to filter detection.
+        score_thres: Class score threshold to filter detection.
+        use_correct_only: If True, filter detection by using score of gt class
+            instead of the most confident.
 
     Returns:
         Filtered target boxes and corresponding class labels.
@@ -240,14 +237,13 @@ def _filter_positive_proposals_single(
     paired_gt_idx = paired_gt_idx.to(device)
     paired_gt_classes = gt_classes_repeat[idx, paired_gt_idx]
 
-    cond = iou_cond
+    # Get scores of corresponding class
+    scores = F.softmax(class_logits, dim=-1)
     if use_correct_only:
-        # Filter for score of proposal > score_thres
-        # Get scores of corresponding class
-        scores = F.softmax(class_logits, dim=-1)
-        paired_scores = scores[idx, paired_gt_classes]
-        score_cond = paired_scores >= score_thres
         # Filter for positive proposals and their corresponding gt labels
-        cond = iou_cond & score_cond
-
+        score_cond = scores[idx, paired_gt_classes] >= score_thres
+    else:
+        # Filter for score of proposal > score_thres
+        score_cond = scores.max(dim=1).values >= score_thres
+    cond = iou_cond & score_cond
     return paired_gt_classes[cond], cond

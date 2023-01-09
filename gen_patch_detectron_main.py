@@ -269,6 +269,15 @@ if __name__ == "__main__":
     cudnn.benchmark = False
     cudnn.deterministic = True
 
+    # Set logging config
+    logging.basicConfig(
+        stream=sys.stdout,
+        format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
+        level=logging.DEBUG
+        if config["base"]["debug"] or config["base"]["verbose"]
+        else logging.INFO,
+    )
+
     # Only allow reap or synthetic as dataset for generating patch
     if config_base["dataset"] not in ("reap", "synthetic"):
         raise ValueError(
