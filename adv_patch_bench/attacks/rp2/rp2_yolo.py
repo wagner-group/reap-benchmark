@@ -2,68 +2,73 @@
 
 from __future__ import annotations
 
+import copy
+from typing import Any
+
 import torch
+from detectron2 import structures
+from torch import nn
 
-from adv_patch_bench.attacks import grad_attack
-from adv_patch_bench.utils.types import ImageTensor, Target
+from adv_patch_bench.attacks.rp2 import rp2_base
 
 
-class RP2AttackYOLO(grad_attack.GradAttack):
+class RP2YOLOAttack(rp2_base.RP2BaseAttack):
     """RP2 Attack for YOLO models."""
 
-    def _loss_func(
-        self,
-        adv_imgs: list[ImageTensor],
-        adv_targets: list[Target],
-        # obj_class: int | None = None,
-    ) -> torch.Tensor:
-        """Compute loss for YOLO models.
-
-        TODO(documentation)
-        """
-        # TODO: Get obj_class from targets instead
-        # Compute logits, loss, gradients
-        out, _ = self._core_model(adv_imgs, val=True)
-        conf = out[:, :, 4:5] * out[:, :, 5:]
-        conf, labels = conf.max(-1)
-        if obj_class is not None:
-            loss = 0
-            # Loop over EoT batch
-            for c, label in zip(conf, labels):
-                c_l = c[label == obj_class]
-                if c_l.size(0) > 0:
-                    # Select prediction from box with max confidence and ignore
-                    # ones with already low confidence
-                    # loss += c_l.max().clamp_min(self.min_conf)
-                    loss += c_l.clamp_min(self._min_conf).sum()
-            loss /= self._num_eot
-        else:
-            # loss = conf.max(1)[0].clamp_min(self.min_conf).mean()
-            loss = conf.clamp_min(self._min_conf).sum()
-            loss /= self._num_eot
-        return loss
-
-    def compute_loss(
-        self,
-        delta: ImageTensor,
-        adv_imgs: list[ImageTensor],
-        adv_targets: list[Target],
-    ) -> torch.Tensor:
-        """Compute loss on perturbed image.
+    def __init__(
+        self, attack_config: dict[str, Any], core_model: nn.Module, **kwargs
+    ) -> None:
+        """Initialize RP2FasterRCNNAttack.
 
         Args:
-            delta: Adversarial patch.
-            adv_img: Perturbed image to compute loss on.
-            adv_target: Target label to compute loss on.
-            obj_class: Target object class. Usually ground-truth label for
-                untargeted attack, and target class for targeted attack.
+            attack_config: Dictionary of attack params.
+            core_model: Traget model to attack.
+        """
+        super().__init__(attack_config, core_model, **kwargs)
+        self._nms_thres_orig = copy.deepcopy(core_model.nms_threshold)
+        self._conf_thres_orig = copy.deepcopy(core_model.conf_threshold)
+
+    def _on_enter_attack(self, **kwargs) -> None:
+        self._is_training = self._core_model.training
+        self._core_model.eval()
+        self._core_model.nms_threshold = self._detectron_iou_thres
+        self._core_model.conf_threshold = self._min_conf
+
+    def _on_exit_attack(self, **kwargs) -> None:
+        self._core_model.train(self._is_training)
+        self._core_model.nms_threshold = self._nms_thres_orig
+        self._core_model.conf_threshold = self._conf_thres_orig
+
+    def _get_targets(
+        self,
+        inputs: list[dict[str, Any]],
+        use_correct_only: bool = False,
+    ) -> tuple[structures.Boxes, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Select a set of targets to attack.
+
+        Args:
+            inputs: A list containing a single dataset_dict, transformed by
+                a DatasetMapper.
+            use_correct_only: Filter out predictions that are already incorrect.
 
         Returns:
-            Loss for attacker to minimize.
+            Matched gt target boxes, gt classes, predicted class logits, and
+            predicted objectness logits.
         """
-        loss: torch.Tensor = self._loss_func(adv_imgs, adv_targets)
-        reg: torch.Tensor = (
-            delta[:, :-1, :] - delta[:, 1:, :]
-        ).abs().mean() + (delta[:, :, :-1] - delta[:, :, 1:]).abs().mean()
-        loss += self._lmbda * reg
-        return loss
+        # losses contain total_loss, iou_loss, conf_loss, cls_loss, l1_loss
+        results, _, _ = self._core_model(inputs, compute_loss=True)
+
+        pred_boxes = [result["instances"].pred_boxes for result in results]
+        class_logits = [result["instances"].cls_logits for result in results]
+        obj_logits = [result["instances"].obj_logits for result in results]
+        gt_boxes = [tgt["instances"].gt_boxes for tgt in inputs]
+        gt_classes = [tgt["instances"].gt_classes for tgt in inputs]
+        paired_outputs = self._pair_gt_proposals(
+            pred_boxes,
+            class_logits,
+            obj_logits,
+            gt_boxes,
+            gt_classes,
+            use_correct_only=use_correct_only,
+        )
+        return paired_outputs

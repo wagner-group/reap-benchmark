@@ -118,7 +118,6 @@ def _generate_adv_patch(
     save_images: bool = False,
     save_dir: pathlib.Path = pathlib.Path("./"),
     verbose: bool = False,
-    config_attack: dict[str, Any] | None = None,
 ) -> tuple[ImageTensor, MaskTensor]:
     """Generate adversarial patch.
 
@@ -134,8 +133,7 @@ def _generate_adv_patch(
     )
 
     attack: base_attack.DetectorAttackModule = attack_util.setup_attack(
-        config_attack=config_attack,
-        is_detectron=True,
+        config=config,
         model=model,
         verbose=verbose,
     )
@@ -245,7 +243,6 @@ def main() -> None:
         save_images=config_base["save_images"],
         save_dir=save_dir,
         verbose=config_base["verbose"],
-        config_attack=config_attack,
     )
 
     # Save adv patch

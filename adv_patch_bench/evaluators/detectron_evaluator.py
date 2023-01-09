@@ -51,8 +51,7 @@ class DetectronEvaluator:
 
     def __init__(
         self,
-        config_eval: Dict[str, Any],
-        config_attack: Dict[str, Any],
+        config: Dict[str, Any],
         model: torch.nn.Module,
         dataloader: Any,
         class_names: List[str],
@@ -61,37 +60,37 @@ class DetectronEvaluator:
         """Evaluator wrapper for detectron model.
 
         Args:
-            config_eval: Dictionary containing eval parameters.
-            config_attack: Dictionary containing attack parameters.
+            config: Dictionary containing config parameters.
             model: Target model.
             dataloader: Dataset to run attack on.
             class_names: List of class names in string.
             all_iou_thres: Array of IoU thresholds for computing score.
         """
+        config_base = config["eval"]
         # General params
-        self._dataset: str = config_eval["dataset"]
-        self._synthetic: bool = config_eval["synthetic"]
+        self._dataset: str = config_base["dataset"]
+        self._synthetic: bool = config_base["synthetic"]
         self._model: torch.nn.Module = model
         self._device: Any = self._model.device
         self._dataloader = dataloader
         self._input_format: str = global_cfg.INPUT.FORMAT
         self._metadata = MetadataCatalog.get(self._dataset)
-        self._verbose: bool = config_eval["verbose"]
+        self._verbose: bool = config_base["verbose"]
 
-        interp: str = config_eval["interp"]
-        self._img_size: SizePx = config_eval["img_size"]
-        num_eval: int | None = config_eval["num_eval"]
+        interp: str = config_base["interp"]
+        self._img_size: SizePx = config_base["img_size"]
+        num_eval: int | None = config_base["num_eval"]
         self._num_eval: int | None = (
             len(dataloader) if num_eval is None else num_eval
         )
         self._class_names: List[str] = class_names
-        self._obj_class: int = config_eval["obj_class"]
+        self._obj_class: int = config_base["obj_class"]
 
         # Common keyword args for constructing RenderImage
         self._rimg_kwargs: Dict[str, Any] = {
             "img_mode": self._input_format,
             "interp": interp,
-            "img_aug_prob_geo": config_eval["img_aug_prob_geo"],
+            "img_aug_prob_geo": config_base["img_aug_prob_geo"],
             "device": self._device,
             "obj_class": self._obj_class,
             "mode": "synthetic" if self._synthetic else "reap",
@@ -99,9 +98,9 @@ class DetectronEvaluator:
 
         # Load annotation DataFrame. "Other" signs are discarded.
         self._anno_df: pd.DataFrame = reap_util.load_annotation_df(
-            config_eval["tgt_csv_filepath"]
+            config_base["tgt_csv_filepath"]
         )
-        self._annotated_signs_only: bool = config_eval["annotated_signs_only"]
+        self._annotated_signs_only: bool = config_base["annotated_signs_only"]
 
         # Build COCO evaluator
         self.evaluator = cocoeval.CustomCOCOEvaluator(
@@ -115,8 +114,8 @@ class DetectronEvaluator:
         # Set up list of IoU thresholds to consider
         self._all_iou_thres = torch.from_numpy(all_iou_thres).to(self._device)
 
-        self._obj_size_px: SizePx = config_eval["obj_size_px"]
-        self._obj_size_mm: SizeMM = config_eval["obj_size_mm"]
+        self._obj_size_px: SizePx = config_base["obj_size_px"]
+        self._obj_size_mm: SizeMM = config_base["obj_size_mm"]
         self._robj_fn: render_object.RenderObject
         self._robj_kwargs: Dict[str, Any]
         robj_kwargs = {
@@ -128,48 +127,46 @@ class DetectronEvaluator:
             self._robj_kwargs = {
                 **robj_kwargs,
                 "obj_class": self._obj_class,
-                "syn_obj_path": config_eval["syn_obj_path"],
-                "syn_rotate": config_eval["syn_rotate"],
-                "syn_translate": config_eval["syn_translate"],
-                "syn_scale": config_eval["syn_scale"],
-                "syn_3d_dist": config_eval["syn_3d_dist"],
-                "syn_colorjitter": config_eval["syn_colorjitter"],
+                "syn_obj_path": config_base["syn_obj_path"],
+                "syn_rotate": config_base["syn_rotate"],
+                "syn_translate": config_base["syn_translate"],
+                "syn_scale": config_base["syn_scale"],
+                "syn_3d_dist": config_base["syn_3d_dist"],
+                "syn_colorjitter": config_base["syn_colorjitter"],
             }
         else:
             self._robj_fn = reap_object.ReapObject
             self._robj_kwargs = {
                 **robj_kwargs,
-                "reap_transform_mode": config_eval["reap_transform_mode"],
-                "reap_use_relight": config_eval["reap_use_relight"],
+                "reap_transform_mode": config_base["reap_transform_mode"],
+                "reap_use_relight": config_base["reap_use_relight"],
             }
 
         # Set up attack if applicable
-        self._attack_type: str = config_eval["attack_type"]
+        self._attack_type: str = config_base["attack_type"]
         self._use_attack: bool = self._attack_type != "none"
         self._attack: Optional[base_attack.DetectorAttackModule] = None
         # Set up attack when running  "per-sign"
         if self._attack_type == "per-sign":
             self._attack = attack_util.setup_attack(
-                config_attack=config_attack,
-                is_detectron=True,
+                config=config,
                 model=model,
-                input_size=self._img_size,
                 verbose=self._verbose,
             )
-        self._adv_patch_path: str = config_eval["adv_patch_path"]
-        self._patch_size_mm: SizePatch = config_eval["patch_size_mm"]
+        self._adv_patch_path: str = config_base["adv_patch_path"]
+        self._patch_size_mm: SizePatch = config_base["patch_size_mm"]
 
         # Visualization params
-        self._num_vis: int = config_eval.get("num_vis", 0)
+        self._num_vis: int = config_base.get("num_vis", 0)
         self._vis_save_dir: pathlib.Path = (
-            pathlib.Path(config_eval["result_dir"]) / "vis"
+            pathlib.Path(config_base["result_dir"]) / "vis"
         )
         self._vis_save_dir.mkdir(exist_ok=True)
-        if config_eval["vis_conf_thres"] is not None:
-            self._vis_conf_thres: float = config_eval["vis_conf_thres"]
+        if config_base["vis_conf_thres"] is not None:
+            self._vis_conf_thres: float = config_base["vis_conf_thres"]
         else:
-            self._vis_conf_thres: float = config_eval["conf_thres"]
-        self._vis_show_bbox: bool = config_eval["vis_show_bbox"]
+            self._vis_conf_thres: float = config_base["conf_thres"]
+        self._vis_show_bbox: bool = config_base["vis_show_bbox"]
 
         # Variables for storing synthetic data results
         # syn_scores and syn_matches have shape [num_ious, num_eval]

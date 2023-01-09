@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import detectron2
 import yaml
-from detectron2.engine import default_argument_parser, default_setup
+from detectron2.engine import default_argument_parser
+from yolov7.config import add_yolo_config
+from yolov7.utils.d2overrides import default_setup
 
 from hparams import (
     DEFAULT_SYN_OBJ_DIR,
@@ -917,6 +919,7 @@ def setup_detectron_cfg(
         )
 
     cfg = detectron2.config.get_cfg()
+    add_yolo_config(cfg)
     cfg.merge_from_file(config_base["config_file"])
     cfg.merge_from_list(config_base["opts"])
 
@@ -952,6 +955,9 @@ def setup_detectron_cfg(
         weight_path, str
     ), f"weight_path must be string, but it is {weight_path}!"
     cfg.MODEL.WEIGHTS = weight_path
+
+    # YOLOv7 configs
+    cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
 
     cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around

@@ -73,7 +73,6 @@ class RenderImage:
         self._mode: str = mode
         self.obj_classes: list[int] = []
         self.obj_ids: list[str] = []
-        # self._img_size: SizePx = img_size
 
         if robj_kwargs is None:
             robj_kwargs = {}
@@ -126,8 +125,10 @@ class RenderImage:
                         len(samples),
                     )
             else:
-                # TODO: Set self.num_objs
-                raise NotImplementedError()
+                raise NotImplementedError(
+                    f"Only reap and mtsd modes are supported, but {mode} is "
+                    "given!"
+                )
 
         self.images = torch.stack(images, dim=0).to(device, non_blocking=True)
         self.samples = samples

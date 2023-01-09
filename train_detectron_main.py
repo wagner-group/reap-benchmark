@@ -47,7 +47,6 @@ from detectron2.evaluation import (
     inference_on_dataset,
     print_csv_format,
 )
-from detectron2.modeling import build_model
 from detectron2.solver import build_lr_scheduler, build_optimizer
 from detectron2.utils import comm
 from detectron2.utils.events import EventStorage
@@ -56,6 +55,7 @@ from torch.nn.parallel import DistributedDataParallel
 import adv_patch_bench.dataloaders.detectron.util as data_util
 from adv_patch_bench.attacks import attack_util
 from adv_patch_bench.dataloaders.detectron import mtsd_dataset_mapper
+from adv_patch_bench.models.custom_build import build_model
 from adv_patch_bench.transforms.render_image import RenderImage
 from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
@@ -282,6 +282,7 @@ def train(cfg, config, model, attack):
 
             loss_dict = model(data)
             losses = sum(loss_dict.values())
+            print(loss_dict)
             assert torch.isfinite(
                 losses
             ).all(), f"Loss diverges; Something went wrong\n{loss_dict}"
@@ -337,8 +338,7 @@ def main(config):
 
     # Set up attack for adversarial training
     attack = attack_util.setup_attack(
-        config_attack=config["attack"],
-        is_detectron=True,
+        config=config,
         model=model,
         verbose=config["base"]["verbose"],
     )
