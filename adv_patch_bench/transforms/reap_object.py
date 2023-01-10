@@ -242,14 +242,6 @@ class ReapObject(render_object.RenderObject):
                 num_overlap_pixels,
             )
             logger.debug(str([t["file_name"].split("/")[-1] for t in targets]))
-            # print(transform_mat)
-            # img = (1 - alpha_mask) * images + alpha_mask * warped_patch
-            # transform_mat[0] @ torch.tensor([0, 0, 1], device="cuda", dtype=torch.float32)
-            # import torchvision
-            # torchvision.utils.save_image(img, "temp.png")
-            # torchvision.utils.save_image(alpha_mask, "temp_alpha.png")
-            # import pdb
-            # pdb.set_trace()
 
         # Place patch on object using alpha channel
         final_img: BatchImageTensor = (

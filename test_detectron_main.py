@@ -149,7 +149,7 @@ def _compute_conf_thres(
         max_f1_idx = f1_score.argmax(0)
         max_f1 = f1_score[max_f1_idx, class_idx]
         tp = tp_score_full[max_f1_idx, iou_idx, class_idx]
-        fp = tp_score_full[max_f1_idx, iou_idx, class_idx]
+        fp = fp_score_full[max_f1_idx, iou_idx, class_idx]
         conf_thres = np.take(scores_thres, max_f1_idx)
 
         def array2str(array):
@@ -166,7 +166,7 @@ def _compute_conf_thres(
         max_f1_idx = f1_mean.argmax()
         max_f1 = f1_mean[max_f1_idx]
         tp = tp_score_full[iou_idx, :, max_f1_idx]
-        fp = tp_score_full[iou_idx, :, max_f1_idx]
+        fp = fp_score_full[iou_idx, :, max_f1_idx]
         conf_thres = scores_thres[max_f1_idx]
         logger.info("max_f1_idx: %d", max_f1_idx)
         logger.info("max_f1: %.4f", max_f1)

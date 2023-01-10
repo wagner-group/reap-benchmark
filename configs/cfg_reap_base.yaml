@@ -40,8 +40,8 @@ base:
 
   # Synthetic benchmark params
   syn_obj_width_px: 64
-  syn_rotate: 15
-  syn_scale: 1
+  syn_rotate: 15  # Rotation degree: [-syn_rotate, syn_rotate]
+  syn_scale: 1  # Scale: [1 / syn_scale, syn_scale]
   syn_translate: 0.4
   syn_colorjitter: 0
   syn_3d_dist: 0

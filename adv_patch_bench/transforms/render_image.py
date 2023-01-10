@@ -10,7 +10,12 @@ import kornia.augmentation as K
 import torch
 import torchvision
 
-from adv_patch_bench.transforms import mtsd_object, reap_object, util
+from adv_patch_bench.transforms import (
+    mtsd_object,
+    reap_object,
+    syn_object,
+    util,
+)
 from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
@@ -83,12 +88,11 @@ class RenderImage:
         self._robj_fn = {
             "reap": reap_object.ReapObject,
             "mtsd": mtsd_object.MtsdObject,
+            "synthetic": syn_object.SynObject,
         }[mode]
 
-        if mode not in ("reap", "mtsd"):
-            raise NotImplementedError(
-                f"Only reap and mtsd modes are supported, but {mode} is given!"
-            )
+        if mode not in ("reap", "mtsd", "synthetic"):
+            raise NotImplementedError(f"{mode} mode is not implemented!")
 
         for i, sample in enumerate(samples):
             image: ImageTensor = sample["image"].float() / 255
@@ -108,7 +112,9 @@ class RenderImage:
                 # Skip obj of wrong class or has no REAP annotation in REAP mode
                 if (mode == "reap" and not obj["has_reap"]) or wrong_class:
                     continue
-                if any(point[2] != 2 for point in obj["keypoints"]):
+                if (mode != "synthetic") and any(
+                    point[2] != 2 for point in obj["keypoints"]
+                ):
                     continue
                 self.obj_classes.append(cat_id)
                 robj: RenderObject = self._robj_fn(
@@ -117,6 +123,7 @@ class RenderImage:
                     obj_class=obj["category_id"],
                     device=device,
                     image=image,
+                    img_size=image.shape[-2:],
                     **robj_kwargs,
                 )
                 robj.aggregate_params(self.tf_params)
@@ -148,7 +155,8 @@ class RenderImage:
         ]
 
         for name, params in self.tf_params.items():
-            self.tf_params[name] = torch.cat(params, dim=0)
+            if isinstance(params, list) and isinstance(params[0], torch.Tensor):
+                self.tf_params[name] = torch.cat(params, dim=0)
         self.tf_params["obj_transforms"] = RenderObject.get_augmentation(
             robj_kwargs.get("patch_aug_params"), interp
         )

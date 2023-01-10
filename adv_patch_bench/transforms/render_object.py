@@ -25,7 +25,6 @@ class RenderObject:
         self,
         dataset: str = "reap",
         obj_class: int | None = None,
-        # img_size: SizePx = (1536, 2048),
         obj_size_px: SizePx = SizePx((64, 64)),
         interp: str = "bilinear",
         device: Any = "cuda",
@@ -39,20 +38,11 @@ class RenderObject:
 
         Args:
             dataset: Name of dataset being used.
-            obj_df: Row of DataFrame that holds metadata of this object.
-            filename: Image file name (required when obj_df is None).
             obj_class: Class of object (required when obj_df is None).
-            img_size: Desired image size in pixel.
-            img_size_orig: Original image size.
-            img_hw_ratio: Ratios of new over old height and width.
-            img_pad_size: Pad size (height and width) of image.
             obj_size_px: Object size in pixel.
             interp: Interpolation method. Must be among "nearest", "bilinear",
                 and "bicubic".
             device: Device to place tensors on (e.g., patch, mask).
-            patch_aug_params: Dict of augmentation params, used in addition to
-                transforms for applying patch and object. Defaults to None.
-            is_detectron: Whether Detectron2 model is used.
 
         Raises:
             ValueError: df_row does not have exactly 1 entry.
@@ -69,6 +59,10 @@ class RenderObject:
                 "metadata in hparams.py."
             )
         self._metadata = metadata.get("obj_dim_dict")
+        assert self._metadata is not None, (
+            "Attribute `obj_dim_dict` must be registered as metadata for "
+            f"{dataset} dataset!"
+        )
         self._obj_class: int = obj_class
 
         # Check interp
@@ -80,10 +74,6 @@ class RenderObject:
         self._device: Any = device
 
         self._obj_size_px: SizePx = obj_size_px
-        # self.img_size: SizePx = img_size
-        # self.img_size_orig: SizePx = img_size_orig
-        # self.img_hw_ratio: Tuple[float, float] = img_hw_ratio
-        # self.img_pad_size: SizePx = img_pad_size
         self._hw_ratio: tuple[float, float] = self._metadata["hw_ratio"][
             self._obj_class
         ]

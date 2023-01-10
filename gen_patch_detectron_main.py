@@ -54,8 +54,6 @@ logger = logging.getLogger(__name__)
 
 def _collect_attack_rimgs(
     dataloader: Any,
-    num_bg: int | float,
-    obj_class: int | None = None,
     rimg_kwargs: dict[str, Any] | None = None,
     robj_kwargs: dict[str, Any] | None = None,
 ) -> render_image.RenderImage:
@@ -73,6 +71,9 @@ def _collect_attack_rimgs(
     Returns:
         Background images in form of render_image.RenderImage.
     """
+    obj_class: int = config_base["obj_class"]
+    num_bg: int | float = config["attack"]["common"]["num_bg"]
+
     if rimg_kwargs is None:
         raise ValueError("rimg_kwargs must not be specified!")
     if robj_kwargs is None:
@@ -80,21 +81,21 @@ def _collect_attack_rimgs(
 
     if num_bg < 1:
         assert obj_class is not None
-        print(f"num_bg is a fraction ({num_bg}).")
+        logger.info("num_bg is a fraction (%f).", num_bg)
         # TODO(NewDataset): Made compatible with other datasets.
         num_bg = round(MAPILLARY_IMG_COUNTS_DICT[obj_class] * num_bg)
-        print(f"For {obj_class}, this is {num_bg} images.")
+        logger.info("For class %d, this is %d images.", obj_class, num_bg)
     num_bg = int(num_bg)
 
     backgrounds: list[DetectronSample] = []
-    print("=> Collecting background images...")
+    logger.info("=> Collecting background images...")
     for _, batch in enumerate(tqdm(dataloader)):
         backgrounds.extend(batch)
         if len(backgrounds) >= num_bg:
             break
 
     rimg: render_image.RenderImage = render_image.RenderImage(
-        dataset="reap",
+        dataset="synthetic" if config_base["synthetic"] else "reap",
         samples=backgrounds,
         robj_kwargs=robj_kwargs,
         **rimg_kwargs,
@@ -214,8 +215,6 @@ def main() -> None:
     # Collect background images for generating patch attack
     attack_rimg: render_image.RenderImage = _collect_attack_rimgs(
         dataloader,
-        num_bg,
-        obj_class=obj_class,
         rimg_kwargs=rimg_kwargs,
         robj_kwargs=robj_kwargs,
     )
@@ -277,6 +276,8 @@ if __name__ == "__main__":
         if config["base"]["debug"] or config["base"]["verbose"]
         else logging.INFO,
     )
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
 
     # Only allow reap or synthetic as dataset for generating patch
     if config_base["dataset"] not in ("reap", "synthetic"):

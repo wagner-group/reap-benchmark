@@ -14,8 +14,22 @@ _DATASET = "reap"
 _NUM_CLASSES = len(LABEL_LIST[_DATASET]) - 1
 _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 _NUM_IOU_THRES = 10
-BASE_PATH = "./detectron_output/"
-CONF_THRES = 0.634
+BASE_PATH = "./results/"
+# CONF_THRES = 0.634  # FIXME
+CONF_THRES = [
+    0.45545546,
+    0.74174174,
+    0.97697698,
+    0.37237237,
+    0.18418418,
+    0.75475475,
+    0.83583584,
+    0.84984985,
+    0.78078078,
+    0.66866867,
+    0.65665666,
+    0.0,
+]
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -31,7 +45,9 @@ _TRANSFORM_PARAMS: List[str] = [
 ]
 
 
-def _compute_ap_recall(scores, matched, NP, recall_thresholds=None):
+def _compute_ap_recall(
+    scores, matched, NP, conf_thres=None, recall_thresholds=None
+):
     """Compute AP, precision, and recall.
 
     This curve tracing method has some quirks that do not appear
@@ -65,7 +81,9 @@ def _compute_ap_recall(scores, matched, NP, recall_thresholds=None):
     # get interpolated precision values at the evaluation thresholds
     i_pr = np.array([i_pr[r] if r < len(i_pr) else 0 for r in rec_idx])
 
-    score_idx = np.where(scores >= CONF_THRES)[0][-1]
+    score_idx = None
+    if conf_thres is not None:
+        score_idx = np.where(scores >= conf_thres)[0][-1]
 
     return {
         "precision": pr[score_idx],
@@ -207,7 +225,7 @@ def main(args):
                     continue
                 scores_dict[sid] = scores
 
-                tp = np.sum(scores[iou_idx] >= CONF_THRES)
+                tp = np.sum(scores[iou_idx] >= CONF_THRES[obj_class])
                 class_name = LABEL_LIST[_DATASET][obj_class]
                 tpr = tp / num_gts
                 metrics[f"FNR-{class_name}"] = 1 - tpr
@@ -227,7 +245,12 @@ def main(args):
                     matches = np.zeros_like(scores, dtype=bool)
                     num_matched = len(scores_tp)
                     matches[:num_matched] = 1
-                    outputs = _compute_ap_recall(scores, matches, num_gts)
+                    outputs = _compute_ap_recall(
+                        scores,
+                        matches,
+                        num_gts,
+                        conf_thres=CONF_THRES[obj_class],
+                    )
                     # FIXME: precision can't be weighted average
                     print_df_rows[sid]["Precision"] = outputs["precision"] * 100
                     print_df_rows[sid]["Recall"] = outputs["recall"] * 100
@@ -291,8 +314,8 @@ def main(args):
             continue
 
         clean_scores = gt_scores[0][clean_sid]
-        clean_detected = clean_scores[iou_idx] >= CONF_THRES
-        adv_detected = adv_scores[iou_idx] >= CONF_THRES
+        clean_detected = clean_scores[iou_idx] >= CONF_THRES[k]
+        adv_detected = adv_scores[iou_idx] >= CONF_THRES[k]
         total = clean_scores.shape[1]
 
         num_succeed = np.sum(~adv_detected & clean_detected)
