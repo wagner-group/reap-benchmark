@@ -123,6 +123,7 @@ class DetectronEvaluator:
         self._robj_fn: render_object.RenderObject
         self._robj_kwargs: dict[str, Any]
         robj_kwargs = {
+            "dataset": self._dataset,
             "obj_size_px": self._obj_size_px,
             "interp": interp,
         }
@@ -130,7 +131,6 @@ class DetectronEvaluator:
             self._robj_fn = syn_object.SynObject
             self._robj_kwargs = {
                 **robj_kwargs,
-                "obj_class": self._obj_class,
                 "syn_obj_path": config_base["syn_obj_path"],
                 "syn_rotate": config_base["syn_rotate"],
                 "syn_translate": config_base["syn_translate"],
@@ -192,37 +192,38 @@ class DetectronEvaluator:
         if self._verbose:
             print(*args, **kwargs)
 
-    def _syn_eval(self, outputs: Target, target_render: Target):
+    def _syn_eval(self, outputs: list[Target], target_renders: list[Target]):
         """Compute and save metrics for synthetic data evaluation.
 
         Args:
             outputs: Predicted outputs by model.
-            target_render: Target of rendered image.
+            target_renders: Target of rendered image.
         """
-        instances: structures.Instances = outputs["instances"]
-        # Filter both dt by class
-        instances = instances[instances.pred_classes == self._obj_class]
-        # Last gt box is the new one we added for synthetic sign
-        # Output of pairwise_iou here has shape [num_dts, 1]
-        ious: torch.Tensor = pairwise_iou(
-            instances.pred_boxes,
-            target_render["instances"].gt_boxes[-1].to(self._device),
-        )[:, 0]
+        for output, target_render in zip(outputs, target_renders):
+            instances: structures.Instances = output["instances"]
+            # Filter both dt by class
+            instances = instances[instances.pred_classes == self._obj_class]
+            # Last gt box is the new one we added for synthetic sign
+            # Output of pairwise_iou here has shape [num_dts, 1]
+            ious: torch.Tensor = pairwise_iou(
+                instances.pred_boxes,
+                target_render["instances"].gt_boxes[-1].to(self._device),
+            )[:, 0]
 
-        # Skip empty ious (no overlap)
-        if len(ious) == 0:
+            # Skip empty ious (no overlap)
+            if len(ious) == 0:
+                self._syn_idx += 1
+                return
+
+            # Find the match with highest IoU. This matches COCO evaluator.
+            max_iou, max_idx = ious.max(0, keepdim=True)
+            matches = max_iou >= self._all_iou_thres
+            # Zero out scores if there's no match (i.e., IoU lower than threshold)
+            scores = instances.scores[max_idx] * matches
+            # Save scores and gt-dt matches at each level of IoU thresholds
+            self.syn_matches[:, self._syn_idx] = matches
+            self.syn_scores[:, self._syn_idx] = scores
             self._syn_idx += 1
-            return
-
-        # Find the match with highest IoU. This matches COCO evaluator.
-        max_iou, max_idx = ious.max(0, keepdim=True)
-        matches = max_iou >= self._all_iou_thres
-        # Zero out scores if there's no match (i.e., IoU lower than threshold)
-        scores = instances.scores[max_idx] * matches
-        # Save scores and gt-dt matches at each level of IoU thresholds
-        self.syn_matches[:, self._syn_idx] = matches
-        self.syn_scores[:, self._syn_idx] = scores
-        self._syn_idx += 1
 
     def run(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Runs evaluator and saves the prediction results.
@@ -266,7 +267,6 @@ class DetectronEvaluator:
             filenames = [name.split(".")[0] for name in filenames]
 
             rimg: render_image.RenderImage = render_image.RenderImage(
-                dataset=self._dataset,
                 samples=batch,
                 robj_kwargs=self._robj_kwargs,
                 **self._rimg_kwargs,
@@ -275,14 +275,27 @@ class DetectronEvaluator:
             if self._synthetic:
                 # Attacking synthetic signs
                 # TODO(synthetic)
-                raise NotImplementedError()
+                # raise NotImplementedError()
                 # rimg.create_object(None, self._robj_fn, self._robj_kwargs)
                 # robj = rimg.get_object()
                 # robj.load_adv_patch(adv_patch=adv_patch, patch_mask=patch_mask)
                 # Image is used as background only so we can include any of
                 # them when evaluating synthetic signs.
-                total_num_patches += 1
-                cur_adv_patch, cur_patch_mask = adv_patch, patch_mask
+                num_objs = len(rimg.images)
+                total_num_patches += num_objs
+                repeat_size = (num_objs, 1, 1, 1)
+                cur_adv_patch, cur_patch_mask = None, None
+                if patch_mask is not None:
+                    cur_patch_mask = patch_mask.repeat(repeat_size)
+                if self._attack_type == "per-sign":
+                    cur_adv_patch = self._attack.run(
+                        rimg,
+                        cur_patch_mask,
+                        batch_mode=True,
+                    )
+                elif adv_patch is not None:
+                    cur_adv_patch = adv_patch.repeat(repeat_size)
+                # cur_adv_patch, cur_patch_mask = adv_patch, patch_mask
             elif rimg.num_objs > 0:
                 # Attacking REAP signs
                 total_num_patches += rimg.num_objs

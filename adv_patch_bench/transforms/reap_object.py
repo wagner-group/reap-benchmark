@@ -153,6 +153,9 @@ class ReapObject(render_object.RenderObject):
             final_img: Image with transformed patch applied.
             target: Target with synthetic object label added.
         """
+        if adv_patch is None or patch_mask is None:
+            return images, targets
+
         transform_mat = tf_params["transform_mat"]
         alpha = tf_params["alpha"]
         beta = tf_params["beta"]

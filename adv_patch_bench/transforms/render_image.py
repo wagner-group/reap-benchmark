@@ -9,6 +9,7 @@ from typing import Any
 import kornia.augmentation as K
 import torch
 import torchvision
+from detectron2.config import global_cfg
 
 from adv_patch_bench.transforms import (
     mtsd_object,
@@ -35,7 +36,6 @@ class RenderImage:
 
     def __init__(
         self,
-        dataset: str,
         samples: list[dict[str, Any]],
         mode: str = "reap",
         obj_class: int | None = None,
@@ -43,7 +43,6 @@ class RenderImage:
         interp: str = "bilinear",
         img_aug_prob_geo: float | None = None,
         device: Any = "cuda",
-        bg_class: int | None = None,
         robj_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Initialize RenderImage containing full image and various metadata.
@@ -66,6 +65,7 @@ class RenderImage:
         Raises:
             ValueError: Invalid img_mode.
         """
+        bg_class = global_cfg.other_catId
         self._interp: str = interp
         self._is_detectron: bool = "instances" in samples[0]
 
@@ -103,41 +103,51 @@ class RenderImage:
 
             temp_num_objs = len(self.obj_classes)
             is_obj_kept = []
-            for oid, obj in enumerate(sample["annotations"]):
-                is_obj_kept.append(False)
-                cat_id = obj["category_id"]
-                wrong_class = cat_id == bg_class or (
-                    cat_id != obj_class and obj_class >= 0
-                )
-                # Skip obj of wrong class or has no REAP annotation in REAP mode
-                if (mode == "reap" and not obj["has_reap"]) or wrong_class:
-                    continue
-                if (mode != "synthetic") and any(
-                    point[2] != 2 for point in obj["keypoints"]
-                ):
-                    continue
-                self.obj_classes.append(cat_id)
+            # FIXME: 
+            if mode == "synthetic":
+                self.obj_classes.append(obj_class)
                 robj: RenderObject = self._robj_fn(
-                    obj_dict=obj,
-                    dataset=dataset,
-                    obj_class=obj["category_id"],
+                    obj_class=obj_class,
                     device=device,
-                    image=image,
                     img_size=image.shape[-2:],
                     **robj_kwargs,
                 )
                 robj.aggregate_params(self.tf_params)
                 obj_to_img.append(i)
-                self.obj_ids.append(f"{file_name}-{oid}")
-                is_obj_kept[-1] = True
+                self.obj_ids.append(f"{file_name}-0")
+            else:
+                for oid, obj in enumerate(sample["annotations"]):
+                    is_obj_kept.append(False)
+                    cat_id = obj["category_id"]
+                    wrong_class = cat_id == bg_class or (
+                        cat_id != obj_class and obj_class >= 0
+                    )
+                    # Skip obj of wrong class or has no REAP annotation in REAP mode
+                    if (mode == "reap" and not obj["has_reap"]) or wrong_class:
+                        continue
+                    if any(point[2] != 2 for point in obj["keypoints"]):
+                        continue
+                    self.obj_classes.append(cat_id)
+                    robj: RenderObject = self._robj_fn(
+                        obj_dict=obj,
+                        obj_class=obj["category_id"],
+                        device=device,
+                        # image=image,
+                        img_size=image.shape[-2:],
+                        **robj_kwargs,
+                    )
+                    robj.aggregate_params(self.tf_params)
+                    obj_to_img.append(i)
+                    self.obj_ids.append(f"{file_name}-{oid}")
+                    is_obj_kept[-1] = True
 
-            # Filter objs in sample by oids
-            sample["instances"] = sample["instances"][is_obj_kept].to(device)
-            sample["annotations"] = [
-                anno
-                for anno, is_kept in zip(sample["annotations"], is_obj_kept)
-                if is_kept
-            ]
+                # Filter objs in sample by oids
+                sample["instances"] = sample["instances"][is_obj_kept].to(device)
+                sample["annotations"] = [
+                    anno
+                    for anno, is_kept in zip(sample["annotations"], is_obj_kept)
+                    if is_kept
+                ]
 
             if temp_num_objs == len(self.obj_classes):
                 logger.warning(
@@ -210,9 +220,6 @@ class RenderImage:
         """
         images, samples, tf_params = self._slice_images_and_params(obj_indices)
         orig_images = images
-
-        if adv_patch is None or patch_mask is None:
-            return images, samples
 
         images, targets = self._robj_fn.apply_objects(
             images,

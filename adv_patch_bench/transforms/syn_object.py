@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Optional
 
 import numpy as np
@@ -191,21 +192,25 @@ class SynObject(render_object.RenderObject):
         geo_transform = tf_params["geo_transform"]
         resize_and_pad = tf_params["resize_and_pad"]
 
-        # Resize patch and its mask to full image size
-        adv_patch = resize_and_pad(adv_patch)
-        patch_mask = resize_and_pad(patch_mask)
+        if adv_patch is None or patch_mask is None:
+            adv_obj: BatchImageTensor = syn_obj
+        else:
+            # Resize patch and its mask to full image size
+            adv_patch = resize_and_pad(adv_patch)
+            patch_mask = resize_and_pad(patch_mask)
+            # Apply lighting transform
+            if not suppress_aug:
+                adv_patch = light_transform(adv_patch)
+                if adv_patch.is_leaf:
+                    adv_patch = adv_patch.clamp(0, 1)
+                else:
+                    adv_patch.clamp_(0, 1)
+            adv_obj: BatchImageTensor = (
+                patch_mask * adv_patch + (1 - patch_mask) * syn_obj
+            )
 
-        # Apply lighting transform
-        if not suppress_aug:
-            adv_patch = light_transform(adv_patch)
-            if adv_patch.is_leaf:
-                adv_patch = adv_patch.clamp(0, 1)
-            else:
-                adv_patch.clamp_(0, 1)
+        # TODO(feature): Add augmentation for the sign
 
-        adv_obj: BatchImageTensor = (
-            patch_mask * adv_patch + (1 - patch_mask) * syn_obj
-        )
         rgba_adv_obj: BatchImageTensorRGBA = torch.cat(
             [adv_obj, obj_mask], dim=1
         )
@@ -292,9 +297,9 @@ def _modify_syn_target_one(
     bbox = [b.cpu().item() for b in bbox]
 
     # Copy target since we have to add a new object
-    # new_target = copy.deepcopy(target)
+    new_target = copy.deepcopy(target)
     # instances: structures.Instances = target["instances"]
-    new_target = {}
+    # new_target = {}
 
     # Create Boxes object in XYXY_ABS format
     y_min, x_min, h_obj, w_obj = bbox
