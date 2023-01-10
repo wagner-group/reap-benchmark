@@ -169,6 +169,12 @@ def reap_args_parser(
         default=8,
         help="Number of dataloader workers (per RANK in DDP mode).",
     )
+    parser.add_argument(
+        "--use-per-class-conf-thres",
+        action="store_true",
+        help="If True, expect/compute confidence score threshold per class.",
+    )
+
     # ====================== Specific to synthetic signs ===================== #
     parser.add_argument(
         "--syn-obj-path",
@@ -465,17 +471,6 @@ def reap_args_parser(
         help="Whether to draw bbox in visualized images.",
     )
 
-    # TODO(deprecated): remove in the future
-    # parser.add_argument(
-    #     "--other-class-confidence-threshold",
-    #     type=float,
-    #     default=0,
-    #     help=(
-    #         "confidence threshold at which other labels are changed if there "
-    #         "is a match with a prediction"
-    #     ),
-    # )
-
     args = parser.parse_args()
 
     if args.exp_config_file:
@@ -514,7 +509,7 @@ def reap_args_parser(
                 continue
             try:
                 val = ast.literal_eval(tokens[1])
-            except ValueError:
+            except (ValueError, SyntaxError):
                 val = tokens[1]
             parent[param] = val
 
@@ -652,10 +647,11 @@ def _update_split_file(
     # Try to find split file in given dir
     split: str = "attack" if is_gen_patch else "test"
     if config_base["obj_class"] < 0:
-        return
+        default_filename: str = "all.txt"
+    else:
+        class_name: str = LABEL_LIST[dataset][config_base["obj_class"]]
+        default_filename: str = f"{class_name}_{split}.txt"
 
-    class_name: str = LABEL_LIST[dataset][config_base["obj_class"]]
-    default_filename: str = f"{class_name}_{split}.txt"
     split_file_path: pathlib.Path = split_file_dir / default_filename
     if split_file_path.is_file():
         print(f"Using split_file_path: {split_file_path}.")
@@ -720,9 +716,9 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
     dataset = config_base["dataset"]
     obj_dim_dict = OBJ_DIM_DICT[dataset]
     obj_class = config_base["obj_class"]
-    if obj_class < 0:
-        hw_ratio = 1.0
-    else:
+
+    hw_ratio = 1.0
+    if obj_class >= 0:
         hw_ratio = obj_dim_dict["hw_ratio"][obj_class]
         config_base["obj_size_mm"] = obj_dim_dict["size_mm"][obj_class]
 
@@ -843,13 +839,16 @@ def _update_save_dir(
             exp_name += name_from_cfg
         else:
             exp_name = name_from_cfg
-    exp_name = f"train_{exp_name}" if is_train else exp_name
+    exp_name = f"train_{exp_name}" if is_train else f"test_{exp_name}"
     config_base["name"] = exp_name
 
+    obj_class: int = config_base["obj_class"]
     if not is_train:
-        class_name = LABEL_LIST[config_base["dataset"]][
-            config_base["obj_class"]
-        ]
+        class_name = (
+            LABEL_LIST[config_base["dataset"]][obj_class]
+            if obj_class >= 0
+            else "all"
+        )
         save_dir = os.path.join(config_base["base_dir"], exp_name, class_name)
     else:
         save_dir = os.path.join(config_base["base_dir"], exp_name)

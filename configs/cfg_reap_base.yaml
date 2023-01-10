@@ -53,6 +53,7 @@ base:
   model_name: 'faster_rcnn'  # For naming purpose only
   weights: './detectron_output/faster_rcnn_R_50_FPN_mtsd_no_color_2/model_best.pth'
   conf_thres: 0.634  # Confidence score threshold to consider detection
+  use_per_class_conf_thres: True
 
   # Visualization
   num_vis: 10

@@ -10,7 +10,7 @@ https://github.com/yizhe-ang/detectron2-1/blob/master/detectron2_1/adv.py
 from __future__ import annotations
 
 import pathlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -51,10 +51,10 @@ class DetectronEvaluator:
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: dict[str, dict[str, Any]],
         model: torch.nn.Module,
         dataloader: Any,
-        class_names: List[str],
+        class_names: list[str],
         all_iou_thres: np.ndarray = _DEFAULT_IOU_THRESHOLDS,
     ) -> None:
         """Evaluator wrapper for detectron model.
@@ -66,7 +66,7 @@ class DetectronEvaluator:
             class_names: List of class names in string.
             all_iou_thres: Array of IoU thresholds for computing score.
         """
-        config_base = config["eval"]
+        config_base: dict[str, str | float | int] = config["base"]
         # General params
         self._dataset: str = config_base["dataset"]
         self._synthetic: bool = config_base["synthetic"]
@@ -78,16 +78,16 @@ class DetectronEvaluator:
         self._verbose: bool = config_base["verbose"]
 
         interp: str = config_base["interp"]
-        self._img_size: SizePx = config_base["img_size"]
+        self._img_size: SizePx = SizePx(config_base["img_size"])
         num_eval: int | None = config_base["num_eval"]
         self._num_eval: int | None = (
             len(dataloader) if num_eval is None else num_eval
         )
-        self._class_names: List[str] = class_names
+        self._class_names: list[str] = class_names
         self._obj_class: int = config_base["obj_class"]
 
         # Common keyword args for constructing RenderImage
-        self._rimg_kwargs: Dict[str, Any] = {
+        self._rimg_kwargs: dict[str, Any] = {
             "img_mode": self._input_format,
             "interp": interp,
             "img_aug_prob_geo": config_base["img_aug_prob_geo"],
@@ -114,10 +114,14 @@ class DetectronEvaluator:
         # Set up list of IoU thresholds to consider
         self._all_iou_thres = torch.from_numpy(all_iou_thres).to(self._device)
 
-        self._obj_size_px: SizePx = config_base["obj_size_px"]
-        self._obj_size_mm: SizeMM = config_base["obj_size_mm"]
+        self._obj_size_px: SizePx = SizePx(
+            config_base.get("obj_size_px", (0, 0))
+        )
+        self._obj_size_mm: SizeMM = SizePx(
+            config_base.get("obj_size_mm", (0.0, 0.0))
+        )
         self._robj_fn: render_object.RenderObject
-        self._robj_kwargs: Dict[str, Any]
+        self._robj_kwargs: dict[str, Any]
         robj_kwargs = {
             "obj_size_px": self._obj_size_px,
             "interp": interp,
@@ -145,7 +149,7 @@ class DetectronEvaluator:
         # Set up attack if applicable
         self._attack_type: str = config_base["attack_type"]
         self._use_attack: bool = self._attack_type != "none"
-        self._attack: Optional[base_attack.DetectorAttackModule] = None
+        self._attack: base_attack.DetectorAttackModule | None = None
         # Set up attack when running  "per-sign"
         if self._attack_type == "per-sign":
             self._attack = attack_util.setup_attack(
@@ -154,7 +158,9 @@ class DetectronEvaluator:
                 verbose=self._verbose,
             )
         self._adv_patch_path: str = config_base["adv_patch_path"]
-        self._patch_size_mm: SizePatch = config_base["patch_size_mm"]
+        self._patch_size_mm: SizePatch = SizePatch(
+            config_base.get("patch_size_mm", (0, 0.0, 0.0))
+        )
 
         # Visualization params
         self._num_vis: int = config_base.get("num_vis", 0)
@@ -218,15 +224,15 @@ class DetectronEvaluator:
         self.syn_scores[:, self._syn_idx] = scores
         self._syn_idx += 1
 
-    def run(self) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def run(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Runs evaluator and saves the prediction results.
 
         Returns:
             coco_instances_results: COCO-style predicted instance results.
             metrics: Dict of metrics.
         """
-        coco_instances_results: List[Dict[str, Any]] = []
-        metrics: Dict[str, Any] = {}
+        coco_instances_results: list[dict[str, Any]] = []
+        metrics: dict[str, Any] = {}
 
         # Prepare attack data
         adv_patch, patch_mask = attack_util.prep_adv_patch(
@@ -244,7 +250,7 @@ class DetectronEvaluator:
             patch_mask = patch_mask.to(self._device)
 
         total_num_images, total_num_patches, num_vis = 0, 0, 0
-        eval_img_ids: List[int] = []
+        eval_img_ids: list[int] = []
         self.evaluator.reset()
         self._reset_syn_metrics()
 
@@ -455,7 +461,7 @@ class DetectronEvaluator:
         self,
         images: ImageTensor,
         output_size: SizePx | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Simple inference on a single image.
 
         Args:

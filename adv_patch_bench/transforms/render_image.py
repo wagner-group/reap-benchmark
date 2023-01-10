@@ -34,7 +34,6 @@ class RenderImage:
         samples: list[dict[str, Any]],
         mode: str = "reap",
         obj_class: int | None = None,
-        # img_size: SizePx | None = None,
         img_mode: str = "BGR",
         interp: str = "bilinear",
         img_aug_prob_geo: float | None = None,
@@ -86,48 +85,59 @@ class RenderImage:
             "mtsd": mtsd_object.MtsdObject,
         }[mode]
 
+        if mode not in ("reap", "mtsd"):
+            raise NotImplementedError(
+                f"Only reap and mtsd modes are supported, but {mode} is given!"
+            )
+
         for i, sample in enumerate(samples):
             image: ImageTensor = sample["image"].float() / 255
             # image = self._resize_image(image)
             image = image.flip(0) if img_mode == "BGR" else image
             file_name = sample["file_name"].split("/")[-1]
             images.append(image.to(device))
-            sample["instances"] = sample["instances"].to(device)
 
-            if mode in ("reap", "mtsd"):
-                temp_num_objs = len(self.obj_classes)
-                for oid, obj in enumerate(sample["annotations"]):
-                    cat_id = obj["category_id"]
-                    wrong_class = cat_id == bg_class or (
-                        cat_id != obj_class and obj_class >= 0
-                    )
-                    if (mode == "reap" and not obj["has_reap"]) or wrong_class:
-                        continue
-                    if any(point[2] != 2 for point in obj["keypoints"]):
-                        continue
-                    self.obj_classes.append(cat_id)
-                    robj: RenderObject = self._robj_fn(
-                        obj_dict=obj,
-                        dataset=dataset,
-                        obj_class=obj["category_id"],
-                        device=device,
-                        image=image,
-                        **robj_kwargs,
-                    )
-                    robj.aggregate_params(self.tf_params)
-                    obj_to_img.append(i)
-                    self.obj_ids.append(f"{file_name}-{oid}")
-                if temp_num_objs == len(self.obj_classes):
-                    logger.warning(
-                        "No valid object is found in image %d/%d. Consider "
-                        "removing this image.",
-                        i,
-                        len(samples),
-                    )
-            else:
-                raise NotImplementedError(
-                    f"Only reap and mtsd modes are supported, but {mode} is "
-                    "given!"
+            temp_num_objs = len(self.obj_classes)
+            is_obj_kept = []
+            for oid, obj in enumerate(sample["annotations"]):
+                is_obj_kept.append(False)
+                cat_id = obj["category_id"]
+                wrong_class = cat_id == bg_class or (
+                    cat_id != obj_class and obj_class >= 0
+                )
+                # Skip obj of wrong class or has no REAP annotation in REAP mode
+                if (mode == "reap" and not obj["has_reap"]) or wrong_class:
+                    continue
+                if any(point[2] != 2 for point in obj["keypoints"]):
+                    continue
+                self.obj_classes.append(cat_id)
+                robj: RenderObject = self._robj_fn(
+                    obj_dict=obj,
+                    dataset=dataset,
+                    obj_class=obj["category_id"],
+                    device=device,
+                    image=image,
+                    **robj_kwargs,
+                )
+                robj.aggregate_params(self.tf_params)
+                obj_to_img.append(i)
+                self.obj_ids.append(f"{file_name}-{oid}")
+                is_obj_kept[-1] = True
+
+            # Filter objs in sample by oids
+            sample["instances"] = sample["instances"][is_obj_kept].to(device)
+            sample["annotations"] = [
+                anno
+                for anno, is_kept in zip(sample["annotations"], is_obj_kept)
+                if is_kept
+            ]
+
+            if temp_num_objs == len(self.obj_classes):
+                logger.warning(
+                    "No valid object is found in image %d/%d. Consider "
+                    "removing this image.",
+                    i,
+                    len(samples),
                 )
 
         self.images = torch.stack(images, dim=0).to(device, non_blocking=True)

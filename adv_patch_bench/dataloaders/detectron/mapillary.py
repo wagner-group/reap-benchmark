@@ -184,18 +184,6 @@ def get_mapillary_dict(
                             2,
                         )
                     )
-                # kp_xmin = min(keypoints[i] for i in [0, 3, 6, 9])
-                # kp_xmax = max(keypoints[i] for i in [0, 3, 6, 9])
-                # kp_ymin = min(keypoints[i] for i in [1, 4, 7, 10])
-                # kp_ymax = max(keypoints[i] for i in [1, 4, 7, 10])
-                # from detectron2.structures import Boxes
-                # from detectron2.structures.boxes import pairwise_iou
-                # import torch
-                # b1 = Boxes(torch.tensor([[kp_xmin, kp_ymin, kp_xmax, kp_ymax]]))
-                # b2 = Boxes(torch.tensor([[xmin, ymin, xmax, ymax]]))
-                # iou = pairwise_iou(b1, b2).item()
-                # if iou < 0.25:
-                #     print(iou, jpg_filename, obj_id)
                 assert len(keypoints) == _NUM_KEYPOINTS * 3 and all(
                     keypoints[i] == 2 for i in [2, 5, 8, 11]
                 )
@@ -207,7 +195,7 @@ def get_mapillary_dict(
             objs.append(obj)
 
         # Skip images with no object of interest
-        if len(objs) == 0:
+        if len(objs) == 0 or all(o["category_id"] == bg_class for o in objs):
             continue
 
         record["annotations"] = objs

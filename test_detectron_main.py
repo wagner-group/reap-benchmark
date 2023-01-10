@@ -11,6 +11,9 @@ import random
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+import pandas as pd
+import yaml
 from packaging import version
 
 # Calling subprocess.check_output() with python version 3.8.10 or lower will
@@ -30,10 +33,7 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
 
 # pylint: disable=wrong-import-position
 import detectron2
-import numpy as np
-import pandas as pd
 import torch
-import yaml
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
 from adv_patch_bench.evaluators import detectron_evaluator
@@ -63,6 +63,7 @@ _EVAL_PARAMS = [
     "model_name",
     "weights",
 ]
+_EPS = np.spacing(1)
 
 
 def _hash(obj: str) -> str:
@@ -85,14 +86,103 @@ def _normalize_dict(
     return flat_dict
 
 
+def _get_tp_fp_full(
+    scores_full: list[list[float]], conf_thres: float | list[float]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute true and false positives given scores and score threshold.
+
+    Args:
+        scores_full: List of list of scores. First axis is obj classes and
+            second is number of IoU thresholds.
+        conf_thres: Score threshold to consider a detection.
+
+    Returns:
+        True and false positives. Shape: [num_ious, num_classes].
+    """
+    num_classes = len(scores_full)
+    num_ious = len(scores_full[0])
+    tp_full = np.zeros((num_ious, num_classes))
+    fp_full = np.zeros_like(tp_full)
+    for i in range(num_ious):
+        for k in range(num_classes):
+            if isinstance(conf_thres, float):
+                thres = conf_thres
+            else:
+                thres = conf_thres[k]
+            tp_full[i, k] = np.sum(np.array(scores_full[k][i][0]) >= thres)
+            fp_full[i, k] = np.sum(np.array(scores_full[k][i][1]) >= thres)
+    return tp_full, fp_full
+
+
+def _compute_conf_thres(
+    scores_full: list[list[float]],
+    num_gts_per_class: np.ndarray,
+    other_sign_class: int,
+    iou_idx: int,
+    use_per_class_conf_thres: bool = True,
+):
+    num_scores = 1000
+    num_classes = len(scores_full)
+    num_ious = len(scores_full[0])
+    scores_thres = np.linspace(0, 1, num_scores)
+    tp_score_full = np.zeros((num_scores, num_ious, num_classes))
+    fp_score_full = np.zeros_like(tp_score_full)
+
+    # Get true and false positive at all values of score thres
+    for i, thres in enumerate(scores_thres):
+        tp_full, fp_full = _get_tp_fp_full(scores_full, thres)
+        tp_score_full[i] = tp_full
+        fp_score_full[i] = fp_full
+
+    # Compute f1 scores
+    recall = tp_score_full / (num_gts_per_class[None, None, :] + _EPS)
+    precision = tp_score_full / (tp_score_full + fp_score_full + _EPS)
+    f1_scores = 2 * precision * recall / (precision + recall + _EPS)
+    assert np.all(f1_scores >= 0) and not np.any(np.isnan(f1_scores))
+
+    if use_per_class_conf_thres:
+        # Remove 'other' class from f1 and select desired IoU thres
+        f1_scores[:, iou_idx, other_sign_class] -= 1e9
+        f1_score = f1_scores[:, iou_idx]
+        # Compute score thres per class
+        class_idx = np.arange(num_classes)
+        max_f1_idx = f1_score.argmax(0)
+        max_f1 = f1_score[max_f1_idx, class_idx]
+        tp = tp_score_full[max_f1_idx, iou_idx, class_idx]
+        fp = tp_score_full[max_f1_idx, iou_idx, class_idx]
+        conf_thres = np.take(scores_thres, max_f1_idx)
+
+        def array2str(array):
+            return np.array2string(array, separator=", ")
+
+        logger.info("max_f1_idx: %s", array2str(max_f1_idx))
+        logger.info("max_f1: %s", array2str(max_f1))
+        logger.info("conf_thres: %s", array2str(conf_thres))
+    else:
+        # Remove 'other' class from f1 and select desired IoU thres
+        f1_score = np.delete(f1_scores[:, iou_idx], other_sign_class, axis=1)
+        # Compute one score thres for all class (use mean f1 score)
+        f1_mean = f1_score.mean(2)
+        max_f1_idx = f1_mean.argmax()
+        max_f1 = f1_mean[max_f1_idx]
+        tp = tp_score_full[iou_idx, :, max_f1_idx]
+        fp = tp_score_full[iou_idx, :, max_f1_idx]
+        conf_thres = scores_thres[max_f1_idx]
+        logger.info("max_f1_idx: %d", max_f1_idx)
+        logger.info("max_f1: %.4f", max_f1)
+        logger.info("conf_thres: %.3f", conf_thres)
+    return tp, fp, conf_thres
+
+
 def _compute_metrics(
     scores_full: np.ndarray,
     num_gts_per_class: np.ndarray,
     other_sign_class: int,
     conf_thres: Optional[float] = None,
     iou_thres: float = 0.5,
+    use_per_class_conf_thres: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[float]]:
-
+    """Compute true positives, false positives, and score threshold."""
     all_iou_thres = np.linspace(
         0.5, 0.95, int(np.round((0.95 - 0.5) / 0.05)) + 1, endpoint=True
     )
@@ -102,74 +192,36 @@ def _compute_metrics(
         raise ValueError(f"Invalid iou_thres {iou_thres}!")
     iou_idx = int(iou_idx)
 
-    # Find score threshold that maximizes F1 score
-    eps = np.spacing(1)
-    num_classes = len(scores_full)
-    num_ious = len(scores_full[0])
-
     if conf_thres is None:
-        num_scores = 1000
-        scores_thres = np.linspace(0, 1, num_scores)
-        tp_full = np.zeros((num_ious, num_classes, num_scores))
-        fp_full = np.zeros_like(tp_full)
-
-        for t in range(num_ious):
-            for k in range(num_classes):
-                for si, s in enumerate(scores_thres):
-                    tp_full[t, k, si] = np.sum(
-                        np.array(scores_full[k][t][0]) >= s
-                    )
-                    fp_full[t, k, si] = np.sum(
-                        np.array(scores_full[k][t][1]) >= s
-                    )
-
-        rc = tp_full / (num_gts_per_class[None, :, None] + eps)
-        pr = tp_full / (tp_full + fp_full + eps)
-        f1 = 2 * pr * rc / (pr + rc + eps)
-        assert np.all(f1 >= 0) and not np.any(np.isnan(f1))
-
-        # Remove 'other' class from f1 and average over remaining classes
-        f1_mean = np.delete(f1[iou_idx], other_sign_class, axis=0).mean(0)
-        max_f1_idx = f1_mean.argmax()
-        max_f1 = f1_mean[max_f1_idx]
-        tp: np.ndarray = tp_full[iou_idx, :, max_f1_idx]
-        fp: np.ndarray = fp_full[iou_idx, :, max_f1_idx]
-        conf_thres = scores_thres[max_f1_idx]
-        logger.debug(
-            "max_f1_idx: %d, max_f1: %.4f, conf_thres: %.3f.",
-            max_f1_idx,
-            max_f1,
-            conf_thres,
+        # Find score threshold that maximizes F1 score
+        logger.info(
+            "conf_thres not specified. Finding one that maximizes F1 scores..."
+        )
+        tp, fp, conf_thres = _compute_conf_thres(
+            scores_full,
+            num_gts_per_class,
+            other_sign_class,
+            iou_idx,
+            use_per_class_conf_thres=use_per_class_conf_thres,
         )
     else:
-        logger.debug("Using specified conf_thres of %f...", conf_thres)
+        logger.info("Using specified conf_thres of %s...", str(conf_thres))
+        tp_full, fp_full = _get_tp_fp_full(scores_full, conf_thres)
+        tp = tp_full[iou_idx]
+        fp = fp_full[iou_idx]
 
-        tp_full = np.zeros((num_ious, num_classes))
-        fp_full = np.zeros_like(tp_full)
-
-        for t in range(num_ious):
-            for k in range(num_classes):
-                tp_full[t, k] = np.sum(
-                    np.array(scores_full[k][t][0]) >= conf_thres
-                )
-                fp_full[t, k] = np.sum(
-                    np.array(scores_full[k][t][1]) >= conf_thres
-                )
-        tp: np.ndarray = tp_full[iou_idx]
-        fp: np.ndarray = fp_full[iou_idx]
-
-    rc = tp / (num_gts_per_class + eps)
-    pr = tp / (tp + fp + eps)
+    recall = tp / (num_gts_per_class + _EPS)
+    precision = tp / (tp + fp + _EPS)
 
     # Compute combined metrics, ignoring class
-    recall_cmb = tp.sum() / (num_gts_per_class.sum() + eps)
+    recall_cmb = tp.sum() / (num_gts_per_class.sum() + _EPS)
 
-    logger.debug("num_gts_per_class: %s", str(num_gts_per_class))
-    logger.debug("tp: %s", str(tp))
-    logger.debug("fp: %s", str(fp))
-    logger.debug("precision: %s", str(pr))
-    logger.debug("recall: %s", str(rc))
-    logger.debug("recall_cmb: %s", str(recall_cmb))
+    logger.info("num_gts_per_class: %s", str(num_gts_per_class))
+    logger.info("tp: %s", str(tp))
+    logger.info("fp: %s", str(fp))
+    logger.info("precision: %s", str(precision))
+    logger.info("recall: %s", str(recall))
+    logger.info("recall_cmb: %s", str(recall_cmb))
 
     return tp, fp, conf_thres
 
@@ -285,6 +337,7 @@ def main() -> None:
             config_base["other_sign_class"],
             conf_thres,
             config_base["iou_thres"],
+            config_base["use_per_class_conf_thres"],
         )
         if config_base["conf_thres"] is None:
             # Update with new conf_thres
@@ -296,9 +349,7 @@ def main() -> None:
             logger.info("%s: %s", key, str(value))
 
         logger.info("          tp   fp   num_gt")
-        tp_all = 0
-        fp_all = 0
-        total = 0
+        tp_all, fp_all, total = 0, 0, 0
         for i, (t, f, num_gt) in enumerate(zip(tp, fp, num_gts_per_class)):
             logger.info(
                 "Class %2d: %4d %4d %4d", i, int(t), int(f), int(num_gt)
@@ -312,6 +363,7 @@ def main() -> None:
         metrics["FPR-all"] = fp_all / total
         logger.info("Total num patches: %d", metrics["total_num_patches"])
         _dump_results(results)
+        logger.info("Finished.")
 
 
 if __name__ == "__main__":
@@ -327,14 +379,13 @@ if __name__ == "__main__":
     log_level: int = (
         logging.DEBUG
         if config_base["debug"] or config_base["verbose"]
-        else logging.WARNING
+        else logging.INFO
     )
-    formatter = logging.Formatter(
-        "[%(asctime)s - %(name)s - %(levelname)s]: %(message)s"
-    )
+    FORMAT_STR = "[%(asctime)s - %(name)s - %(levelname)s]: %(message)s"
+    formatter = logging.Formatter(FORMAT_STR)
     logging.basicConfig(
         stream=sys.stdout,
-        format=formatter,
+        format=FORMAT_STR,
         level=log_level,
     )
     file_handler = logging.FileHandler(
@@ -348,6 +399,7 @@ if __name__ == "__main__":
     dt_log.setLevel(log_level)
     dt_log = logging.getLogger("fvcore")
     dt_log.setLevel(log_level)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
     # Set random seeds
     torch.random.manual_seed(seed)

@@ -119,6 +119,9 @@ class GradAttack(base_attack.DetectorAttackModule):
             beta = torch.zeros_like(rimg.tf_params["beta"])
             half_alpha = torch.ones_like(rimg.tf_params["beta"]) / 2
 
+        if not batch_mode:
+            patch_mask = patch_mask.expand(self._num_eot, -1, -1, -1)
+
         # Run PGD on inputs for specified number of steps
         for step in range(self._num_steps):
             # Randomly select RenderImages to attack this step
@@ -126,7 +129,7 @@ class GradAttack(base_attack.DetectorAttackModule):
                 bg_idx = torch.randperm(rimg.num_objs, device=z_delta.device)
                 bg_idx = bg_idx[: self._num_eot]
                 # DEBUG: Fix bg_idx to debug
-                # bg_idx = torch.zeros(1, device=z_delta.device, dtype=torch.long)
+                # bg_idx = torch.arange(self._num_eot, device=z_delta.device)
 
             if "pgd" in self._optimizer_name:
                 z_delta.detach_()
@@ -213,9 +216,10 @@ class GradAttack(base_attack.DetectorAttackModule):
                 )
             batch_size = len(patch_mask)
         else:
-            if "pgd" in self._optimizer_name and rimg.num_objs > 1:
-                # TODO(feature): We can allow this if alphas and betas are the
-                # same for all objects.
+            if "pgd" in self._optimizer_name and self._num_eot > 1:
+                # TODO(feature): We can allow this since PGD only takes signed
+                # grad so scaling with alphas does not change anything. Need to
+                # implement the aggregation.
                 raise ValueError(
                     "PGD optimizer cannot be used in non-batch mode with more "
                     f"than one obects ({rimg.num_objs}). PGD clipping should "
@@ -239,21 +243,15 @@ class GradAttack(base_attack.DetectorAttackModule):
                 if init_patch is not None:
                     z_delta[i] = self._to_opt_space(init_patch.to(device))
 
-            if not batch_mode:
-                z_delta = z_delta.expand(self._num_eot, -1, -1, -1)
-                patch_mask = patch_mask.expand(self._num_eot, -1, -1, -1)
-
             # Set up optimizer
             self._reset_run(z_delta)
+
             # Run attack once
+            # EventStorage is needed to compute losses in Detectron2
             with EventStorage():
                 delta = self._run_one(
                     rimg, z_delta, patch_mask, batch_mode=batch_mode
                 )
-
-        # DEBUG
-        # outt = non_max_suppression(out.detach(), conf_thres=0.25, iou_thres=0.45)
-        # plot_images(adv_img.detach(), output_to_target(outt))
 
         self._on_exit_attack()
         # Return worst-case perturbed input logits
@@ -309,9 +307,9 @@ class GradAttack(base_attack.DetectorAttackModule):
                 images = torch.maximum(images, beta)
                 images = torch.minimum(images, beta + 2 * half_alpha)
             return images
-        # from (-inf, +inf) to (-1, +1)
+        # Map from (-inf, +inf) to (-1, +1)
         images = torch.tanh(images)
-        # map from (-1, +1) to (low, high)
+        # Map from (-1, +1) to (low, high)
         # Need to copy images here since torch.tanh needs output to compute grad
         images = images * half_alpha
         images.add_(half_alpha).add_(beta)

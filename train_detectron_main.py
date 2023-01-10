@@ -281,7 +281,6 @@ def train(cfg, config, model, attack):
 
             loss_dict = model(data)
             losses = sum(loss_dict.values())
-            print(loss_dict)
             assert torch.isfinite(
                 losses
             ).all(), f"Loss diverges; Something went wrong\n{loss_dict}"

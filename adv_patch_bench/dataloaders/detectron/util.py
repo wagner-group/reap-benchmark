@@ -39,7 +39,7 @@ _LOAD_DATASET = {
 log = logging.getLogger(__name__)
 
 
-def _get_img_ids(dataset: str, obj_class: int) -> list[int]:
+def _get_img_ids(dataset: str, obj_class: int | None) -> list[int]:
     """Get ids of images that contain desired object class."""
     metadata = detectron2.data.MetadataCatalog.get(dataset)
     if not hasattr(metadata, "json_file"):
@@ -52,7 +52,11 @@ def _get_img_ids(dataset: str, obj_class: int) -> list[int]:
     json_file = PathManager.get_local_path(metadata.json_file)
     with contextlib.redirect_stdout(io.StringIO()):
         coco_api = COCO(json_file)
-    img_ids: list[int] = coco_api.getImgIds(catIds=[obj_class])
+
+    cat_ids = []
+    if obj_class is not None and obj_class >= 0:
+        cat_ids = [obj_class]
+    img_ids: list[int] = coco_api.getImgIds(catIds=cat_ids)
     return img_ids
 
 
