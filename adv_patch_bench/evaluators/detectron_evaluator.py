@@ -123,7 +123,6 @@ class DetectronEvaluator:
         self._robj_fn: render_object.RenderObject
         self._robj_kwargs: dict[str, Any]
         robj_kwargs = {
-            "dataset": self._dataset,
             "obj_size_px": self._obj_size_px,
             "interp": interp,
         }
@@ -173,6 +172,7 @@ class DetectronEvaluator:
         else:
             self._vis_conf_thres: float = config_base["conf_thres"]
         self._vis_show_bbox: bool = config_base["vis_show_bbox"]
+        self._vis_img_scale: float = 0.5
 
         # Variables for storing synthetic data results
         # syn_scores and syn_matches have shape [num_ious, num_eval]
@@ -273,48 +273,27 @@ class DetectronEvaluator:
             )
 
             if self._synthetic:
-                # Attacking synthetic signs
-                # TODO(synthetic)
-                # raise NotImplementedError()
-                # rimg.create_object(None, self._robj_fn, self._robj_kwargs)
-                # robj = rimg.get_object()
-                # robj.load_adv_patch(adv_patch=adv_patch, patch_mask=patch_mask)
-                # Image is used as background only so we can include any of
-                # them when evaluating synthetic signs.
                 num_objs = len(rimg.images)
-                total_num_patches += num_objs
-                repeat_size = (num_objs, 1, 1, 1)
-                cur_adv_patch, cur_patch_mask = None, None
-                if patch_mask is not None:
-                    cur_patch_mask = patch_mask.repeat(repeat_size)
-                if self._attack_type == "per-sign":
-                    cur_adv_patch = self._attack.run(
-                        rimg,
-                        cur_patch_mask,
-                        batch_mode=True,
-                    )
-                elif adv_patch is not None:
-                    cur_adv_patch = adv_patch.repeat(repeat_size)
-                # cur_adv_patch, cur_patch_mask = adv_patch, patch_mask
             elif rimg.num_objs > 0:
-                # Attacking REAP signs
-                total_num_patches += rimg.num_objs
-                repeat_size = (rimg.num_objs, 1, 1, 1)
-                cur_adv_patch, cur_patch_mask = None, None
-                if patch_mask is not None:
-                    cur_patch_mask = patch_mask.repeat(repeat_size)
-                if self._attack_type == "per-sign":
-                    cur_adv_patch = self._attack.run(
-                        rimg,
-                        cur_patch_mask,
-                        batch_mode=True,
-                    )
-                elif adv_patch is not None:
-                    cur_adv_patch = adv_patch.repeat(repeat_size)
-                # vis_name += "_" + "-".join(obj_ids)
+                num_objs = rimg.num_obj
             else:
                 # Skip image without any adversarial patch when attacking
                 continue
+
+            cur_adv_patch, cur_patch_mask = None, None
+            total_num_patches += num_objs
+            # Repeat patch and mask for each object in batch of images
+            repeat_size = (num_objs, 1, 1, 1)
+            if patch_mask is not None:
+                cur_patch_mask = patch_mask.repeat(repeat_size)
+            if self._attack_type == "per-sign":
+                cur_adv_patch = self._attack.run(
+                    rimg,
+                    cur_patch_mask,
+                    batch_mode=True,
+                )
+            elif adv_patch is not None:
+                cur_adv_patch = adv_patch.repeat(repeat_size)
 
             # Apply adversarial patch and convert to Detectron2 input format
             img_render, target_render = rimg.apply_objects(
@@ -384,17 +363,22 @@ class DetectronEvaluator:
             imgs_orig_np, targets_orig, outputs_orig, file_names
         ):
             # Visualize ground truth labels on original image
-            vis_orig = Visualizer(img_orig_np, self._metadata, scale=0.5)
+            vis_gt_orig = Visualizer(
+                img_orig_np, self._metadata, scale=self._vis_img_scale
+            )
             if self._vis_show_bbox:
-                im_gt_orig = vis_orig.draw_dataset_dict(target_orig)
+                im_gt_orig = vis_gt_orig.draw_dataset_dict(target_orig)
             else:
-                im_gt_orig = vis_orig.get_output()
+                im_gt_orig = vis_gt_orig.get_output()
             im_gt_orig.save(str(self._vis_save_dir / f"gt_orig_{name}.png"))
 
             # Visualize prediction on original image
+            vis_pred_orig = Visualizer(
+                img_orig_np, self._metadata, scale=self._vis_img_scale
+            )
             instances: structures.Instances = output_orig["instances"].to("cpu")
             # Set confidence threshold and visualize rendered image
-            im_pred_orig = vis_orig.draw_instance_predictions(
+            im_pred_orig = vis_pred_orig.draw_instance_predictions(
                 instances[instances.scores > self._vis_conf_thres]
             )
             im_pred_orig.save(str(self._vis_save_dir / f"pred_orig_{name}.png"))
@@ -408,25 +392,30 @@ class DetectronEvaluator:
         for img_render_np, target_render, output_render, name in zip(
             imgs_render_np, targets_render, outputs_render, file_names
         ):
-            vis_render = Visualizer(img_render_np, self._metadata, scale=0.5)
 
             if self._synthetic:
                 # Visualize ground truth on perturbed image
-                im_gt_render = vis_render.draw_dataset_dict(target_render)
+                vis_gt_render = Visualizer(
+                    img_render_np, self._metadata, scale=self._vis_img_scale
+                )
+                im_gt_render = vis_gt_render.draw_dataset_dict(target_render)
                 im_gt_render.save(
                     str(self._vis_save_dir / f"gt_render_{name}.png")
                 )
 
             # Visualize prediction on perturbed image
+            vis_pred_render = Visualizer(
+                img_render_np, self._metadata, scale=self._vis_img_scale
+            )
             instances: structures.Instances = output_render["instances"].to(
                 "cpu"
             )
             if self._vis_show_bbox:
-                im_pred_render = vis_render.draw_instance_predictions(
+                im_pred_render = vis_pred_render.draw_instance_predictions(
                     instances[instances.scores > self._vis_conf_thres]
                 )
             else:
-                im_pred_render = vis_render.get_output()
+                im_pred_render = vis_pred_render.get_output()
             im_pred_render.save(
                 str(self._vis_save_dir / f"pred_render_{name}.png")
             )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -31,13 +31,13 @@ class SynObject(render_object.RenderObject):
 
     def __init__(
         self,
-        img_size: SizePx = SizePx((1536, 2048)),
-        syn_obj_path: str = "./circle.png",
-        syn_rotate: Optional[float] = None,
-        syn_scale: Optional[float] = None,
-        syn_translate: Optional[float] = None,
-        syn_3d_dist: Optional[float] = None,
-        syn_colorjitter: Optional[float] = None,
+        img_size: SizePx | None = None,
+        syn_obj_path: str | None = None,
+        syn_rotate: float | None = None,
+        syn_scale: float | None = None,
+        syn_translate: float | None = None,
+        syn_3d_dist: float | None = None,
+        syn_colorjitter: float | None = None,
         **kwargs,
     ) -> None:
         """Initialize SynOject.
@@ -52,7 +52,11 @@ class SynObject(render_object.RenderObject):
             syn_3d_dist: _description_. Defaults to None.
             syn_colorjitter: _description_. Defaults to None.
         """
-        super().__init__(**kwargs)
+        super().__init__(dataset="synthetic", **kwargs)
+        if img_size is None:
+            raise ValueError("img_size must be specified for SynObject!")
+        if syn_obj_path is None:
+            raise ValueError("syn_obj_path must be specified for SynObject!")
         self._img_size: SizePx = img_size
 
         # Resize obj_mask to obj_size_px and pad to img_size
@@ -84,36 +88,6 @@ class SynObject(render_object.RenderObject):
         )
         self._geo_transform: TransformParamFn = transforms[0]
         self._light_transform: TransformFn = transforms[2]
-
-    # def _resize_patch(
-    #     self, patch_or_mask: _ImageOrMask, is_mask: bool
-    # ) -> _ImageOrMask:
-    #     """Resize adversarial patch or mask.
-
-    #     This function overrides _resize_patch() in RenderObject. For synthetic
-    #     object, we want to also pad patch and mask to self.img_size.
-
-    #     Args:
-    #         patch_or_mask: Adversarial patch or mask to resize.
-    #         is_mask: Whether patch_or_mask is mask.
-
-    #     Returns:
-    #         Resized patch_or_mask.
-    #     """
-    #     patch_or_mask: _ImageOrMask = img_util.coerce_rank(patch_or_mask, 3)
-    #     # Resize to obj_size_px and pad to img_size
-    #     patch_or_mask: _ImageOrMask = img_util.resize_and_pad(
-    #         patch_or_mask,
-    #         resize_size=self._obj_size_px,
-    #         pad_size=self._img_size,
-    #         is_binary=is_mask,
-    #         interp=self._interp,
-    #     )
-    #     assert patch_or_mask.shape[-2:] == self._img_size, (
-    #         f"Shapes of patch/mask ({patch_or_mask.shape}) and img_size "
-    #         f"({self._img_size}) do not match! Something went wrong."
-    #     )
-    #     return patch_or_mask
 
     def _resize_and_pad(self, obj: BatchImageTensor) -> BatchImageTensor:
         obj: BatchImageTensor = img_util.resize_and_pad(
@@ -298,8 +272,6 @@ def _modify_syn_target_one(
 
     # Copy target since we have to add a new object
     new_target = copy.deepcopy(target)
-    # instances: structures.Instances = target["instances"]
-    # new_target = {}
 
     # Create Boxes object in XYXY_ABS format
     y_min, x_min, h_obj, w_obj = bbox
@@ -310,10 +282,7 @@ def _modify_syn_target_one(
     new_instances.gt_boxes = structures.Boxes(tensor_bbox)
     new_instances.gt_classes = torch.tensor([obj_class])
 
-    # Concatenate new instance to existing one
-    # new_target["instances"] = structures.Instances.cat(
-    #     [instances, new_instances]
-    # )
+    # Assign new instance
     new_target["instances"] = new_instances
 
     # Also update annotations for visualization
@@ -322,7 +291,6 @@ def _modify_syn_target_one(
         "category_id": obj_class,
         "bbox_mode": target["annotations"][0]["bbox_mode"],
     }
-    # new_target["annotations"].append(new_anno)
     new_target["annotations"] = [new_anno]
 
     return new_target

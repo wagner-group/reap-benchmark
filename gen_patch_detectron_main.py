@@ -9,7 +9,10 @@ import random
 import sys
 from typing import Any
 
+import numpy as np
+import yaml
 from packaging import version
+from tqdm import tqdm
 
 # Calling subprocess.check_output() with python version 3.8.10 or lower will
 # raise NotADirectoryError. When torch calls this to call hipconfig, it does
@@ -28,13 +31,10 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
 
 # pylint: disable=wrong-import-position
 import detectron2
-import numpy as np
 import torch
 import torchvision
-import yaml
 from detectron2.data import MetadataCatalog
 from torch.backends import cudnn
-from tqdm import tqdm
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
 import adv_patch_bench.utils.argparse as args_util
@@ -95,7 +95,6 @@ def _collect_attack_rimgs(
             break
 
     rimg: render_image.RenderImage = render_image.RenderImage(
-        dataset="synthetic" if config_base["synthetic"] else "reap",
         samples=backgrounds,
         robj_kwargs=robj_kwargs,
         **rimg_kwargs,

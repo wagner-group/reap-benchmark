@@ -304,6 +304,9 @@ def main() -> None:
     conf_thres: float = config_base["conf_thres"]
 
     if config_base["synthetic"]:
+        obj_class: int = config["base"]["obj_class"]
+        if obj_class is None or obj_class < 0:
+            raise ValueError(f"Invalid obj_class value {obj_class}!")
         total_num_patches = metrics["total_num_patches"]
         syn_scores = metrics["syn_scores"]
         syn_matches = metrics["syn_matches"]
@@ -311,7 +314,7 @@ def main() -> None:
         iou_thres = config_base["iou_thres"]
 
         # Get detection for desired score and for all IoU thresholds
-        detected = (syn_scores >= conf_thres) * syn_matches
+        detected = (syn_scores >= conf_thres[obj_class]) * syn_matches
         # Select desired IoU threshold
         iou_thres_idx = int(np.where(all_iou_thres == iou_thres)[0])
         tp = detected[iou_thres_idx].sum()

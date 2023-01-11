@@ -102,8 +102,8 @@ class RenderImage:
             images.append(image.to(device))
 
             temp_num_objs = len(self.obj_classes)
-            is_obj_kept = []
-            # FIXME: 
+            # TODO(enhancement): These modes can be unified under one class
+            # method that takes in sample dict, i.e., create_obj_from_sample().
             if mode == "synthetic":
                 self.obj_classes.append(obj_class)
                 robj: RenderObject = self._robj_fn(
@@ -116,6 +116,7 @@ class RenderImage:
                 obj_to_img.append(i)
                 self.obj_ids.append(f"{file_name}-0")
             else:
+                is_obj_kept = []
                 for oid, obj in enumerate(sample["annotations"]):
                     is_obj_kept.append(False)
                     cat_id = obj["category_id"]
@@ -142,7 +143,9 @@ class RenderImage:
                     is_obj_kept[-1] = True
 
                 # Filter objs in sample by oids
-                sample["instances"] = sample["instances"][is_obj_kept].to(device)
+                sample["instances"] = sample["instances"][is_obj_kept].to(
+                    device
+                )
                 sample["annotations"] = [
                     anno
                     for anno, is_kept in zip(sample["annotations"], is_obj_kept)
