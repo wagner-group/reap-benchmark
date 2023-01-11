@@ -180,6 +180,8 @@ def main(args):
 
                 # Experiment setting identifier for matching clean and attack
                 obj_class = results["obj_class"]
+                if obj_class < 0:
+                    continue
                 synthetic = int(results["synthetic"])
                 attack_type = results["attack_type"]
                 is_attack = int(results["attack_type"] != "none")

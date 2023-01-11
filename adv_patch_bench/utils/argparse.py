@@ -192,6 +192,16 @@ def reap_args_parser(
         help="Object width in pixels (default: 0.1 * img_size).",
     )
     parser.add_argument(
+        "--syn-desired-fnr",
+        type=float,
+        default=None,
+        help=(
+            "If conf_thres is not specified, it will be computed such that "
+            "prediction achieves syn_desired_fnr. We use this method to get "
+            "conf_thres for synthetic data since we cannot compute FPR."
+        ),
+    )
+    parser.add_argument(
         "--syn-rotate",
         type=float,
         default=15,

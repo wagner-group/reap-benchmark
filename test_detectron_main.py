@@ -64,6 +64,7 @@ _EVAL_PARAMS = [
     "weights",
 ]
 _EPS = np.spacing(1)
+_NUM_SCORES = 1000
 
 
 def _hash(obj: str) -> str:
@@ -114,6 +115,27 @@ def _get_tp_fp_full(
     return tp_full, fp_full
 
 
+def _compute_conf_thres_syn(
+    scores: np.ndarray, desired_fnr: float = 0.05
+) -> float:
+    """Compute confidence score threshold for synthetic data.
+
+    Threshold is chosen such that FNR is equal to `desired_fnr`.
+
+    Args:
+        scores: Predicted class scores.
+        desired_fnr: Desired FNR to achieve. Defaults to 0.05.
+
+    Returns:
+        Confidence score threshold.
+    """
+    scores_thres = np.linspace(0, 1, _NUM_SCORES)
+    fnrs = (scores_thres[:, None] > scores[0, None]).mean(1)
+    score_idx = np.where(fnrs < desired_fnr)[0][-1]
+    # Round to 3 digits
+    return scores_thres[score_idx].round(3)
+
+
 def _compute_conf_thres(
     scores_full: list[list[float]],
     num_gts_per_class: np.ndarray,
@@ -121,11 +143,10 @@ def _compute_conf_thres(
     iou_idx: int,
     use_per_class_conf_thres: bool = True,
 ):
-    num_scores = 1000
     num_classes = len(scores_full)
     num_ious = len(scores_full[0])
-    scores_thres = np.linspace(0, 1, num_scores)
-    tp_score_full = np.zeros((num_scores, num_ious, num_classes))
+    scores_thres = np.linspace(0, 1, _NUM_SCORES)
+    tp_score_full = np.zeros((_NUM_SCORES, num_ious, num_classes))
     fp_score_full = np.zeros_like(tp_score_full)
 
     # Get true and false positive at all values of score thres
@@ -307,16 +328,28 @@ def main() -> None:
         obj_class: int = config["base"]["obj_class"]
         if obj_class is None or obj_class < 0:
             raise ValueError(f"Invalid obj_class value {obj_class}!")
+        iou_thres_idx = int(
+            np.where(metrics["all_iou_thres"] == config_base["iou_thres"])[0]
+        )
         total_num_patches = metrics["total_num_patches"]
         syn_scores = metrics["syn_scores"]
         syn_matches = metrics["syn_matches"]
-        all_iou_thres = metrics["all_iou_thres"]
-        iou_thres = config_base["iou_thres"]
+
+        if conf_thres is None:
+            # Compute conf_thres for synthetic data using desired FNR
+            desired_fnr = config["base"]["syn_desired_fnr"]
+            if isinstance(desired_fnr, (list, tuple)):
+                desired_fnr = desired_fnr[obj_class]
+            conf_thres = _compute_conf_thres_syn(
+                (syn_scores * syn_matches)[iou_thres_idx],
+                desired_fnr=desired_fnr,
+            )
+        if isinstance(conf_thres, (list, tuple)):
+            conf_thres = conf_thres[obj_class]
 
         # Get detection for desired score and for all IoU thresholds
-        detected = (syn_scores >= conf_thres[obj_class]) * syn_matches
+        detected = (syn_scores >= conf_thres) * syn_matches
         # Select desired IoU threshold
-        iou_thres_idx = int(np.where(all_iou_thres == iou_thres)[0])
         tp = detected[iou_thres_idx].sum()
         fn = total_num_patches - tp
         metrics["syn_total"] = total_num_patches
@@ -403,6 +436,7 @@ if __name__ == "__main__":
     dt_log = logging.getLogger("fvcore")
     dt_log.setLevel(log_level)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
 
     # Set random seeds
     torch.random.manual_seed(seed)

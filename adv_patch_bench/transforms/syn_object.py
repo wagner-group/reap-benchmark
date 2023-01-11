@@ -166,6 +166,10 @@ class SynObject(render_object.RenderObject):
         geo_transform = tf_params["geo_transform"]
         resize_and_pad = tf_params["resize_and_pad"]
 
+        # FIXME: patch aug
+        # if not suppress_aug:
+        #     aug_geo, _, aug_light = tf_params["obj_transforms"]
+
         if adv_patch is None or patch_mask is None:
             adv_obj: BatchImageTensor = syn_obj
         else:

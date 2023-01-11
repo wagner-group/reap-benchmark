@@ -275,7 +275,7 @@ class DetectronEvaluator:
             if self._synthetic:
                 num_objs = len(rimg.images)
             elif rimg.num_objs > 0:
-                num_objs = rimg.num_obj
+                num_objs = rimg.num_objs
             else:
                 # Skip image without any adversarial patch when attacking
                 continue
