@@ -9,6 +9,7 @@ import os
 import pickle
 import random
 import sys
+import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -41,6 +42,8 @@ from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
 from hparams import LABEL_LIST
 
 logger = logging.getLogger(__name__)
+# This is to ignore a warning from detectron2/structures/keypoints.py:29
+warnings.filterwarnings("ignore", category=UserWarning)
 
 _EVAL_PARAMS = [
     "conf_thres",
@@ -129,11 +132,18 @@ def _compute_conf_thres_syn(
     Returns:
         Confidence score threshold.
     """
+    logger.info(
+        "Computing confidence score threshold for synthetic data to achieve "
+        "FNR of %.3f...",
+        desired_fnr,
+    )
     scores_thres = np.linspace(0, 1, _NUM_SCORES)
-    fnrs = (scores_thres[:, None] > scores[0, None]).mean(1)
+    fnrs = (scores_thres[:, None] > scores[None]).mean(1)
     score_idx = np.where(fnrs < desired_fnr)[0][-1]
     # Round to 3 digits
-    return scores_thres[score_idx].round(3)
+    conf_score = scores_thres[score_idx].round(3)
+    logger.info("Obtained confidence score threshold: %.3f", conf_score)
+    return conf_score
 
 
 def _compute_conf_thres(

@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import warnings
 from collections import OrderedDict
 from typing import Any
 
@@ -29,7 +30,6 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
     subprocess.check_output = _hacky_subprocess_fix
 
 # pylint: disable=wrong-import-position
-import detectron2
 import torch
 import torchvision
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
@@ -63,6 +63,8 @@ from adv_patch_bench.utils.types import BatchImageTensor
 
 _EPS = 1e-6
 logger = logging.getLogger(__name__)
+# This is to ignore a warning from detectron2/structures/keypoints.py:29
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def _get_sampler(cfg):
@@ -131,10 +133,6 @@ def train(cfg, config, model, attack):
     resume: bool = config_base["resume"]
     use_attack: bool = config_base["attack_type"] != "none"
     train_dataset = cfg.DATASETS.TRAIN[0]
-    class_names = detectron2.data.MetadataCatalog.get(train_dataset).get(
-        "thing_classes"
-    )
-    bg_class: int = len(class_names) - 1
 
     rimg_kwargs: dict[str, Any] = {
         "img_mode": cfg.INPUT.FORMAT,
@@ -143,7 +141,6 @@ def train(cfg, config, model, attack):
         "device": model.device,
         "obj_class": config_base["obj_class"],
         "mode": "mtsd",
-        "bg_class": bg_class,
     }
     robj_kwargs = {
         "obj_size_px": config_base["obj_size_px"],
@@ -227,7 +224,6 @@ def train(cfg, config, model, attack):
             if use_attack:
                 # Create image wrapper that handles tranforms
                 rimg: RenderImage = RenderImage(
-                    dataset=cfg.DATASETS.TRAIN[0],
                     samples=data,
                     robj_kwargs=robj_kwargs,
                     **rimg_kwargs,

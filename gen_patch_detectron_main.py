@@ -7,6 +7,7 @@ import pathlib
 import pickle
 import random
 import sys
+import warnings
 from typing import Any
 
 import numpy as np
@@ -50,6 +51,8 @@ from adv_patch_bench.utils.types import (
 from hparams import MAPILLARY_IMG_COUNTS_DICT
 
 logger = logging.getLogger(__name__)
+# This is to ignore a warning from detectron2/structures/keypoints.py:29
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def _collect_attack_rimgs(

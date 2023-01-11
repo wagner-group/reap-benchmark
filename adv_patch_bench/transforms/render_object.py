@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import torch
 from detectron2.data import MetadataCatalog
 
 import adv_patch_bench.utils.image as img_util
@@ -99,6 +100,22 @@ class RenderObject:
             interp=interp,
         )
         return transforms
+
+    @staticmethod
+    def clip_zero_one(tensor: torch.Tensor) -> torch.Tensor:
+        """Clip tensor to [0, 1] range.
+
+        Args:
+            tensor: Tensor to clip.
+
+        Returns:
+            Clipped tensor.
+        """
+        if tensor.is_leaf:
+            tensor = tensor.clamp(0, 1)
+        else:
+            tensor.clamp_(0, 1)
+        return tensor
 
     def _get_obj_mask(
         self, use_box_mode: bool = False

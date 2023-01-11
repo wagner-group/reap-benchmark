@@ -16,20 +16,7 @@ _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 _NUM_IOU_THRES = 10
 BASE_PATH = "./results/"
 # CONF_THRES = 0.634  # FIXME
-CONF_THRES = [
-    0.45545546,
-    0.74174174,
-    0.97697698,
-    0.37237237,
-    0.18418418,
-    0.75475475,
-    0.83583584,
-    0.84984985,
-    0.78078078,
-    0.66866867,
-    0.65665666,
-    0.0,
-]
+CONF_THRES = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [

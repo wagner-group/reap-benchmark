@@ -162,41 +162,48 @@ class SynObject(render_object.RenderObject):
         syn_obj: BatchImageTensor = tf_params["syn_obj"]
         obj_mask: BatchMaskTensor = tf_params["obj_mask"]
         obj_class: torch.Tensor = tf_params["obj_class"]
-        light_transform = tf_params["light_transform"]
-        geo_transform = tf_params["geo_transform"]
         resize_and_pad = tf_params["resize_and_pad"]
 
-        # FIXME: patch aug
-        # if not suppress_aug:
-        #     aug_geo, _, aug_light = tf_params["obj_transforms"]
+        aug_geo, aug_light = tf_util.identity, tf_util.identity
+        geo_transform, light_transform = tf_util.identity, tf_util.identity
+        if not suppress_aug:
+            # Augmentation for patch only
+            aug_geo, _, aug_light = tf_params["obj_transforms"]
+            # Augmentation for entire object
+            light_transform = tf_params["light_transform"]
+            geo_transform = tf_params["geo_transform"]
 
+        adv_obj: BatchImageTensor
         if adv_patch is None or patch_mask is None:
-            adv_obj: BatchImageTensor = syn_obj
+            # No adv patch/mask given
+            adv_obj = syn_obj
         else:
+            # Apply lighting transform to patch only
+            adv_patch = aug_light(adv_patch)
+            adv_patch = render_object.RenderObject.clip_zero_one(adv_patch)
             # Resize patch and its mask to full image size
             adv_patch = resize_and_pad(adv_patch)
             patch_mask = resize_and_pad(patch_mask)
-            # Apply lighting transform
-            if not suppress_aug:
-                adv_patch = light_transform(adv_patch)
-                if adv_patch.is_leaf:
-                    adv_patch = adv_patch.clamp(0, 1)
-                else:
-                    adv_patch.clamp_(0, 1)
-            adv_obj: BatchImageTensor = (
-                patch_mask * adv_patch + (1 - patch_mask) * syn_obj
-            )
+            # Apply geometric transform to patch only
+            rgba_patch = torch.cat([adv_patch, patch_mask], dim=1)
+            rgba_patch = aug_geo(rgba_patch)
+            rgba_patch = render_object.RenderObject.clip_zero_one(rgba_patch)
+            patch_mask = rgba_patch[:, -1:, :, :]
+            adv_patch = rgba_patch[:, :-1, :, :]
+            # Place patch on synthetic object
+            adv_obj = patch_mask * adv_patch + (1 - patch_mask) * syn_obj
 
-        # TODO(feature): Add augmentation for the sign
+        # Apply lighting transform on entire object
+        adv_obj = light_transform(adv_obj)
+        adv_obj = render_object.RenderObject.clip_zero_one(adv_obj)
 
         rgba_adv_obj: BatchImageTensorRGBA = torch.cat(
             [adv_obj, obj_mask], dim=1
         )
 
         # Apply geometric transform on syn obj together with patch
-        if not suppress_aug:
-            rgba_adv_obj = geo_transform(rgba_adv_obj)
-        rgba_adv_obj.clamp_(0, 1)
+        rgba_adv_obj = geo_transform(rgba_adv_obj)
+        rgba_adv_obj = render_object.RenderObject.clip_zero_one(rgba_adv_obj)
 
         # Place transformed syn obj to image
         obj_mask = rgba_adv_obj[:, -1:, :, :]
@@ -205,12 +212,6 @@ class SynObject(render_object.RenderObject):
 
         # Modify target to account for applied syn object
         targets: Target = _modify_syn_target(targets, obj_class, obj_mask)
-
-        # DEBUG
-        # import torchvision
-        # torchvision.utils.save_image(adv_img, "temp.png")
-        # import pdb
-        # pdb.set_trace()
 
         return adv_img, targets
 
