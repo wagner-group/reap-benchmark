@@ -1,0 +1,125 @@
+[01/07 06:13:28] detectron2 INFO: Rank of current process: 0. World size: 1
+[01/07 06:13:31] detectron2 INFO: Environment info:
+----------------------  --------------------------------------------------------------------------------------------------------------
+sys.platform            linux
+Python                  3.8.15 (default, Nov 24 2022, 15:19:38) [GCC 11.2.0]
+numpy                   1.24.0rc2
+detectron2              0.6 @/home/chawins/miniconda3/envs/reap-python3.8/lib/python3.8/site-packages/detectron2
+Compiler                GCC 9.4
+CUDA compiler           CUDA 11.8
+detectron2 arch flags   8.6
+DETECTRON2_ENV_MODULE   <not set>
+PyTorch                 2.0.0.dev20221214+cu117 @/home/chawins/miniconda3/envs/reap-python3.8/lib/python3.8/site-packages/torch
+PyTorch debug build     False
+GPU available           Yes
+GPU 0                   NVIDIA RTX A5000 (arch=8.6)
+Driver version          520.61.05
+CUDA_HOME               /home/chawins/miniconda3/envs/reap-python3.9/
+Pillow                  9.3.0
+torchvision             0.15.0.dev20221214+cu117 @/home/chawins/miniconda3/envs/reap-python3.8/lib/python3.8/site-packages/torchvision
+torchvision arch flags  3.5, 5.0, 6.0, 7.0, 7.5, 8.0, 8.6
+fvcore                  0.1.5.post20221213
+iopath                  0.1.9
+cv2                     4.6.0
+----------------------  --------------------------------------------------------------------------------------------------------------
+PyTorch built with:
+  - GCC 9.3
+  - C++ Version: 201703
+  - Intel(R) Math Kernel Library Version 2020.0.0 Product Build 20191122 for Intel(R) 64 architecture applications
+  - Intel(R) MKL-DNN v2.7.2 (Git Hash fbec3e25a559ee252022ae066817b204e106a6ba)
+  - OpenMP 201511 (a.k.a. OpenMP 4.5)
+  - LAPACK is enabled (usually provided by MKL)
+  - NNPACK is enabled
+  - CPU capability usage: AVX2
+  - CUDA Runtime 11.7
+  - NVCC architecture flags: -gencode;arch=compute_37,code=sm_37;-gencode;arch=compute_50,code=sm_50;-gencode;arch=compute_60,code=sm_60;-gencode;arch=compute_70,code=sm_70;-gencode;arch=compute_75,code=sm_75;-gencode;arch=compute_80,code=sm_80;-gencode;arch=compute_86,code=sm_86
+  - CuDNN 8.5
+  - Magma 2.6.1
+  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, CUDA_VERSION=11.7, CUDNN_VERSION=8.5.0, CXX_COMPILER=/opt/rh/devtoolset-9/root/usr/bin/c++, CXX_FLAGS= -fabi-version=11 -Wno-deprecated -fvisibility-inlines-hidden -DUSE_PTHREADPOOL -fopenmp -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOROCTRACER -DUSE_FBGEMM -DUSE_QNNPACK -DUSE_PYTORCH_QNNPACK -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE -DEDGE_PROFILER_USE_KINETO -O2 -fPIC -Wall -Wextra -Werror=return-type -Werror=non-virtual-dtor -Wnarrowing -Wno-missing-field-initializers -Wno-type-limits -Wno-array-bounds -Wno-unknown-pragmas -Wunused-local-typedefs -Wno-unused-parameter -Wno-unused-function -Wno-unused-result -Wno-strict-overflow -Wno-strict-aliasing -Wno-error=deprecated-declarations -Wno-stringop-overflow -Wno-psabi -Wno-error=pedantic -Wno-error=redundant-decls -Wno-error=old-style-cast -fdiagnostics-color=always -faligned-new -Wno-unused-but-set-variable -Wno-maybe-uninitialized -fno-math-errno -fno-trapping-math -Werror=format -Werror=cast-function-type -Wno-stringop-overflow, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, PERF_WITH_AVX512=1, TORCH_DISABLE_GPU_ASSERTS=ON, TORCH_VERSION=2.0.0, USE_CUDA=ON, USE_CUDNN=ON, USE_EXCEPTION_PTR=1, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=1, USE_NNPACK=ON, USE_OPENMP=ON, USE_ROCM=OFF, 
+
+[01/07 06:13:31] detectron2 INFO: Command line arguments: Namespace(config_file='./configs/yolov6s.yaml', dist_url='tcp://127.0.0.1:50152', eval_only=False, machine_rank=0, num_gpus=1, num_machines=1, opts=[], resume=False)
+[01/07 06:13:31] detectron2 INFO: Contents of args.config_file=./configs/yolov6s.yaml:
+_BASE_: "./Base-YOLOv7.yaml"
+MODEL:
+  PIXEL_MEAN: [0.485, 0.456, 0.406] # same value as PP-YOLOv2, RGB order
+  PIXEL_STD: [0.229, 0.224, 0.225]
+
+  WEIGHTS: ""
+  MASK_ON: False
+  META_ARCHITECTURE: "YOLOV6"
+  BACKBONE:
+    NAME: "build_efficientrep_backbone"
+    OUT_FEATURES: ["stride8", "stride16", "stride32"]
+
+  YOLO:
+    CLASSES: 80
+    IN_FEATURES: ["stride8", "stride16", "stride32"]
+    CONF_THRESHOLD: 0.001
+    NMS_THRESHOLD: 0.65
+    IGNORE_THRESHOLD: 0.7
+    WIDTH_MUL: 0.50
+    DEPTH_MUL: 0.33
+    LOSS:
+      LAMBDA_IOU: 1.5
+    HEAD:
+      TYPE: "yolov6"
+    NECK:
+      TYPE: "reppan"
+
+DATASETS:
+  TRAIN: ("coco_2017_train",)
+  TEST: ("coco_2017_val",)
+
+INPUT:
+  # FORMAT: "RGB" # using BGR default
+  MIN_SIZE_TRAIN: (2048, )
+  MAX_SIZE_TRAIN: 2048 # force max size train to 800?
+  MIN_SIZE_TEST: 2048
+  MAX_SIZE_TEST: 2048
+  # open all augmentations
+  JITTER_CROP:
+    ENABLED: False
+  RESIZE:
+    ENABLED: False
+    # SHAPE: (540, 960)
+  DISTORTION:
+    ENABLED: False  # EDIT: True
+  COLOR_JITTER:
+    BRIGHTNESS: True
+    SATURATION: True
+  # MOSAIC:
+  #   ENABLED: True
+  #   NUM_IMAGES: 4
+  #   DEBUG_VIS: True
+  #   # MOSAIC_WIDTH: 960
+  #   # MOSAIC_HEIGHT: 540
+  MOSAIC_AND_MIXUP:
+    ENABLED: False  # EDIT: True
+    # ENABLED: False
+    DEBUG_VIS: False
+    ENABLE_MIXUP: False
+    DISABLE_AT_ITER: 120000
+
+SOLVER:
+  AMP:
+    # enable fp16 training
+    ENABLED: False  # EDIT: True
+  IMS_PER_BATCH: 80
+  BASE_LR: 0.02
+  STEPS: (60000, 80000)
+  WARMUP_FACTOR: 0.00033333
+  WARMUP_ITERS: 1200
+  MAX_ITER: 230000
+  LR_SCHEDULER_NAME: "WarmupCosineLR"
+
+TEST:
+  EVAL_PERIOD: 10000
+VIS_PERIOD: 5000
+
+DATALOADER:
+  # proposals are part of the dataset_dicts, and take a lot of RAM
+  NUM_WORKERS: 3
+[01/07 06:13:31] detectron2 INFO: Running with full config was omitted.
+[01/07 06:13:31] detectron2 INFO: Full config saved to ./output/config.yaml
+[01/07 06:13:31] d2.utils.env INFO: Using a generated random seed 33065040
+[01/07 06:13:31] d2.engine.defaults INFO: Auto-scaling the config to batch_size=10, learning_rate=0.0025, max_iter=1840000, warmup=9600.

@@ -8,7 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from hparams import (MIN_OBJ_AREA, PATH_APB_ANNO, PATH_MTSD_BASE,
-                     PATH_SIMILAR_FILES, TS_COLOR_DICT, TS_COLOR_OFFSET_DICT,
+                     PATH_DUPLICATE_FILES, TS_COLOR_DICT, TS_COLOR_OFFSET_DICT,
                      OTHER_SIGN_CLASS)
 
 
@@ -24,7 +24,7 @@ use_color = False
 
 path = PATH_MTSD_BASE
 csv_path = PATH_APB_ANNO
-similarity_df_csv_path = PATH_SIMILAR_FILES
+similarity_df_csv_path = PATH_DUPLICATE_FILES
 anno_path = join(path, 'annotations')
 
 if use_mtsd_original_labels:

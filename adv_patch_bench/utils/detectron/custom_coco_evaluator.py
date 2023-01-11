@@ -15,7 +15,6 @@ import detectron2.utils.comm as comm
 import numpy as np
 import pycocotools.mask as mask_util
 import torch
-from adv_patch_bench.utils.detectron.custom_cocoeval import COCOeval
 from detectron2.config import CfgNode, global_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.data.datasets.coco import convert_to_coco_json
@@ -26,6 +25,8 @@ from detectron2.utils.file_io import PathManager
 from detectron2.utils.logger import create_small_table
 from pycocotools.coco import COCO
 from tabulate import tabulate
+
+from adv_patch_bench.utils.detectron.custom_cocoeval import COCOeval
 
 
 class CustomCOCOEvaluator(DatasetEvaluator):

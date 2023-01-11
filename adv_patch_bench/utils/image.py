@@ -1,13 +1,16 @@
 """Utility file for manipulating and preprocessing images."""
 
+from __future__ import annotations
+
 import json
 import os
 from os.path import join
-from typing import Optional, Tuple, Union
+from typing import Tuple, Union
 
 import numpy as np
 import torch
 import torchvision.transforms.functional as T
+
 from adv_patch_bench.utils.types import ImageTensorGeneric, SizePx
 
 _PadSize = Tuple[int, int, int, int]
@@ -58,12 +61,14 @@ def mask_to_box(mask):
 
 
 def resize_and_pad(
-    obj: ImageTensorGeneric,
-    resize_size: Optional[SizePx] = None,
-    pad_size: Optional[SizePx] = None,
+    obj: ImageTensorGeneric | None = None,
+    orig_size: SizePx | None = None,
+    resize_size: SizePx | None = None,
+    pad_size: SizePx | None = None,
     is_binary: bool = False,
     interp: str = "bilinear",
-    return_padding: bool = False,
+    return_params: bool = False,
+    keep_aspect_ratio: bool = True,
 ) -> Union[ImageTensorGeneric, Tuple[ImageTensorGeneric, _PadSize]]:
     """Resize obj to resize_size and then pad_size it to pad_size.
 
@@ -81,10 +86,14 @@ def resize_and_pad(
         NotImplementedError: Invalid interpolation mode.
 
     Returns:
-        Resized and padded obj. If return_padding is True, additionally return
-        padding size.
+        Resized and padded obj. If return_params is True, additionally return
+        scales (height, width) and padding size (left, top, right, bottom).
     """
-    if resize_size is not None and resize_size != obj.shape[-2:]:
+    if obj is not None:
+        orig_size = obj.shape[-2:]
+
+    scales = (1, 1)
+    if resize_size is not None:
         if is_binary or interp == "nearest":
             interp = T.InterpolationMode.NEAREST
         elif interp == "bicubic":
@@ -93,10 +102,26 @@ def resize_and_pad(
             interp = T.InterpolationMode.BILINEAR
         else:
             raise NotImplementedError(f"Interp {interp} not supported!")
-        obj = T.resize(obj, resize_size, interpolation=interp)
+
+        if keep_aspect_ratio:
+            scale_height = resize_size[0] / orig_size[0]
+            scale_width = resize_size[1] / orig_size[1]
+            scale = min(scale_height, scale_width)
+            resize_size = (
+                round(scale * orig_size[0]),
+                round(scale * orig_size[1]),
+            )
+        scales = (resize_size[0] / orig_size[0], resize_size[1] / orig_size[1])
+
+        if obj is not None and resize_size != obj.shape[-2:]:
+            obj = T.resize(obj, resize_size, interpolation=interp)
     else:
+        resize_size = orig_size
+
+    if obj is not None:
         resize_size = obj.shape[-2:]
 
+    padding = (0, 0, 0, 0)
     if pad_size is not None and resize_size != pad_size:
         # Compute pad size that centers obj
         top: int = (pad_size[0] - resize_size[0]) // 2
@@ -107,12 +132,11 @@ def resize_and_pad(
             max(0, pad_size[1] - resize_size[1] - left),  # right
             max(0, pad_size[0] - resize_size[0] - top),  # bottom
         )
-        obj = T.pad(obj, padding)
-    else:
-        padding = (0, 0, 0, 0)
+        if obj is not None:
+            obj = T.pad(obj, padding)
 
-    if return_padding:
-        return obj, padding
+    if return_params:
+        return obj, scales, padding
     return obj
 
 

@@ -14,8 +14,9 @@ _DATASET = "reap"
 _NUM_CLASSES = len(LABEL_LIST[_DATASET]) - 1
 _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 _NUM_IOU_THRES = 10
-BASE_PATH = "./detectron_output/"
-CONF_THRES = 0.634
+BASE_PATH = "./results/"
+# CONF_THRES = 0.634  # FIXME
+CONF_THRES = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -31,7 +32,9 @@ _TRANSFORM_PARAMS: List[str] = [
 ]
 
 
-def _compute_ap_recall(scores, matched, NP, recall_thresholds=None):
+def _compute_ap_recall(
+    scores, matched, NP, conf_thres=None, recall_thresholds=None
+):
     """Compute AP, precision, and recall.
 
     This curve tracing method has some quirks that do not appear
@@ -65,7 +68,9 @@ def _compute_ap_recall(scores, matched, NP, recall_thresholds=None):
     # get interpolated precision values at the evaluation thresholds
     i_pr = np.array([i_pr[r] if r < len(i_pr) else 0 for r in rec_idx])
 
-    score_idx = np.where(scores >= CONF_THRES)[0][-1]
+    score_idx = None
+    if conf_thres is not None:
+        score_idx = np.where(scores >= conf_thres)[0][-1]
 
     return {
         "precision": pr[score_idx],
@@ -162,6 +167,8 @@ def main(args):
 
                 # Experiment setting identifier for matching clean and attack
                 obj_class = results["obj_class"]
+                if obj_class < 0:
+                    continue
                 synthetic = int(results["synthetic"])
                 attack_type = results["attack_type"]
                 is_attack = int(results["attack_type"] != "none")
@@ -207,7 +214,7 @@ def main(args):
                     continue
                 scores_dict[sid] = scores
 
-                tp = np.sum(scores[iou_idx] >= CONF_THRES)
+                tp = np.sum(scores[iou_idx] >= CONF_THRES[obj_class])
                 class_name = LABEL_LIST[_DATASET][obj_class]
                 tpr = tp / num_gts
                 metrics[f"FNR-{class_name}"] = 1 - tpr
@@ -227,7 +234,12 @@ def main(args):
                     matches = np.zeros_like(scores, dtype=bool)
                     num_matched = len(scores_tp)
                     matches[:num_matched] = 1
-                    outputs = _compute_ap_recall(scores, matches, num_gts)
+                    outputs = _compute_ap_recall(
+                        scores,
+                        matches,
+                        num_gts,
+                        conf_thres=CONF_THRES[obj_class],
+                    )
                     # FIXME: precision can't be weighted average
                     print_df_rows[sid]["Precision"] = outputs["precision"] * 100
                     print_df_rows[sid]["Recall"] = outputs["recall"] * 100
@@ -291,8 +303,8 @@ def main(args):
             continue
 
         clean_scores = gt_scores[0][clean_sid]
-        clean_detected = clean_scores[iou_idx] >= CONF_THRES
-        adv_detected = adv_scores[iou_idx] >= CONF_THRES
+        clean_detected = clean_scores[iou_idx] >= CONF_THRES[k]
+        adv_detected = adv_scores[iou_idx] >= CONF_THRES[k]
         total = clean_scores.shape[1]
 
         num_succeed = np.sum(~adv_detected & clean_detected)
@@ -341,17 +353,17 @@ def main(args):
 
     print(attack_exp_name, clean_exp_name, CONF_THRES)
     print("All-class ASR")
-    for sid in results_all_classes:
+    for sid, result in results_all_classes.items():
 
-        num_succeed = results_all_classes[sid]["num_succeed"]
-        num_clean = results_all_classes[sid]["num_clean"]
-        total = results_all_classes[sid]["num_total"]
+        num_succeed = result["num_succeed"]
+        num_clean = result["num_clean"]
+        total = result["num_total"]
         asr = num_succeed / (num_clean.sum() + 1e-9) * 100
 
         # Average metrics over classes instead of counting all as one
         all_class_sid = f"{sid} | all"
-        asrs = results_all_classes[sid]["asr"]
-        fnrs = results_all_classes[sid]["fnr"]
+        asrs = result["asr"]
+        fnrs = result["fnr"]
         avg_asr = np.mean(asrs)
         print_df_rows[all_class_sid]["ASR"] = avg_asr
         avg_fnr = np.mean(fnrs)
@@ -368,7 +380,7 @@ def main(args):
 
         if "reap" in sid:
             # This is the correct (or commonly used) definition of mAP
-            mAP = np.mean(results_all_classes[sid]["ap"])
+            mAP = np.mean(result["ap"])
             print_df_rows[all_class_sid]["AP"] = mAP
 
             aps = np.zeros(_NUM_IOU_THRES)
@@ -392,19 +404,19 @@ def main(args):
             f"average {avg_asr:.2f}, total {total}"
         )
 
-    for sid in tp_scores:
+    for sid, tp_score in tp_scores.items():
         if "reap" in sid and "none" in sid:
             aps = np.zeros(_NUM_IOU_THRES)
             num_dts = None
             for t in range(_NUM_IOU_THRES):
-                matched_len = len(tp_scores[sid][t])
+                matched_len = len(tp_score[t])
                 unmatched_len = len(fp_scores[sid][t])
                 if num_dts is not None:
                     assert num_dts == matched_len + unmatched_len
                 num_dts = matched_len + unmatched_len
                 scores = np.zeros(num_dts)
                 matches = np.zeros_like(scores, dtype=bool)
-                scores[:matched_len] = tp_scores[sid][t]
+                scores[:matched_len] = tp_score[t]
                 scores[matched_len:] = fp_scores[sid][t]
                 matches[:matched_len] = 1
                 aps[t] = _compute_ap_recall(

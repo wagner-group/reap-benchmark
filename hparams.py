@@ -25,7 +25,7 @@ DEFAULT_DATA_PATHS["synthetic"] = DEFAULT_DATA_PATHS["mapillary"]
 DEFAULT_SYN_OBJ_DIR = "./attack_assets/"
 
 DEFAULT_PATH_MTSD_LABEL = "./mtsd_label_metadata.csv"
-PATH_SIMILAR_FILES = "./similar_files_df.csv"
+PATH_DUPLICATE_FILES = "./scripts_gen_reap/similar_files_df.csv"
 DEFAULT_PATH_BG_FILE_NAMES = "./bg_txt_files/"
 DEFAULT_PATH_DEBUG_PATCH = f"{DEFAULT_SYN_OBJ_DIR}/debug.png"
 
@@ -132,7 +132,7 @@ _MPL_NO_COLOR_SIZE_MM = {
     "pentagon": (915.0, 915.0),
     "octagon": (915.0, 915.0),
 }
-_MPL_NO_COLOR_SIZE_MM = list(_MPL_NO_COLOR_SIZE_MM.values())
+_MPL_NO_COLOR_SIZE_MM = dict(enumerate(_MPL_NO_COLOR_SIZE_MM.values()))
 
 # Geometric shape of objects
 # This is straightforward for our traffic sign classes, but to extend to other
@@ -150,10 +150,12 @@ _MPL_NO_COLOR_SHAPE = {
     "pentagon": "pentagon",
     "octagon": "octagon",
 }
-_MPL_NO_COLOR_SHAPE = list(_MPL_NO_COLOR_SHAPE.values())
+_MPL_NO_COLOR_SHAPE = dict(enumerate(_MPL_NO_COLOR_SHAPE.values()))
 
 # Height-width ratio
-_MPL_NO_COLOR_RATIO = [s[0] / s[1] for s in _MPL_NO_COLOR_SIZE_MM]
+_MPL_NO_COLOR_RATIO = {
+    i: size[0] / size[1] for i, size in enumerate(_MPL_NO_COLOR_SIZE_MM.values())
+}
 
 OBJ_DIM_DICT: Dict[str, Dict[str, Any]] = {
     "mapillary_no_color": {
@@ -164,6 +166,7 @@ OBJ_DIM_DICT: Dict[str, Dict[str, Any]] = {
 }
 OBJ_DIM_DICT["reap"] = OBJ_DIM_DICT["mapillary_no_color"]
 OBJ_DIM_DICT["synthetic"] = OBJ_DIM_DICT["mapillary_no_color"]
+OBJ_DIM_DICT["mtsd_no_color"] = OBJ_DIM_DICT["mapillary_no_color"]
 
 # =========================================================================== #
 
@@ -257,3 +260,18 @@ MAPILLARY_IMG_COUNTS_DICT = {
 #     "pentagon": 0,
 #     "octagon": 405,
 # }
+
+OLD_TO_NEW_LABELS = {
+    "circle-750.0": "circle",
+    "triangle-900.0": "triangle",
+    "triangle_inverted-1220.0": "up-triangle",
+    "diamond-600.0": "diamond-s",
+    "diamond-915.0": "diamond-l",
+    "square-600.0": "square",
+    "rect-458.0-610.0": "rect-s",
+    "rect-762.0-915.0": "rect-m",
+    "rect-915.0-1220.0": "rect-l",
+    "pentagon-915.0": "pentagon",
+    "octagon-915.0": "octagon",
+    "other": "other",
+}

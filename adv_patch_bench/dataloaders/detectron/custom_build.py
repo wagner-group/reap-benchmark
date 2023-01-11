@@ -1,15 +1,18 @@
 """Custom build_detection_test_loader for Detectron2 models."""
 
+import logging
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import torch.utils.data as torchdata
 from detectron2.config import configurable
+from detectron2.data import build
 from detectron2.data.common import DatasetFromList, MapDataset
 from detectron2.data.samplers import InferenceSampler
 
-import detectron2.data.build as build
+logger = logging.getLogger(__name__)
 
 
+# pylint: disable=protected-access
 @configurable(from_config=build._test_loader_from_config)
 def build_detection_test_loader(
     dataset: Union[List[Any], torchdata.Dataset],
@@ -66,9 +69,11 @@ def build_detection_test_loader(
             if d["file_name"].split("/")[-1] in split_file_names
         ]
         if len(new_dataset) != len(split_file_names):
-            raise ValueError(
+            logger.warning(
                 "Not all files listed in filter_file_names are found "
-                f"({len(new_dataset)} vs {len(split_file_names)})!"
+                "(dataset length: %d vs split files: %d)!",
+                len(new_dataset),
+                len(split_file_names),
             )
         dataset = new_dataset
 

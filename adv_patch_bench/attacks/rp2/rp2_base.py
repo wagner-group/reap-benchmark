@@ -1,89 +1,40 @@
-"""Base class of RP2 Attack."""
+"""RP2 attack for Detectron2 models."""
 
-import time
-from abc import abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
 
-import numpy as np
+import abc
+from typing import Any
+
 import torch
-import torch.optim as optim
-from adv_patch_bench.attacks import base_attack
-from adv_patch_bench.transforms import render_image
-from adv_patch_bench.utils.types import MaskTensor, ImageTensor, Target
+import torch.nn.functional as F
+from detectron2 import structures
+from torch import nn
 
-# from yolov5.utils.general import non_max_suppression
-# from yolov5.utils.plots import output_to_target, plot_images
+from adv_patch_bench.attacks import grad_attack
+from adv_patch_bench.utils.types import BatchImageTensor, Target
 
 
-class RP2AttackModule(base_attack.DetectorAttackModule):
-    """Base class of RP2 Attack."""
+class RP2BaseAttack(grad_attack.GradAttack):
+    """RP2 Attack for Detectron2 models."""
 
     def __init__(
-        self,
-        attack_config: Dict[str, Any],
-        core_model: torch.nn.Module,
-        **kwargs,
-    ):
-        """RP2AttackModule is a base class for RP2 Attack.
-
-        Reference: Eykholt et al., "Robust Physical-World Attacks on Deep
-        Learning Models," 2018. (https://arxiv.org/abs/1707.08945)
+        self, attack_config: dict[str, Any], core_model: nn.Module, **kwargs
+    ) -> None:
+        """Initialize RP2BaseAttack.
 
         Args:
-            attack_config: Config dict for attacks.
-            core_model: Target model to attack.
+            attack_config: Dictionary of attack params.
+            core_model: Traget model to attack.
         """
         super().__init__(attack_config, core_model, **kwargs)
-        self.num_steps = attack_config["num_steps"]
-        self.step_size = attack_config["step_size"]
-        self.optimizer = attack_config["optimizer"]
-        self.use_lr_schedule = attack_config["use_lr_schedule"]
-        self.num_eot = attack_config["num_eot"]
-        self.lmbda = attack_config["lambda"]
-        self.min_conf = attack_config["min_conf"]
-        self.attack_mode = attack_config["attack_mode"].split("-")
-        self.num_restarts = 1
-        self.is_training: Optional[bool] = None  # Holding model training state
-        self.ema_const = 0.9
-
-        # TODO(feature): Allow more threat models
-        self.targeted: bool = False
-
-        # Use change of variable on delta with alpha and beta.
-        # Mostly used with per-sign or real attack.
-        self.use_var_change_ab = "var_change_ab" in self.attack_mode
-        if self.use_var_change_ab:
-            # Does not work when num_eot > 1
-            assert (
-                self.num_eot == 1
-            ), "When use_var_change_ab is used, num_eot can only be set to 1."
-
-    @abstractmethod
-    def _loss_func(
-        self,
-        adv_img: ImageTensor,
-        adv_target: Target,
-        obj_class: int,
-    ) -> torch.Tensor:
-        """Implement loss function on perturbed image.
-
-        Args:
-            adv_img: Image to compute loss on.
-            adv_target: Target label to compute loss on.
-            obj_class: Target object class. Usually ground-truth label for
-                untargeted attack, and target class for targeted attack.
-
-        Returns:
-            Loss for attacker to minimize.
-        """
-        raise NotImplementedError("self._loss_func() not implemented!")
+        self._obj_const: float = attack_config["obj_loss_const"]
+        self._iou_thres: float = attack_config["iou_thres"]
 
     def compute_loss(
         self,
-        delta: ImageTensor,
-        adv_img: ImageTensor,
-        adv_target: Target,
-        obj_class: List[int],
+        delta: BatchImageTensor,
+        adv_imgs: BatchImageTensor,
+        adv_targets: list[Target],
     ) -> torch.Tensor:
         """Compute loss on perturbed image.
 
@@ -97,175 +48,202 @@ class RP2AttackModule(base_attack.DetectorAttackModule):
         Returns:
             Loss for attacker to minimize.
         """
-        loss: torch.Tensor = self._loss_func(adv_img, adv_target, obj_class)
-        tv: torch.Tensor = (delta[:, :-1, :] - delta[:, 1:, :]).abs().mean() + (
-            delta[:, :, :-1] - delta[:, :, 1:]
-        ).abs().mean()
-        loss += self.lmbda * tv
+        loss: torch.Tensor = self._loss_func(adv_imgs, adv_targets)
+        reg: torch.Tensor = (
+            delta[:, :-1, :] - delta[:, 1:, :]
+        ).abs().mean() + (delta[:, :, :-1] - delta[:, :, 1:]).abs().mean()
+        loss += self._lmbda * reg
         return loss
 
-    @torch.no_grad()
-    def run(
+    @abc.abstractmethod
+    def _get_targets(
         self,
-        rimgs: List[render_image.RenderImage],
-        patch_mask: MaskTensor,
-    ) -> ImageTensor:
-        """Run RP2 Attack.
+        inputs: list[dict[str, Any]],
+        use_correct_only: bool = False,
+    ) -> tuple[structures.Boxes, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Select a set of targets to attack.
 
         Args:
+            inputs: A list containing a single dataset_dict, transformed by
+                a DatasetMapper.
+            use_correct_only: Filter out predictions that are already incorrect.
 
         Returns:
-            torch.Tensor: Adversarial patch with shape [C, H, W]
+            Matched gt target boxes, gt classes, predicted class logits, and
+            predicted objectness logits.
         """
-        self._on_enter_attack()
-        device = patch_mask.device
+        _ = inputs, use_correct_only  # Unused
+        raise NotImplementedError("_get_targets() has to be implemented.")
 
-        all_bg_idx: np.ndarray = np.arange(len(rimgs))
-        # Load patch_mask to all RenderObject first. This should be done once.
-        for rimg in rimgs:
-            robj = rimg.get_object()
-            robj.load_adv_patch(patch_mask=patch_mask)
+    def _loss_func(
+        self,
+        adv_imgs: BatchImageTensor,
+        adv_targets: list[Target],
+    ) -> torch.Tensor:
+        """Compute detection loss for RP2 attack.
 
-        for _ in range(self.num_restarts):
-            # Initialize adversarial perturbation
-            z_delta: ImageTensor = torch.zeros(
-                (3,) + patch_mask.shape[-2:],
-                device=device,
-                dtype=torch.float32,
-            )
-            z_delta.uniform_(0, 1)
+        Args:
+            adv_imgs: Image to compute loss on.
+            adv_targets: Target label to compute loss on.
 
-            # Set up optimizer
-            opt, lr_schedule = self._setup_opt(z_delta)
-            self.ema_loss = None
-            self.start_time = time.time()
-
-            # Run PGD on inputs for specified number of steps
-            for step in range(self.num_steps):
-
-                # Randomly select RenderImages to attack this step
-                np.random.shuffle(all_bg_idx)
-                bg_idx = all_bg_idx[: self.num_eot]
-                rimg_eot = [rimgs[i] for i in bg_idx]
-
-                with torch.enable_grad():
-                    z_delta.requires_grad_()
-                    # Determine how perturbation is projected
-                    if self.use_var_change_ab:
-                        # TODO(feature): Does not work when num_eot > 1
-                        robj = rimg_eot[0].get_object()
-                        alpha, beta = robj.alpha, robj.beta
-                        delta = self._to_model_space(
-                            z_delta, beta, alpha + beta
-                        )
-                    else:
-                        delta = self._to_model_space(z_delta, 0, 1)
-
-                    # Load new adversarial patch to each RenderObject
-                    # TODO(feature): Support batch rimg
-                    rimg = rimg_eot[0]
-                    robj = rimg.get_object()
-                    robj.load_adv_patch(adv_patch=delta)
-                    # Apply adversarial patch to each RenderImage
-                    adv_img, adv_target = rimg.apply_objects()
-                    adv_img = rimg.post_process_image(adv_img)
-
-                    # DEBUG
-                    # if step % 100 == 0:
-                    #     torchvision.utils.save_image(
-                    #         adv_img[0], f'gen_adv_real_{step}.png')
-
-                    loss: torch.Tensor = self.compute_loss(
-                        delta, adv_img, adv_target, robj.obj_class
-                    )
-                    loss.backward()
-                    z_delta = self._step_opt(z_delta, opt)
-
-                if lr_schedule is not None:
-                    lr_schedule.step(loss)
-                self._print_loss(loss, step)
-
-                # DEBUG
-                # import os
-                # for idx in range(self.num_eot):
-                #     if not os.path.exists(f'tmp/{idx}/test_adv_img_{step}.png'):
-                #         os.makedirs(f'tmp/{idx}/', exist_ok=True)
-                #     torchvision.utils.save_image(adv_img[idx], f'tmp/{idx}/test_adv_img_{step}.png')
+        Returns:
+            Loss for attacker to minimize.
+        """
+        # NOTE: IoU threshold for ROI is 0.5 and for RPN is 0.7
+        inputs = []
+        for img, target in zip(adv_imgs, adv_targets):
+            target["image"] = img
+            inputs.append(target)
+        # pylint: disable=unbalanced-tuple-unpacking
+        outputs = self._get_targets(inputs, use_correct_only=False)
 
         # DEBUG
-        # outt = non_max_suppression(out.detach(), conf_thres=0.25, iou_thres=0.45)
-        # plot_images(adv_img.detach(), output_to_target(outt))
+        # import cv2
+        # from detectron2.utils.visualizer import Visualizer
+        # from detectron2.data import MetadataCatalog
+        # with torch.no_grad():
+        #     idx = 0
+        #     metadata[idx]['height'], metadata[idx]['width'] = adv_img.shape[2:]
+        #     outputs = self.core_model(metadata)[idx]
+        #     instances = outputs["instances"]
+        #     mask = instances.scores > 0.5
+        #     instances = instances[mask]
+        #     self.metadata = MetadataCatalog.get('mapillary_combined')
+        #     img = metadata[idx]['image'].cpu().numpy().transpose(1, 2, 0)[:, :, ::-1]
+        #     v = Visualizer(img, self.metadata, scale=0.5)
+        #     vis_og = v.draw_instance_predictions(instances.to('cpu')).get_image()
+        #     cv2.imwrite('temp_pred.png', vis_og[:, :, ::-1])
+        #     metadata[idx]['annotations'] = [{
+        #         'bbox': metadata[idx]['instances'].gt_boxes.tensor[0].tolist(),
+        #         'category_id': metadata[idx]['instances'].gt_classes.item(),
+        #         'bbox_mode': metadata[idx]['annotations'][0]['bbox_mode'],
+        #     }]
+        #     vis_gt = v.draw_dataset_dict(metadata[0]).get_image()
+        #     cv2.imwrite('temp_gt.png', vis_gt[:, :, ::-1])
+        #     print('ok')
+        # import pdb
+        # pdb.set_trace()
 
-        self._on_exit_attack()
-        # Return worst-case perturbed input logits
-        return delta.detach()
+        # Loop through each EoT image
+        loss: torch.Tensor = torch.zeros(1, device=adv_imgs.device)
+        for tgt_lb, tgt_log, obj_log in outputs:
+            # Filter obj_class
+            # if self._obj_class_only:
+            #     # Focus attack on prediction of `obj_class` only
+            #     idx = obj_class == tgt_lb
+            #     tgt_lb, tgt_log, obj_log = (
+            #         tgt_lb[idx],
+            #         tgt_log[idx],
+            #         obj_log[idx],
+            #     )
+            # else:
+            #     tgt_lb = torch.zeros_like(tgt_lb) + obj_class
+            # If there's no matched gt/prediction, then attack already succeeds.
+            # TODO(feature): Appearing or misclassification attacks
+            target_loss: torch.Tensor = torch.zeros_like(loss)
+            obj_loss: torch.Tensor = torch.zeros_like(loss)
+            if len(tgt_log) > 0 and len(tgt_lb) > 0:
+                # Ignore the background class on tgt_log
+                target_loss = F.cross_entropy(tgt_log, tgt_lb, reduction="mean")
+            if len(obj_log) > 0 and self._obj_const != 0:
+                obj_lb = torch.ones_like(obj_log)
+                obj_loss = F.binary_cross_entropy_with_logits(
+                    obj_log, obj_lb, reduction="mean"
+                )
+            loss += target_loss + self._obj_const * obj_loss
+        return -loss
 
-    def _setup_opt(
-        self, z_delta: ImageTensor
-    ) -> Tuple[Optional[optim.Optimizer], Optional[Any]]:
-        # Set up optimizer
-        if self.optimizer == "sgd":
-            opt = optim.SGD([z_delta], lr=self.step_size, momentum=0.999)
-        elif self.optimizer == "adam":
-            opt = optim.Adam([z_delta], lr=self.step_size)
-        elif self.optimizer == "rmsprop":
-            opt = optim.RMSprop([z_delta], lr=self.step_size)
-        elif self.optimizer == "pgd":
-            opt = None
-        else:
-            raise NotImplementedError("Given optimizer not implemented.")
+    def _pair_gt_proposals(
+        self,
+        proposal_boxes: list[structures.Boxes],
+        class_logits: torch.Tensor | list[torch.Tensor],
+        objectness_logits: torch.Tensor | list[torch.Tensor],
+        gt_boxes: list[structures.Boxes],
+        gt_classes: list[torch.Tensor],
+        use_correct_only: bool = False,
+    ) -> list[tuple[torch.Tensor, torch.Tensor]]:
+        """See _filter_positive_proposals_single().
 
-        lr_schedule = None
-        if self.use_lr_schedule and opt is not None:
-            lr_schedule = optim.lr_scheduler.ReduceLROnPlateau(
-                opt,
-                factor=0.5,
-                patience=int(self.num_steps / 10),
-                threshold=1e-9,
-                min_lr=self.step_size * 1e-6,
-                verbose=self._verbose,
+        # TODO(documentation): Add docstring.
+        """
+        pairs = []
+        for inpt in zip(proposal_boxes, class_logits, gt_boxes, gt_classes):
+            pairs.append(
+                _filter_positive_proposals_single(
+                    *inpt,
+                    iou_thres=self._iou_thres,
+                    score_thres=self._min_conf,
+                    use_correct_only=use_correct_only,
+                )
             )
-
-        return opt, lr_schedule
-
-    def _step_opt(
-        self, z_delta: ImageTensor, opt: Optional[optim.Optimizer]
-    ) -> ImageTensor:
-        if self.optimizer == "pgd":
-            grad = z_delta.grad.detach()
-            grad = torch.sign(grad)
-            z_delta = z_delta.detach() - self.step_size * grad
-            z_delta.clamp_(0, 1)
-        else:
-            opt.step()
-        return z_delta
-
-    def _to_model_space(self, x, min_, max_):
-        """Transforms an input from the attack space to the model space."""
-        if "pgd" in self.attack_mode:
-            return x
-
-        # from (-inf, +inf) to (-1, +1)
-        x = torch.tanh(x)
-
-        # map from (-1, +1) to (min_, max_)
-        a = (min_ + max_) / 2
-        b = (max_ - min_) / 2
-        x = x * b + a
-        return x
-
-    def _print_loss(self, loss: torch.Tensor, step: int) -> None:
-        if self.ema_loss is None:
-            self.ema_loss = loss.item()
-        else:
-            self.ema_loss = (
-                self.ema_const * self.ema_loss
-                + (1 - self.ema_const) * loss.item()
+        paired_outputs = []
+        for i, (paired_gt_classes, paired_idx) in enumerate(pairs):
+            paired_outputs.append(
+                [
+                    paired_gt_classes.to(self._device),
+                    class_logits[i][paired_idx],
+                    objectness_logits[i][paired_idx],
+                ]
             )
+            num_pairs = len(paired_gt_classes)
+            assert all(
+                num_pairs == len(output) for output in paired_outputs[-1]
+            ), f"Output shape mismatch: {[len(o) for o in paired_outputs[-1]]}!"
+        return paired_outputs
 
-        if step % 100 == 0 and self._verbose:
-            print(
-                f"step: {step:4d}  loss: {self.ema_loss:.4f}  "
-                f"time: {time.time() - self.start_time:.2f}s"
-            )
-            self.start_time = time.time()
+
+def _filter_positive_proposals_single(
+    proposal_boxes: structures.Boxes,
+    class_logits: torch.Tensor,
+    gt_boxes: structures.Boxes,
+    gt_classes: torch.Tensor,
+    iou_thres: float = 0.1,
+    score_thres: float = 0.1,
+    use_correct_only: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Filter for desired targets for the attack.
+
+    Args:
+        proposal_boxes: Proposal boxes directly from RPN.
+        scores: Softmaxed scores for each proposal box.
+        gt_boxes: Ground truth boxes.
+        gt_classes: Ground truth classes.
+        iou_thres: IoU threshold to filter detection.
+        score_thres: Class score threshold to filter detection.
+        use_correct_only: If True, filter detection by using score of gt class
+            instead of the most confident.
+
+    Returns:
+        Filtered target boxes and corresponding class labels.
+    """
+    n_proposals: int = len(proposal_boxes)
+    device = class_logits.device
+
+    proposal_gt_ious: torch.Tensor = structures.pairwise_iou(
+        proposal_boxes, gt_boxes
+    ).to(device)
+
+    # Pair each proposed box in proposal_boxes with a ground-truth box in
+    # gt_boxes, i.e., find ground-truth box with highest IoU.
+    # IoU with paired gt_box, idx of paired gt_box
+    paired_ious, paired_gt_idx = proposal_gt_ious.max(dim=1)
+
+    # Filter for IoUs > iou_thres
+    iou_cond = paired_ious >= iou_thres
+
+    # Get class of paired gt_box
+    gt_classes_repeat = gt_classes.repeat(n_proposals, 1)
+    idx = torch.arange(n_proposals, device=device)
+    paired_gt_idx = paired_gt_idx.to(device)
+    paired_gt_classes = gt_classes_repeat[idx, paired_gt_idx]
+
+    # Get scores of corresponding class
+    scores = F.softmax(class_logits, dim=-1)
+    if use_correct_only:
+        # Filter for positive proposals and their corresponding gt labels
+        score_cond = scores[idx, paired_gt_classes] >= score_thres
+    else:
+        # Filter for score of proposal > score_thres
+        score_cond = scores.max(dim=1).values >= score_thres
+    cond = iou_cond & score_cond
+    return paired_gt_classes[cond], cond
