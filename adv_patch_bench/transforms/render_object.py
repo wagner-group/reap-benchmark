@@ -30,6 +30,7 @@ class RenderObject:
         interp: str = "bilinear",
         device: Any = "cuda",
         use_box_mode: bool = False,
+        pad_to_square: bool = True,
         **kwargs,
     ) -> None:
         """Base ObjectTF associated with one object in image.
@@ -73,14 +74,10 @@ class RenderObject:
             )
         self._interp: str = interp
         self._device: Any = device
-
         self._obj_size_px: SizePx = obj_size_px
-        self._hw_ratio: tuple[float, float] = self._metadata["hw_ratio"][
-            self._obj_class
-        ]
 
         # Generate object mask and source points for geometric transforms
-        mask_src = self._get_obj_mask(use_box_mode)
+        mask_src = self._get_obj_mask(use_box_mode, pad_to_square)
         self.obj_mask: MaskTensor = mask_src[0].to(device)
         self.src_points: np.ndarray = mask_src[1]
 
@@ -118,7 +115,7 @@ class RenderObject:
         return tensor
 
     def _get_obj_mask(
-        self, use_box_mode: bool = False
+        self, use_box_mode: bool = False, pad_to_square: bool = True
     ) -> tuple[MaskTensor, np.ndarray]:
         """Generate binary object mask and corresponding source points.
 
@@ -128,9 +125,10 @@ class RenderObject:
         shape: str = self._metadata["shape"][self._obj_class]
         obj_mask, src = util.gen_sign_mask(
             shape,
-            self._hw_ratio,
+            self._obj_size_px[0] / self._obj_size_px[1],
             self._obj_size_px[1],
             use_box_mode=use_box_mode,
+            pad_to_square=pad_to_square,
         )
         obj_mask = obj_mask.float()
         obj_mask = img_util.coerce_rank(obj_mask, 4)

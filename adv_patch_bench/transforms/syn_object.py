@@ -21,8 +21,6 @@ from adv_patch_bench.utils.types import (
     MaskTensor,
     SizePx,
     Target,
-    TransformFn,
-    TransformParamFn,
 )
 
 
@@ -52,7 +50,7 @@ class SynObject(render_object.RenderObject):
             syn_3d_dist: _description_. Defaults to None.
             syn_colorjitter: _description_. Defaults to None.
         """
-        super().__init__(dataset="synthetic", **kwargs)
+        super().__init__(dataset="synthetic", pad_to_square=False, **kwargs)
         if img_size is None:
             raise ValueError("img_size must be specified for SynObject!")
         if syn_obj_path is None:
@@ -86,8 +84,11 @@ class SynObject(render_object.RenderObject):
             syn_colorjitter=syn_colorjitter,
             interp=self._interp,
         )
-        self._geo_transform: TransformParamFn = transforms[0]
-        self._light_transform: TransformFn = transforms[2]
+        (
+            self._geo_transform,
+            self._mask_transform,
+            self._light_transform,
+        ) = transforms
 
     def _resize_and_pad(self, obj: BatchImageTensor) -> BatchImageTensor:
         obj: BatchImageTensor = img_util.resize_and_pad(
@@ -122,10 +123,11 @@ class SynObject(render_object.RenderObject):
 
         # Verify aspect ratio of loaded syn_obj
         obj_hw_ratio: float = syn_obj.shape[-2] / syn_obj.shape[-1]
-        if abs(self._hw_ratio - obj_hw_ratio) > 1e-3:
+        hw_ratio: float = self._obj_size_px[0] / self._obj_size_px[1]
+        if abs(hw_ratio - obj_hw_ratio) > 1e-2:
             raise ValueError(
                 f"Aspect ratio of loaded object is {obj_hw_ratio:.4f}, but it "
-                f"should be {obj_hw_ratio:.4f}!"
+                f"should be {hw_ratio:.4f}!"
             )
 
         # Resize syn_obj to obj_size_px and pad to img_size
@@ -200,7 +202,6 @@ class SynObject(render_object.RenderObject):
         rgba_adv_obj: BatchImageTensorRGBA = torch.cat(
             [adv_obj, obj_mask], dim=1
         )
-
         # Apply geometric transform on syn obj together with patch
         rgba_adv_obj = geo_transform(rgba_adv_obj)
         rgba_adv_obj = render_object.RenderObject.clip_zero_one(rgba_adv_obj)
@@ -238,6 +239,8 @@ class SynObject(render_object.RenderObject):
             params_dicts["light_transform"] = self._light_transform
         if "geo_transform" not in params_dicts:
             params_dicts["geo_transform"] = self._geo_transform
+        if "mask_transform" not in params_dicts:
+            params_dicts["mask_transform"] = self._mask_transform
         if "resize_and_pad" not in params_dicts:
             params_dicts["resize_and_pad"] = self._resize_and_pad
 
