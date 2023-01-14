@@ -2,8 +2,10 @@
 
 import argparse
 import ast
+import logging
 import os
 import pathlib
+import pickle
 from typing import Any, Dict, List, Optional, Union
 
 import detectron2
@@ -33,6 +35,7 @@ _TRANSFORM_PARAMS: List[str] = [
     "syn_colorjitter",
     "syn_3d_dist",
 ]
+logger = logging.getLogger(__name__)
 
 
 def reap_args_parser(
@@ -173,6 +176,11 @@ def reap_args_parser(
         "--use-per-class-conf-thres",
         action="store_true",
         help="If True, expect/compute confidence score threshold per class.",
+    )
+    parser.add_argument(
+        "--compute-conf-thres",
+        action="store_true",
+        help="If True, compute and save conf_thres in output_dir.",
     )
 
     # ====================== Specific to synthetic signs ===================== #
@@ -525,7 +533,7 @@ def reap_args_parser(
 
     assert "base" in config and "attack" in config
     _update_dataset_name(config, is_train)
-    _verify_eval_config(config["base"], is_detectron)
+    _verify_base_config(config["base"], is_detectron)
 
     # Update config and fill with auto-generated params
     _update_img_size(config)
@@ -536,6 +544,7 @@ def reap_args_parser(
     _update_attack_transforms(config)
     _update_save_dir(config, is_detectron=is_detectron, is_train=is_train)
     _update_result_dir(config)
+    _update_conf_thres(config)
 
     if config["base"]["debug"]:
         config["base"]["verbose"] = True
@@ -543,7 +552,7 @@ def reap_args_parser(
     return config
 
 
-def _verify_eval_config(config_base: Dict[str, Any], is_detectron: bool):
+def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
     """Some manual verifications of config.
 
     Args:
@@ -590,9 +599,43 @@ def _verify_eval_config(config_base: Dict[str, Any], is_detectron: bool):
             )
 
 
+def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
+    config_base = config["base"]
+    if config_base["compute_conf_thres"]:
+        config_base["conf_thres"] = None
+    if config_base["conf_thres"] is None:
+        config_base["compute_conf_thres"] = True
+    if (
+        config_base["compute_conf_thres"]
+        and config_base["dataset"] == "synthetic"
+        and config_base["syn_desired_fnr"] is None
+    ):
+        raise ValueError(
+            "For synthetic data, if compute_conf_thres is True, "
+            "syn_desired_fnr must be specified."
+        )
+    # Load conf_thres from metadata
+    if (
+        not config_base["compute_conf_thres"]
+        and config_base["conf_thres"] is None
+    ):
+        metadata_dir = os.path.join(
+            config_base["base_dir"], config_base["name"], "metadata.pkl"
+        )
+        if not os.path.isfile(metadata_dir):
+            raise FileNotFoundError(
+                f"Metadata is not found in the default location {metadata_dir}!"
+                " when loading conf_thres. Please place metadata.pkl there, or "
+                "set compute_conf_thres to False and specify conf_thres."
+            )
+        with open(metadata_dir, "rb") as file:
+            metadata = pickle.load(file)
+        config_base["conf_thres"] = metadata["conf_thres"]
+
+
 def _update_dataset_name(
     config: Dict[str, Dict[str, Any]], is_train: bool = False
-) -> List[str]:
+) -> None:
     """Update dataset and dataset_split in config_base.
 
     Expect dataset to have 1-3 tokens separated by "-" (hyphen). The first token
@@ -639,11 +682,11 @@ def _update_split_file(
     dataset: str = config_base["dataset"]
     num_bg: int = config["attack"]["common"]["num_bg"]
     if split_file_path is None:
-        print("split_file_path is not specified.")
+        logger.info("split_file_path is not specified.")
         return
 
     if os.path.isfile(split_file_path):
-        print(f"split_file_path is specified as {split_file_path}.")
+        logger.info("split_file_path is specified as %s.", split_file_path)
         return
 
     # If split_file is dir, we search inside that dir to find valid txt file
@@ -664,7 +707,7 @@ def _update_split_file(
 
     split_file_path: pathlib.Path = split_file_dir / default_filename
     if split_file_path.is_file():
-        print(f"Using split_file_path: {split_file_path}.")
+        logger.info("Using split_file_path: %s.", split_file_path)
         config_base["split_file_path"] = split_file_path
         return
 
@@ -679,7 +722,7 @@ def _update_split_file(
         )
 
     split_file_path = str(split_file_path)
-    print(f"Using auto-generated split_file_path: {split_file_path}.")
+    logger.info("Using auto-generated split_file_path: %s.", split_file_path)
     config_base["split_file_path"] = split_file_path
 
 

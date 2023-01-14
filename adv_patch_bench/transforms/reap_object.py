@@ -48,7 +48,7 @@ class ReapObject(render_object.RenderObject):
         Raises:
             NotImplementedError: Invalid transform mode.
         """
-        super().__init__(dataset="reap", **kwargs)
+        super().__init__(dataset="reap", pad_to_square=True, **kwargs)
 
         if patch_transform_mode not in _VALID_TRANSFORM_MODE:
             raise NotImplementedError(

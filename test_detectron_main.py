@@ -151,7 +151,6 @@ def _compute_conf_thres(
     num_gts_per_class: np.ndarray,
     other_sign_class: int,
     iou_idx: int,
-    use_per_class_conf_thres: bool = True,
 ):
     num_classes = len(scores_full)
     num_ious = len(scores_full[0])
@@ -171,7 +170,7 @@ def _compute_conf_thres(
     f1_scores = 2 * precision * recall / (precision + recall + _EPS)
     assert np.all(f1_scores >= 0) and not np.any(np.isnan(f1_scores))
 
-    if use_per_class_conf_thres:
+    if config_base["use_per_class_conf_thres"]:
         # Remove 'other' class from f1 and select desired IoU thres
         f1_scores[:, iou_idx, other_sign_class] -= 1e9
         f1_score = f1_scores[:, iou_idx]
@@ -208,12 +207,11 @@ def _compute_conf_thres(
 def _compute_metrics(
     scores_full: np.ndarray,
     num_gts_per_class: np.ndarray,
-    other_sign_class: int,
     conf_thres: Optional[float] = None,
-    iou_thres: float = 0.5,
-    use_per_class_conf_thres: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[float]]:
     """Compute true positives, false positives, and score threshold."""
+    other_sign_class: int = config_base["other_sign_class"]
+    iou_thres: float = config_base["iou_thres"]
     all_iou_thres = np.linspace(
         0.5, 0.95, int(np.round((0.95 - 0.5) / 0.05)) + 1, endpoint=True
     )
@@ -223,7 +221,7 @@ def _compute_metrics(
         raise ValueError(f"Invalid iou_thres {iou_thres}!")
     iou_idx = int(iou_idx)
 
-    if conf_thres is None:
+    if config_base["compute_conf_thres"]:
         # Find score threshold that maximizes F1 score
         logger.info(
             "conf_thres not specified. Finding one that maximizes F1 scores..."
@@ -233,13 +231,11 @@ def _compute_metrics(
             num_gts_per_class,
             other_sign_class,
             iou_idx,
-            use_per_class_conf_thres=use_per_class_conf_thres,
         )
     else:
         logger.info("Using specified conf_thres of %s...", str(conf_thres))
         tp_full, fp_full = _get_tp_fp_full(scores_full, conf_thres)
-        tp = tp_full[iou_idx]
-        fp = fp_full[iou_idx]
+        tp, fp = tp_full[iou_idx], fp_full[iou_idx]
 
     recall = tp / (num_gts_per_class + _EPS)
     precision = tp / (tp + fp + _EPS)
@@ -290,7 +286,39 @@ def _dump_results(results: Dict[str, Any]) -> None:
     )
     with open(result_path, "wb") as file:
         pickle.dump(results, file)
-    logger.info("Results are saved at %s", result_dir)
+
+    if config_base["compute_conf_thres"]:
+        # Try to load existing metadata
+        metadata_dir = os.path.join(
+            config_base["base_dir"], config_base["name"], "metadata.pkl"
+        )
+        metadata = {}
+        if os.path.isfile(metadata_dir):
+            logger.info("Existing metadata file found at %s.", metadata_dir)
+            with open(metadata_dir, "rb") as file:
+                metadata = pickle.load(file)
+
+        if "conf_thres" not in metadata:
+            logger.info(
+                "conf_thres does not exist in metadata. Creating an empty "
+                "one..."
+            )
+            metadata["conf_thres"] = [
+                None for _ in LABEL_LIST[config_base["dataset"]]
+            ]
+
+        # Write new conf_thres
+        conf_thres = results["bbox"]["conf_thres"]
+        if isinstance(conf_thres, list) or config_base["obj_class"] == -1:
+            metadata["conf_thres"] = conf_thres
+        else:
+            metadata["conf_thres"][config_base["obj_class"]] = conf_thres
+
+        with open(metadata_dir, "wb") as file:
+            pickle.dump(metadata, file)
+        logger.info("Metadata is saved at %s.", metadata_dir)
+
+    logger.info("Results are saved at %s.", result_dir)
 
 
 def main() -> None:
@@ -328,7 +356,6 @@ def main() -> None:
 
     eval_cfg = _normalize_dict(config_base)
     results: Dict[str, Any] = {**metrics, **eval_cfg, **config_attack}
-    _dump_results(results)
 
     # Logging results
     metrics: Dict[str, Any] = results["bbox"]
@@ -345,7 +372,7 @@ def main() -> None:
         syn_scores = metrics["syn_scores"]
         syn_matches = metrics["syn_matches"]
 
-        if conf_thres is None:
+        if config_base["compute_conf_thres"]:
             # Compute conf_thres for synthetic data using desired FNR
             desired_fnr = config["base"]["syn_desired_fnr"]
             if isinstance(desired_fnr, (list, tuple)):
@@ -356,6 +383,7 @@ def main() -> None:
             )
         if isinstance(conf_thres, (list, tuple)):
             conf_thres = conf_thres[obj_class]
+        metrics["conf_thres"] = conf_thres
 
         # Get detection for desired score and for all IoU thresholds
         detected = (syn_scores >= conf_thres) * syn_matches
@@ -380,14 +408,9 @@ def main() -> None:
         tp, fp, conf_thres = _compute_metrics(
             metrics["scores_full"],
             num_gts_per_class,
-            config_base["other_sign_class"],
             conf_thres,
-            config_base["iou_thres"],
-            config_base["use_per_class_conf_thres"],
         )
-        if config_base["conf_thres"] is None:
-            # Update with new conf_thres
-            metrics["conf_thres"] = conf_thres
+        metrics["conf_thres"] = conf_thres
 
         for key, value in metrics.items():
             if "syn" in key or not isinstance(value, (int, float, str, bool)):
@@ -408,8 +431,9 @@ def main() -> None:
         metrics["TPR-all"] = tp_all / total
         metrics["FPR-all"] = fp_all / total
         logger.info("Total num patches: %d", metrics["total_num_patches"])
-        _dump_results(results)
-        logger.info("Finished.")
+
+    _dump_results(results)
+    logger.info("Finished.")
 
 
 if __name__ == "__main__":

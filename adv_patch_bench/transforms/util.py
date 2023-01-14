@@ -141,6 +141,7 @@ def gen_sign_mask(
     hw_ratio: float = 1.0,
     obj_width_px: int = 64,
     use_box_mode: bool = False,
+    pad_to_square: bool = True,
 ) -> tuple[torch.Tensor, _KeyPoints]:
     """Generate mask of object and source keypoints.
 
@@ -153,6 +154,8 @@ def gen_sign_mask(
         shape: Object shape defined based on classes in REAP.
         hw_ratio: Ratio of height over width of object.
         obj_width_px: Width of object in pixels.
+        use_box_mode: If True, keypoints returned will be those of rectangular
+            box around the object instead of the pre-defined keypoints.
 
     Returns:
         Binary mask and source keypoint for geometric transformation with
@@ -177,8 +180,8 @@ def gen_sign_mask(
     img_util.coerce_rank(mask, 4)
     mask, scales, padding = img_util.resize_and_pad(
         obj=mask,
-        resize_size=(obj_width_px, obj_width_px),
-        pad_size=(obj_width_px, obj_width_px),
+        resize_size=(round(hw_ratio * obj_width_px), obj_width_px),
+        pad_size=(obj_width_px, obj_width_px) if pad_to_square else None,
         is_binary=True,
         keep_aspect_ratio=True,
         return_params=True,
