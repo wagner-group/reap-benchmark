@@ -1,5 +1,6 @@
 """Run realism test for REAP benchmark."""
 
+import math
 import os
 import pathlib
 import pickle
@@ -11,7 +12,6 @@ import numpy as np
 import pandas as pd
 import skimage
 import torch
-import torchvision.transforms.functional as T
 from kornia.geometry.transform import get_perspective_transform
 from torchvision.utils import save_image
 from tqdm import tqdm
@@ -34,6 +34,9 @@ def _save_images(
     img_height,
     is_clean,
 ):
+    if patch_tgt is None:
+        patch_tgt = [None for _ in patch_src]
+
     for i, (src_i, tgt_i) in enumerate(zip(src, tgt)):
         cv.circle(image, (int(src_i[0]), int(src_i[1])), 5, POINT_COLORS[i], -1)
         cv.circle(image, (int(tgt_i[0]), int(tgt_i[1])), 5, POINT_COLORS[i], -1)
@@ -51,8 +54,8 @@ def _save_images(
             )
     # resize image and scale down by 8
     image_resized = cv.resize(image, (img_width // 8, img_height // 8))
-    print("saving image")
-    skimage.io.imsave("test.png", image_resized)
+    image_resized = torch.from_numpy(image_resized).permute(2, 0, 1)
+    return image_resized.float() / 255
 
 
 def main():
@@ -90,9 +93,6 @@ def main():
     # remove 'other' class from list
     traffic_sign_classes.remove("other")
 
-    # flag to control whether to save images for debugging
-    save_images_for_debugging = False
-
     # lists to store geometric and lighting errors for each image
     geometric_errors = []
     lighting_errors = []
@@ -125,6 +125,9 @@ def main():
 
         # read image
         image = skimage.io.imread(filepath)
+        torch_image = torch.from_numpy(image).float().permute(2, 0, 1)
+        torch_image.unsqueeze_(0)
+        torch_image /= 255.0
 
         # get image dimensions
         img_width, img_height = row["width"], row["height"]
@@ -140,14 +143,14 @@ def main():
             sign_x4,
             sign_y4,
         ) = (
-            row["sign_x1"],
-            row["sign_y1"],
-            row["sign_x2"],
-            row["sign_y2"],
-            row["sign_x3"],
-            row["sign_y3"],
-            row["sign_x4"],
-            row["sign_y4"],
+            float(row["sign_x1"]),
+            float(row["sign_y1"]),
+            float(row["sign_x2"]),
+            float(row["sign_y2"]),
+            float(row["sign_x3"]),
+            float(row["sign_y3"]),
+            float(row["sign_x4"]),
+            float(row["sign_y4"]),
         )
 
         # get labeled coordinates for patch in image
@@ -161,34 +164,33 @@ def main():
             patch_x4,
             patch_y4,
         ) = (
-            row["patch_x1"],
-            row["patch_y1"],
-            row["patch_x2"],
-            row["patch_y2"],
-            row["patch_x3"],
-            row["patch_y3"],
-            row["patch_x4"],
-            row["patch_y4"],
+            float(row["patch_x1"]),
+            float(row["patch_y1"]),
+            float(row["patch_x2"]),
+            float(row["patch_y2"]),
+            float(row["patch_x3"]),
+            float(row["patch_y3"]),
+            float(row["patch_x4"]),
+            float(row["patch_y4"]),
         )
 
         # read in patch and mask from file
         with open(str(patch_path / obj_class / "adv_patch.pkl"), "rb") as file:
             patch, patch_mask = pickle.load(file)
 
-        patch_size_in_pixel = patch.shape[1]
-
+        patch_size_in_pixel = patch.shape[-1]
         hw_ratio_dict = OBJ_DIM_DICT["mapillary_no_color"]["hw_ratio"]
-
         # get aspect ratio for current object class
         hw_ratio = hw_ratio_dict[(index // 2) % len(traffic_sign_classes)]
-
         obj_shape = obj_class_to_shape[obj_class]
 
         # generate mask for object in image
         sign_mask, src = util.gen_sign_mask(
-            obj_shape, hw_ratio=hw_ratio, obj_width_px=patch_size_in_pixel
+            obj_shape,
+            hw_ratio=hw_ratio,
+            obj_width_px=patch_size_in_pixel,
+            pad_to_square=False,
         )
-
         src = np.array(src).astype(np.float32)
 
         # get location of patch in canonical sign
@@ -199,18 +201,27 @@ def main():
             factor = 0.2
         elif obj_class == "diamond-l":
             factor = 0.15
-        elif obj_class in ("circle", "up-triangle"):
+        # elif obj_class in ("circle", "up-triangle"):
+        #     factor = 0.1
+        elif obj_class == "circle":
             factor = 0.1
+        elif obj_class == "up-triangle":
+            factor = 0.1 * 64 / 56
         else:
             factor = 0.0
-        shift = int(h_max * factor)
+        shift = math.ceil(h_max * factor)
         h_min -= shift
         h_max -= shift
         patch_src = np.array(
             [[w_min, h_min], [w_max, h_min], [w_max, h_max], [w_min, h_max]]
         ).astype(np.float32)
 
+        # Shift patch and mask
+        patch_mask = torch.zeros_like(patch_mask)
+        patch_mask[:, h_min:h_max, w_min:w_max] = 1
+
         # Get target patch loc if exists
+        patch_tgt = None
         if not is_clean:
             patch_tgt = np.array(
                 [
@@ -223,10 +234,6 @@ def main():
 
         transform_func = kornia_tf.warp_perspective
         if len(src) == 3:
-            sign_coord = [sign_x1, sign_y1, sign_x2, sign_y2, sign_x3, sign_y3]
-            sign_x1, sign_y1, sign_x2, sign_y2, sign_x3, sign_y3 = [
-                float(s) for s in sign_coord
-            ]
             tgt = np.array(
                 [[sign_x1, sign_y1], [sign_x2, sign_y2], [sign_x3, sign_y3]]
             ).astype(np.float32)
@@ -236,33 +243,12 @@ def main():
                 .unsqueeze(0)
                 .float()
             )
-
             # add [0, 0, 1] to M1
             sign_tf_matrix = torch.cat(
                 (sign_tf_matrix, torch.tensor([0, 0, 1]).view(1, 1, 3).float()),
                 dim=1,
             )
         else:
-            sign_coord = [
-                sign_x1,
-                sign_y1,
-                sign_x2,
-                sign_y2,
-                sign_x3,
-                sign_y3,
-                sign_x4,
-                sign_y4,
-            ]
-            (
-                sign_x1,
-                sign_y1,
-                sign_x2,
-                sign_y2,
-                sign_x3,
-                sign_y3,
-                sign_x4,
-                sign_y4,
-            ) = [float(s) for s in sign_coord]
             tgt = np.array(
                 [
                     [sign_x1, sign_y1],
@@ -271,7 +257,6 @@ def main():
                     [sign_x4, sign_y4],
                 ]
             ).astype(np.float32)
-
             src = torch.from_numpy(src).unsqueeze(0)
             tgt = torch.from_numpy(tgt).unsqueeze(0)
             sign_tf_matrix = get_perspective_transform(src, tgt)
@@ -281,11 +266,10 @@ def main():
         # apply perspective transform to src patch coordinates
         patch_src_transformed = cv.perspectiveTransform(
             patch_src.reshape((1, -1, 2)), sign_tf_matrix[0].numpy()
-        )
-        patch_src_transformed = patch_src_transformed[0]  # unsqueeze(0) above
+        )[0]
 
-        if save_images_for_debugging:
-            _save_images(
+        if SAVE_IMG_DEBUG:
+            image_resized = _save_images(
                 image,
                 src,
                 tgt,
@@ -296,171 +280,99 @@ def main():
                 img_height,
                 is_clean,
             )
-
-        if not is_clean:
-            # calculate euclidean distance between patch_src_transformed and patch_tgt
-            transform_l2_error = np.linalg.norm(
-                patch_src_transformed - patch_tgt, axis=1
-            ).mean()
-
-        # pad patch_mask, patch and canonical sign for affine or perspective trasnform
-        pad_size = (img_height, img_width)
-
-        _, hh, ww = np.where(patch_mask.numpy())
-        h_min, h_max = hh.min(), hh.max() + 1
-        w_min, w_max = ww.min(), ww.max() + 1
-
-        patch_padding = (
-            0,  # left
-            0,  # top
-            max(0, pad_size[1] - patch.shape[2]),  # right
-            max(0, pad_size[0] - patch.shape[1]),  # bottom
-        )
-        patch_padded = T.pad(patch * patch_mask, patch_padding)
-        patch_mask_padded = T.pad(patch_mask, patch_padding)
-
-        sign_padding = (
-            0,  # left
-            0,  # top
-            max(0, pad_size[1] - sign_mask.shape[1]),  # right
-            max(0, pad_size[0] - sign_mask.shape[0]),  # bottom
-        )
-        sign_mask_padded = T.pad(sign_mask.float(), sign_padding)
-
-        if save_images_for_debugging:
-            save_image(patch_padded, "test_patch.png")
-            save_image(patch_mask_padded, "test_patch_mask.png")
-            save_image(sign_mask_padded, "test_sign_mask.png")
-
-        patch_padded = patch_padded.unsqueeze(0)
-        patch_mask_padded = patch_mask_padded.unsqueeze(0)
-        # sign_mask_padded = sign_mask_padded.unsqueeze(0)
-
-        # warp patch
-        warped_patch = transform_func(
-            patch_padded,
-            sign_tf_matrix,
-            dsize=(img_height, img_width),
-            mode="bilinear",
-            padding_mode="zeros",
-        )
-
-        # warp patch mask
-        warped_mask = transform_func(
-            patch_mask_padded,
-            sign_tf_matrix,
-            dsize=(img_height, img_width),
-            mode="bilinear",
-            padding_mode="zeros",
-        )
-
-        # warp canonical sign mask (to calculate alpha and beta)
-        warped_sign_mask = transform_func(
-            sign_mask_padded,
-            sign_tf_matrix,
-            dsize=(img_height, img_width),
-            mode="bilinear",
-            padding_mode="zeros",
-        )
+            save_image(image_resized, f"tmp/{index:02d}_test.png")
 
         if is_clean:
-            # convert numpy array to tensor
-            torch_image = (
-                torch.from_numpy(image).float().permute(2, 0, 1).unsqueeze(0)
-                / 255.0
+            # warp canonical sign mask (to calculate alpha and beta)
+            warped_sign_mask = transform_func(
+                sign_mask.float(),
+                sign_tf_matrix,
+                dsize=(img_height, img_width),
+                mode="nearest",
+                padding_mode="zeros",
             )
+            warped_sign_mask.clamp_(0, 1)
             cropped_traffic_sign = torch.masked_select(
                 torch_image, warped_sign_mask.bool()
             )
-
             # calculate relighting parameters
             alpha, beta = lighting_tf.compute_relight_params(
                 cropped_traffic_sign.numpy().reshape(-1, 1)
             )
-            print("alpha", alpha)
-            print("beta", beta)
+            print(f"alpha: {alpha:.4f}, beta: {beta:.4f}")
+            if SAVE_IMG_DEBUG:
+                save_image(
+                    warped_sign_mask, f"tmp/{index:02d}_M1_warped_sign_mask.png"
+                )
             continue
 
-        warped_patch.clamp_(0, 1)
-        warped_mask.clamp_(0, 1)
-        warped_sign_mask.clamp_(0, 1)
-
-        if save_images_for_debugging:
-            skimage.io.imsave(
-                "test_M1_warped_patch.png", warped_patch[0].permute(1, 2, 0)
-            )
-            skimage.io.imsave(
-                "test_M1_warped_patch_mask.png", warped_mask[0].permute(1, 2, 0)
-            )
-            skimage.io.imsave(
-                "test_M1_warped_sign_mask.png",
-                warped_sign_mask[0].permute(1, 2, 0),
-            )
+        # calculate euclidean distance between patch_src_transformed and patch_tgt
+        transform_l2_error = np.linalg.norm(
+            patch_src_transformed - patch_tgt, axis=1
+        ).mean()
 
         # calculate transform matrix M2 between transformed patch points and labeled patch points
         patch_tf_matrix = get_perspective_transform(
-            torch.from_numpy(patch_src_transformed).unsqueeze(0),
+            torch.from_numpy(patch_src).unsqueeze(0),
             torch.from_numpy(patch_tgt).unsqueeze(0),
         )
         transform_func = kornia_tf.warp_perspective
+
+        # apply relighting to transformed synthetic patch
+        tmp_patch = torch.zeros_like(patch)
+        patch.mul_(alpha).add_(beta)
+        patch.clamp_(0, 1)
+        tmp_patch[:, h_min:h_max, w_min:w_max] = patch[
+            :, h_min + shift : h_max + shift, w_min:w_max
+        ]
+        patch = tmp_patch
         warped_patch = transform_func(
-            warped_patch,
+            patch.unsqueeze(0),
             patch_tf_matrix,
             dsize=(img_height, img_width),
             mode="bilinear",
             padding_mode="zeros",
         )
         warped_mask = transform_func(
-            warped_mask,
+            patch_mask.unsqueeze(0),
             patch_tf_matrix,
             dsize=(img_height, img_width),
-            mode="bilinear",
+            mode="nearest",
             padding_mode="zeros",
         )
         warped_patch.clamp_(0, 1)
-        warped_mask.clamp_(0, 1)
 
-        if save_images_for_debugging:
-            skimage.io.imsave(
-                "test_M2_warped_patch.png", warped_patch[0].permute(1, 2, 0)
-            )
-            skimage.io.imsave(
-                "test_M2_warped_mask.png", warped_mask[0].permute(1, 2, 0)
-            )
+        if SAVE_IMG_DEBUG:
+            save_image(warped_patch, f"tmp/{index:02d}_M2_warped_patch.png")
+            save_image(warped_mask, f"tmp/{index:02d}_M2_warped_mask.png")
 
-        real_patch = warped_mask[0].permute(1, 2, 0) * image
-        if save_images_for_debugging:
-            skimage.io.imsave(
-                "test_tgt_sign.png",
-                warped_sign_mask[0].permute(1, 2, 0) * image,
+        # real_patch = warped_mask[0].permute(1, 2, 0) * image
+        warped_mask = warped_mask.bool()
+        real_patch = torch.masked_select(torch_image, warped_mask)
+        reap_patch = torch.masked_select(warped_patch, warped_mask)
+        if SAVE_IMG_DEBUG:
+            save_image(
+                torch_image * warped_mask, f"tmp/{index:02d}_real_patch.png"
             )
-            image_resized = cv.resize(
-                real_patch.numpy(), (img_width // 8, img_height // 8)
-            )
-            skimage.io.imsave("test_real_patch.png", image_resized)
-
-        # apply relighting to transformed synthetic patch
-        warped_patch = warped_patch.mul_(alpha).add_(beta)
+            save_image(warped_patch, f"tmp/{index:02d}_reap_patch.png")
 
         # calculate relighting error between transformed synthetic patch and real patch
-        real_patch = real_patch / 255.0
-        relighting_l2_error = (
-            (real_patch - warped_patch[0].permute(1, 2, 0)) ** 2
-        ).sum() ** 0.5
+        relighting_l2_error = ((real_patch - reap_patch) ** 2).mean().sqrt()
 
-        print("transform_l2_error", transform_l2_error)
-        print("relighting_l2_error", relighting_l2_error)
+        print()
+        print(f"transform_l2_error: {transform_l2_error:.4f}")
+        print(f"relighting_l2_error: {relighting_l2_error.item():.4f}")
 
         geometric_errors.append(transform_l2_error)
         lighting_errors.append(relighting_l2_error.item())
 
     # plot histogram of geometric_errors and save plot
     plt.hist(geometric_errors, bins=100)
-    plt.savefig("test_geometric_errors.png")
+    plt.savefig("tmp/geometric_errors.png")
     plt.clf()
 
     plt.hist(lighting_errors, bins=100)
-    plt.savefig("test_relighting_errors.png")
+    plt.savefig("tmp/relighting_errors.png")
     plt.clf()
 
     # print statistics for errors
@@ -478,4 +390,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # flag to control whether to save images for debugging
+    SAVE_IMG_DEBUG = False
     main()
