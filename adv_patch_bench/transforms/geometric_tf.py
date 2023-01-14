@@ -3,8 +3,12 @@
 Functions in this file are used by script that generates REAP transform params.
 """
 
-import cv2 as cv
+from __future__ import annotations
+
+import cv2
+import kornia.geometry.transform as kornia_tf
 import numpy as np
+import torch
 
 _POLYGON_ERROR = 0.04
 _SHAPE_TO_VERTICES = {
@@ -16,6 +20,7 @@ _SHAPE_TO_VERTICES = {
     "pentagon": ((0, 2, 3, 4),),
     "octagon": ((0, 2, 4, 6),),
 }
+_VALID_TRANSFORM_MODE = ("perspective", "translate_scale")
 
 
 def get_corners(mask):
@@ -26,11 +31,13 @@ def get_corners(mask):
     ]
 
     # Find contour of the object
-    contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    contours, _ = cv2.findContours(
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+    )
 
     # Find convex hull to combine multiple contours and/or fix some occlusion
     cat_contours = np.concatenate(contours, axis=0)
-    hull = cv.convexHull(cat_contours, returnPoints=True)
+    hull = cv2.convexHull(cat_contours, returnPoints=True)
 
     # Fit polygon to remove some annotation errors and get vertices
     vertices = _detect_polygon(hull)
@@ -40,8 +47,8 @@ def get_corners(mask):
 
 
 def _detect_polygon(contour):
-    eps = cv.arcLength(contour, True) * _POLYGON_ERROR
-    vertices = cv.approxPolyDP(contour, eps, True)
+    eps = cv2.arcLength(contour, True) * _POLYGON_ERROR
+    vertices = cv2.approxPolyDP(contour, eps, True)
     return vertices
 
 
@@ -61,9 +68,9 @@ def _get_box_from_ellipse(rect):
     dev_ratio = abs(rect[1][0] - mean_size) / mean_size
     if dev_ratio < DEV_RATIO_THRES:
         # Set angle to 0 when width and height are similar
-        box = cv.boxPoints((rect[0], rect[1], 0.0))
+        box = cv2.boxPoints((rect[0], rect[1], 0.0))
     else:
-        box = cv.boxPoints(rect)
+        box = cv2.boxPoints(rect)
     return box
 
 
@@ -166,3 +173,72 @@ def get_shape_from_vertices(vertices):
     else:
         shape = "other"
     return shape
+
+
+def get_transform_matrix(
+    src: np.ndarray | list[list[float]] | None = None,
+    tgt: np.ndarray | list[list[float]] | None = None,
+    transform_mode: str = "perspective",
+) -> torch.Tensor:
+    """Get transformation matrix and parameters.
+
+    Returns:
+        Tuple of (Transform function, transformation matrix, target points).
+    """
+    if transform_mode not in _VALID_TRANSFORM_MODE:
+        raise NotImplementedError(
+            f"transform_mode {transform_mode} is not implemented. "
+            f"Only supports {_VALID_TRANSFORM_MODE}!"
+        )
+    if not isinstance(src, np.ndarray):
+        src = np.array(src, dtype=np.float32)[:, :2]
+    if not isinstance(tgt, np.ndarray):
+        tgt = np.array(tgt, dtype=np.float32)[:, :2]
+    tgt = tgt[: len(src)].copy()
+
+    if transform_mode == "translate_scale":
+        # Use corners of axis-aligned bounding box for transform
+        # (translation and scaling) instead of real corners.
+        min_tgt_x = min(tgt[:, 0])
+        max_tgt_x = max(tgt[:, 0])
+        min_tgt_y = min(tgt[:, 1])
+        max_tgt_y = max(tgt[:, 1])
+        tgt = np.array(
+            [
+                [min_tgt_x, min_tgt_y],
+                [max_tgt_x, min_tgt_y],
+                [max_tgt_x, max_tgt_y],
+                [min_tgt_x, max_tgt_y],
+            ]
+        )
+
+        min_src_x = min(src[:, 0])
+        max_src_x = max(src[:, 0])
+        min_src_y = min(src[:, 1])
+        max_src_y = max(src[:, 1])
+        src = np.array(
+            [
+                [min_src_x, min_src_y],
+                [max_src_x, min_src_y],
+                [max_src_x, max_src_y],
+                [min_src_x, max_src_y],
+            ]
+        )
+
+    assert src.shape == tgt.shape, (
+        f"src and tgt keypoints don't have the same shape ({src.shape} vs "
+        f"{tgt.shape})!"
+    )
+
+    if len(src) == 3:
+        # For triangles which have only 3 keypoints
+        transform_mat = cv2.getAffineTransform(src, tgt)
+        transform_mat = torch.from_numpy(transform_mat).unsqueeze(0).float()
+        new_row = torch.tensor([[[0, 0, 1]]])
+        transform_mat = torch.cat([transform_mat, new_row], dim=1)
+    else:
+        # All other signs use perspective transform
+        src = torch.from_numpy(src).unsqueeze(0)
+        tgt = torch.from_numpy(tgt).unsqueeze(0)
+        transform_mat = kornia_tf.get_perspective_transform(src, tgt)
+    return transform_mat

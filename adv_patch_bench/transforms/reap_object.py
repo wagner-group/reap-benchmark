@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import cv2
 import kornia.geometry.transform as kornia_tf
-import numpy as np
 import torch
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
+from adv_patch_bench.transforms.geometric_tf import get_transform_matrix
 from adv_patch_bench.transforms.util import identity
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
@@ -21,9 +20,7 @@ from adv_patch_bench.utils.types import (
     Target,
 )
 
-_VALID_TRANSFORM_MODE = ("perspective", "translate_scale")
 _EPS = 1e-6
-
 logger = logging.getLogger(__name__)
 
 
@@ -49,16 +46,7 @@ class ReapObject(render_object.RenderObject):
             NotImplementedError: Invalid transform mode.
         """
         super().__init__(dataset="reap", pad_to_square=True, **kwargs)
-
-        if patch_transform_mode not in _VALID_TRANSFORM_MODE:
-            raise NotImplementedError(
-                f"transform_mode {patch_transform_mode} is not implemented. "
-                f"Only supports {_VALID_TRANSFORM_MODE}!"
-            )
-        self._patch_transform_mode: str = patch_transform_mode
-        self._use_patch_relight: bool = use_patch_relight
-
-        # # Get REAP relighting transform params
+        # Get REAP relighting transform params
         if use_patch_relight:
             alpha = torch.tensor(
                 obj_dict["alpha"], device=self._device, dtype=torch.float32
@@ -73,66 +61,11 @@ class ReapObject(render_object.RenderObject):
         self.beta: torch.Tensor = img_util.coerce_rank(beta, 4)
 
         # Get REAP geometric transform params
-        self.transform_mat = self._get_reap_transforms(obj_dict["keypoints"])
-
-    def _get_reap_transforms(
-        self, tgt: np.ndarray | list[list[float]] | None = None
-    ) -> torch.Tensor:
-        """Get transformation matrix and parameters.
-
-        Returns:
-            Tuple of (Transform function, transformation matrix, target points).
-        """
-        tgt = np.array(tgt, dtype=np.float32)[:, :2]
-        src: np.ndarray = self.src_points
-        tgt = tgt[: len(src)].copy()
-
-        if self._patch_transform_mode == "translate_scale":
-            # Use corners of axis-aligned bounding box for transform
-            # (translation and scaling) instead of real corners.
-            min_tgt_x = min(tgt[:, 0])
-            max_tgt_x = max(tgt[:, 0])
-            min_tgt_y = min(tgt[:, 1])
-            max_tgt_y = max(tgt[:, 1])
-            tgt = np.array(
-                [
-                    [min_tgt_x, min_tgt_y],
-                    [max_tgt_x, min_tgt_y],
-                    [max_tgt_x, max_tgt_y],
-                    [min_tgt_x, max_tgt_y],
-                ]
-            )
-
-            min_src_x = min(src[:, 0])
-            max_src_x = max(src[:, 0])
-            min_src_y = min(src[:, 1])
-            max_src_y = max(src[:, 1])
-            src = np.array(
-                [
-                    [min_src_x, min_src_y],
-                    [max_src_x, min_src_y],
-                    [max_src_x, max_src_y],
-                    [min_src_x, max_src_y],
-                ]
-            )
-
-        assert src.shape == tgt.shape, (
-            f"src and tgt keypoints don't have the same shape ({src.shape} vs "
-            f"{tgt.shape})!"
-        )
-
-        if len(src) == 3:
-            # For triangles which have only 3 keypoints
-            transform_mat = cv2.getAffineTransform(src, tgt)
-            transform_mat = torch.from_numpy(transform_mat).unsqueeze(0).float()
-            new_row = torch.tensor([[[0, 0, 1]]])
-            transform_mat = torch.cat([transform_mat, new_row], dim=1)
-        else:
-            # All other signs use perspective transform
-            src = torch.from_numpy(src).unsqueeze(0)
-            tgt = torch.from_numpy(tgt).unsqueeze(0)
-            transform_mat = kornia_tf.get_perspective_transform(src, tgt)
-        return transform_mat.to(self._device)
+        self.transform_mat = get_transform_matrix(
+            src=self.src_points,
+            tgt=obj_dict["keypoints"],
+            transform_mode=patch_transform_mode,
+        ).to(self._device)
 
     @staticmethod
     def apply_objects(

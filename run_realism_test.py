@@ -1,9 +1,13 @@
 """Run realism test for REAP benchmark."""
 
+from __future__ import annotations
+
+import copy
 import math
 import os
 import pathlib
 import pickle
+from typing import Any
 
 import cv2 as cv
 import kornia.geometry.transform as kornia_tf
@@ -13,9 +17,11 @@ import pandas as pd
 import skimage
 import torch
 from kornia.geometry.transform import get_perspective_transform
+from PIL import Image
 from torchvision.utils import save_image
 from tqdm import tqdm
 
+import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import lighting_tf, util
 from hparams import OBJ_DIM_DICT, TS_COLOR_DICT
 
@@ -58,7 +64,46 @@ def _save_images(
     return image_resized.float() / 255
 
 
-def main():
+def _compute_relight_params(
+    torch_image,
+    sign_mask,
+    relight_method,
+    relight_params,
+    obj_class,
+    src,
+    tgt,
+) -> torch.Tensor:
+    syn_obj_path = os.path.join(
+        "attack_assets", "synthetic", f"{obj_class}.png"
+    )
+    obj_numpy = np.array(Image.open(syn_obj_path).convert("RGBA")) / 255
+    syn_obj = torch.from_numpy(obj_numpy[:, :, :-1]).float().permute(2, 0, 1)
+    obj_height, obj_width = syn_obj.shape[-2:]
+    orig_height, orig_width = sign_mask.shape[-2:]
+    relight_sign_mask = img_util.resize_and_pad(
+        sign_mask, resize_size=(obj_height, obj_width), is_binary=True
+    ).float()
+    relight_params["obj_mask"] = relight_sign_mask
+    src = copy.deepcopy(src)
+    src[:, 0] *= obj_width / orig_width
+    src[:, 1] *= obj_height / orig_height
+    relight_params["src_points"] = src
+    relight_params["tgt_points"] = tgt
+    relight_params["transform_mode"] = "perspective"
+
+    if relight_method == "polynomial":
+        relight_params["syn_obj"] = syn_obj
+
+    # calculate relighting parameters
+    coeffs = lighting_tf.compute_relight_params(
+        torch_image,
+        method=relight_method,
+        **relight_params,
+    )
+    return coeffs
+
+
+def main(relight_method: str, relight_params: dict[str, Any] | None = None):
     """Main function for running realism test."""
     # file directory where images are stored
     file_dir = "~/data/reap-benchmark/reap_realism_test/images/"
@@ -100,15 +145,11 @@ def main():
     for index, row in tqdm(annotation_df.iterrows()):
         is_clean = index % 2 == 0
         if is_clean:
-            alpha = None
-            beta = None
+            relight_coeffs = None
         else:
             assert (
-                alpha is not None
-            ), "alpha must be specified for adversarial images"
-            assert (
-                beta is not None
-            ), "beta must be specified for adversarial images"
+                relight_coeffs is not None
+            ), "relight_coeffs must be specified for adversarial images"
 
         # obj_class = traffic_sign_classes[(index // 4) % len(traffic_sign_classes)]
         obj_class = traffic_sign_classes[
@@ -283,35 +324,26 @@ def main():
             save_image(image_resized, f"tmp/{index:02d}_test.png")
 
         if is_clean:
-            # warp canonical sign mask (to calculate alpha and beta)
-            warped_sign_mask = transform_func(
-                sign_mask.float(),
-                sign_tf_matrix,
-                dsize=(img_height, img_width),
-                mode="nearest",
-                padding_mode="zeros",
+            relight_coeffs = _compute_relight_params(
+                torch_image,
+                sign_mask,
+                relight_method,
+                relight_params,
+                obj_class,
+                src,
+                tgt,
             )
-            warped_sign_mask.clamp_(0, 1)
-            cropped_traffic_sign = torch.masked_select(
-                torch_image, warped_sign_mask.bool()
-            )
-            # calculate relighting parameters
-            alpha, beta = lighting_tf.compute_relight_params(
-                cropped_traffic_sign.numpy().reshape(-1, 1)
-            )
-            print(f"alpha: {alpha:.4f}, beta: {beta:.4f}")
-            if SAVE_IMG_DEBUG:
-                save_image(
-                    warped_sign_mask, f"tmp/{index:02d}_M1_warped_sign_mask.png"
-                )
+            print(f"relight_coeffs: {relight_coeffs}")
             continue
 
-        # calculate euclidean distance between patch_src_transformed and patch_tgt
+        # calculate euclidean distance between patch_src_transformed and
+        # patch_tgt
         transform_l2_error = np.linalg.norm(
             patch_src_transformed - patch_tgt, axis=1
         ).mean()
 
-        # calculate transform matrix M2 between transformed patch points and labeled patch points
+        # calculate transform matrix M2 between transformed patch points and
+        # labeled patch points
         patch_tf_matrix = get_perspective_transform(
             torch.from_numpy(patch_src).unsqueeze(0),
             torch.from_numpy(patch_tgt).unsqueeze(0),
@@ -319,15 +351,23 @@ def main():
         transform_func = kornia_tf.warp_perspective
 
         # apply relighting to transformed synthetic patch
-        tmp_patch = torch.zeros_like(patch)
-        patch.mul_(alpha).add_(beta)
+        patch = img_util.coerce_rank(patch, 4)
+        num_degree = len(relight_coeffs[0])
+        degrees = torch.arange(num_degree - 1, -1, -1).view(
+            1, 1, num_degree, 1, 1
+        )
+        patch = patch[:, :, None].pow(degrees)
+        # relight_coeffs: [num_channels, num_degree]
+        patch *= relight_coeffs.view(1, -1, num_degree, 1, 1)
+        patch = patch.sum(2)
         patch.clamp_(0, 1)
-        tmp_patch[:, h_min:h_max, w_min:w_max] = patch[
-            :, h_min + shift : h_max + shift, w_min:w_max
+        tmp_patch = torch.zeros_like(patch)
+        tmp_patch[:, :, h_min:h_max, w_min:w_max] = patch[
+            :, :, h_min + shift : h_max + shift, w_min:w_max
         ]
         patch = tmp_patch
         warped_patch = transform_func(
-            patch.unsqueeze(0),
+            patch,
             patch_tf_matrix,
             dsize=(img_height, img_width),
             mode="bilinear",
@@ -388,8 +428,26 @@ def main():
     print(f"max: {np.max(lighting_errors)}")
     print(f"min: {np.min(lighting_errors)}")
 
+    return geometric_errors, lighting_errors
+
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
     SAVE_IMG_DEBUG = False
-    main()
+    results = {}
+
+    # RELIGHT_METHOD = "percentile"
+    # for percentile in range(1, 21):
+    #     params = {"percentile": percentile}
+    #     results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
+
+    RELIGHT_METHOD = "polynomial"
+    for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
+        for degree in range(1, 4):
+            params = {"poly_degree": degree, "drop_topk": drop_topk}
+            results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+                RELIGHT_METHOD, params
+            )
+
+    with open("tmp/realism_test_results.pkl", "wb") as f:
+        pickle.dump(results, f)
