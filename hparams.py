@@ -39,6 +39,7 @@ INTERPS = ("nearest", "bilinear", "bicubic")
 RELIGHT_METHODS = [
     "color_transfer",
     "polynomial",
+    "polynomial_max",
     "percentile",
 ]
 

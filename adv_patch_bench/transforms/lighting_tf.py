@@ -20,75 +20,79 @@ _EPS = 1e-6
 logger = logging.getLogger(__name__)
 
 
-class RGBtoLab(nn.Module):
-    """Convert RGB to Lab color space."""
+# class RGBtoLab(nn.Module):
+#     """Convert RGB to Lab color space."""
 
-    def __init__(self) -> None:
-        """Initialize RGBtoLab."""
-        super().__init__()
-        rgb_to_lms = torch.tensor(
-            [
-                [0.3811, 0.5783, 0.0402],
-                [0.1967, 0.7244, 0.0782],
-                [0.0241, 0.1288, 0.8444],
-            ]
-        )
-        scale = torch.tensor(
-            [
-                [1 / math.sqrt(3), 0, 0],
-                [0, 1 / math.sqrt(6), 0],
-                [0, 0, 1 / math.sqrt(2)],
-            ]
-        )
-        loglms_to_lab = scale @ torch.tensor(
-            [[1.0, 1.0, 1.0], [1.0, 1.0, -2.0], [1.0, -1.0, 0.0]]
-        )
-        self.register_buffer("rgb_to_lms", rgb_to_lms)
-        self.register_buffer("loglms_to_lab", loglms_to_lab)
+#     def __init__(self) -> None:
+#         """Initialize RGBtoLab."""
+#         super().__init__()
+#         rgb_to_lms = torch.tensor(
+#             [
+#                 [0.3811, 0.5783, 0.0402],
+#                 [0.1967, 0.7244, 0.0782],
+#                 [0.0241, 0.1288, 0.8444],
+#             ]
+#         )
+#         scale = torch.tensor(
+#             [
+#                 [1 / math.sqrt(3), 0, 0],
+#                 [0, 1 / math.sqrt(6), 0],
+#                 [0, 0, 1 / math.sqrt(2)],
+#             ]
+#         )
+#         loglms_to_lab = scale @ torch.tensor(
+#             [[1.0, 1.0, 1.0], [1.0, 1.0, -2.0], [1.0, -1.0, 0.0]]
+#         )
+#         self.register_buffer("rgb_to_lms", rgb_to_lms)
+#         self.register_buffer("loglms_to_lab", loglms_to_lab)
 
-    def forward(self, inputs: BatchImageTensor) -> BatchMaskTensor:
-        """Forward pass."""
-        # Clamp to avoid log(0)
-        inputs = inputs.clamp(_EPS, 1 - _EPS)
-        # Convert to LMS space and then Lab space
-        lms = torch.einsum("bchw,cd->bdhw", inputs, self.rgb_to_lms)
-        lab = torch.einsum("bchw,cd->bdhw", lms.log(), self.loglms_to_lab)
-        return lab
+#     def forward(self, inputs: BatchImageTensor) -> BatchMaskTensor:
+#         """Forward pass."""
+#         # Clamp to avoid log(0)
+#         inputs = inputs.clamp(_EPS, 1 - _EPS)
+#         # Convert to LMS space and then Lab space
+#         lms = torch.einsum("bchw,cd->bdhw", inputs, self.rgb_to_lms)
+#         lab = torch.einsum("bchw,cd->bdhw", lms.log(), self.loglms_to_lab)
+#         return lab
 
 
-class LabtoRGB(nn.Module):
-    """Convert Lab to RGB color space."""
+# class LabtoRGB(nn.Module):
+#     """Convert Lab to RGB color space."""
 
-    def __init__(self) -> None:
-        """Initialize LabtoRGB."""
-        super().__init__()
-        scale = torch.tensor(
-            [
-                [1 / math.sqrt(3), 0, 0],
-                [0, 1 / math.sqrt(6), 0],
-                [0, 0, 1 / math.sqrt(2)],
-            ]
-        )
-        lab_to_loglms = (
-            torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, -1.0], [1.0, -2.0, 0.0]])
-            @ scale
-        )
-        lms_to_rgb = torch.tensor(
-            [
-                [4.4679, -3.5873, 0.1193],
-                [-1.2186, 2.3809, -0.1624],
-                [0.0497, -0.2439, 1.2045],
-            ]
-        )
-        self.register_buffer("lab_to_loglms", lab_to_loglms)
-        self.register_buffer("lms_to_rgb", lms_to_rgb)
+#     def __init__(self) -> None:
+#         """Initialize LabtoRGB."""
+#         super().__init__()
+#         scale = torch.tensor(
+#             [
+#                 [1 / math.sqrt(3), 0, 0],
+#                 [0, 1 / math.sqrt(6), 0],
+#                 [0, 0, 1 / math.sqrt(2)],
+#             ]
+#         )
+#         lab_to_loglms = (
+#             torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, -1.0], [1.0, -2.0, 0.0]])
+#             @ scale
+#         )
+#         lms_to_rgb = torch.tensor(
+#             [
+#                 [4.4679, -3.5873, 0.1193],
+#                 [-1.2186, 2.3809, -0.1624],
+#                 [0.0497, -0.2439, 1.2045],
+#             ]
+#         )
+#         self.register_buffer("lab_to_loglms", lab_to_loglms)
+#         self.register_buffer("lms_to_rgb", lms_to_rgb)
 
-    def forward(self, inputs: BatchImageTensor) -> BatchMaskTensor:
-        """Forward pass."""
-        # Convert to LMS space and then Lab space
-        loglms = torch.einsum("bchw,cd->bdhw", inputs, self.lab_to_loglms)
-        rgb = torch.einsum("bchw,cd->bdhw", loglms.exp(), self.lms_to_rgb)
-        return rgb
+#     def forward(self, inputs: BatchImageTensor) -> BatchMaskTensor:
+#         """Forward pass."""
+#         # Convert to LMS space and then Lab space
+#         loglms = torch.einsum("bchw,cd->bdhw", inputs, self.lab_to_loglms)
+#         rgb = torch.einsum("bchw,cd->bdhw", loglms.exp(), self.lms_to_rgb)
+#         return rgb
+
+import kornia
+RGBtoLab = kornia.color.RgbToLab
+LabtoRGB = kornia.color.LabToRgb
 
 
 class RelightTransform(nn.Module):
@@ -102,6 +106,7 @@ class RelightTransform(nn.Module):
         """
         super().__init__()
         self._method: str = method
+        self._l_channel_only = True  # TODO
         if method == "color_transfer":
             self._rgb_to_lab = RGBtoLab()
             self._lab_to_rgb = LabtoRGB()
@@ -121,9 +126,13 @@ class RelightTransform(nn.Module):
         """
         if self._method == "color_transfer":
             return _color_transfer(
-                inputs, relight_coeffs, self._rgb_to_lab, self._lab_to_rgb
+                inputs,
+                relight_coeffs,
+                self._rgb_to_lab,
+                self._lab_to_rgb,
+                l_channel_only=self._l_channel_only,
             )
-        if self._method == "polynomial":
+        if self._method in ("polynomial", "polynomial_max", "polynomial_mean"):
             return _polynomial_match(inputs, relight_coeffs)
         raise NotImplementedError("Invalid lighting transform method!")
 
@@ -133,6 +142,7 @@ def _color_transfer(
     poly_coeffs: torch.Tensor,
     rgb_to_lab: Callable[[BatchImageTensor], BatchImageTensor],
     lab_to_rgb: Callable[[BatchImageTensor], BatchImageTensor],
+    l_channel_only: bool = False,
 ) -> BatchImageTensor:
     """Relight with Color Transfer method from Reinhard, et al. [2021].
 
@@ -152,7 +162,11 @@ def _color_transfer(
 
     # Compute mean and standard deviation of L, a, b channels and normalize
     poly_coeffs = poly_coeffs.view(-1, 3, 2, 1, 1)
-    lab_out = (lab * poly_coeffs[:, :, 0]) + poly_coeffs[:, :, 1]
+    if l_channel_only:
+        lab_out = lab.clone()
+        lab_out[:, 0] = lab[:, 0] * poly_coeffs[:, 0, 0] + poly_coeffs[:, 0, 1]
+    else:
+        lab_out = lab * poly_coeffs[:, :, 0] + poly_coeffs[:, :, 1]
 
     # Convert back to LMS space and then RGB space
     rgb_out = lab_to_rgb(lab_out)
@@ -184,7 +198,7 @@ def _polynomial_match(
     Raises:
         ValueError: Invalid shape of poly_coeffs.
     """
-    if poly_coeffs.ndim == 3:
+    if poly_coeffs.ndim != 3:
         raise ValueError(
             "Expect poly_coeffs to have 3 dimensions [batch_size, "
             f"num_channels, num_degree], but got {poly_coeffs.ndim}!"
@@ -272,7 +286,7 @@ def _fit_polynomial(
     interp: str = "bilinear",
     polynomial_degree: int = 1,
     percentile: float = 0.0,
-    use_max_mode: bool = False,
+    mode: str = "",
 ) -> torch.Tensor:
     if not isinstance(syn_obj, torch.Tensor):
         raise ValueError("syn_obj must be provided as torch.Tensor.")
@@ -286,13 +300,16 @@ def _fit_polynomial(
         padding_mode="zeros",
     )
 
-    if use_max_mode:
-        syn_obj = syn_obj.max(1, keepdim=True)
-        real_pixels_by_channel = torch.stack(real_pixels_by_channel, dim=0)
-        real_pixels_by_channel = real_pixels_by_channel.max(0, keepdim=True)
+    real_pixels_by_channel = torch.stack(real_pixels_by_channel, dim=0)
+    if mode == "max":
+        syn_obj = syn_obj.max(1, keepdim=True)[0]
+        real_pixels_by_channel = real_pixels_by_channel.max(0, keepdim=True)[0]
+    elif mode == "mean":
+        syn_obj = syn_obj.mean(1, keepdim=True)
+        real_pixels_by_channel = real_pixels_by_channel.mean(0, keepdim=True)
 
     coeffs = []
-    for channel in range(1 if use_max_mode else 3):
+    for channel in range(1 if mode else 3):
         syn_pixels = torch.masked_select(syn_obj[:, channel], warped_obj_mask)
         real_pixels = real_pixels_by_channel[channel]
 
@@ -316,7 +333,7 @@ def _fit_polynomial(
     return torch.stack(coeffs, dim=0)
 
 
-def _get_color_transform_params(
+def _get_color_transfer_params(
     real_pixels_by_channel: list[torch.Tensor],
     syn_obj: torch.Tensor | None = None,
     obj_mask: torch.Tensor | None = None,
@@ -380,7 +397,7 @@ def compute_relight_params(
     img: BatchImageTensor = img_util.coerce_rank(img, 4)
     obj_mask: BatchMaskTensor = img_util.coerce_rank(obj_mask, 4)
 
-    if method in ("percentile", "polynomial", "polynomial_max"):
+    if method == "percentile" or "polynomial" in method:
         if transform_mat is None:
             transform_mat = get_transform_matrix(
                 src=src_points, tgt=tgt_points, transform_mode=transform_mode
@@ -428,7 +445,7 @@ def compute_relight_params(
             real_pixels,
             warped_obj_mask=obj_mask,
             transform_mat=transform_mat,
-            use_max_mode="max" in method,
+            mode=method.split("_")[-1],
             **relight_kwargs,
         )
     elif method == "color_transfer":
@@ -438,7 +455,7 @@ def compute_relight_params(
         real_pixels = []
         for channel in range(3):
             real_pixels.append(torch.masked_select(img[:, channel], obj_mask))
-        coeffs = _get_color_transform_params(
+        coeffs = _get_color_transfer_params(
             real_pixels, obj_mask=obj_mask, **relight_kwargs
         )
     else:

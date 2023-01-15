@@ -102,13 +102,7 @@ def _compute_relight_params(
         method=relight_method,
         **relight_params,
     )
-
-    if SAVE_IMG_DEBUG:
-        relight_transform = lighting_tf.RelightTransform(method=RELIGHT_METHOD)
-        relighted_syn_obj = relight_transform(syn_obj, coeffs)
-        save_image(relighted_syn_obj, "tmp_relighted_syn_obj.png")
-
-    return coeffs
+    return coeffs, syn_obj
 
 
 def main(relight_method: str, relight_params: dict[str, Any] | None = None):
@@ -334,7 +328,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
             save_image(image_resized, f"tmp/{index:02d}_test.png")
 
         if is_clean:
-            relight_coeffs = _compute_relight_params(
+            relight_coeffs, syn_obj = _compute_relight_params(
                 torch_image,
                 sign_mask,
                 relight_method,
@@ -343,7 +337,13 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
                 src,
                 tgt,
             )
+            relight_coeffs = relight_coeffs[None]
             print(f"relight_coeffs: {relight_coeffs}")
+            if SAVE_IMG_DEBUG:
+                relighted_syn_obj = relight_transform(syn_obj, relight_coeffs)
+                save_image(
+                    relighted_syn_obj, f"tmp/{index:02d}_relighted_syn_obj.png"
+                )
             continue
 
         # calculate euclidean distance between patch_src_transformed and
@@ -384,15 +384,11 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
         )
         warped_patch.clamp_(0, 1)
 
+        real_patch = torch.masked_select(torch_image, warped_mask.bool())
+        reap_patch = torch.masked_select(warped_patch, warped_mask.bool())
         if SAVE_IMG_DEBUG:
             save_image(warped_patch, f"tmp/{index:02d}_M2_warped_patch.png")
             save_image(warped_mask, f"tmp/{index:02d}_M2_warped_mask.png")
-
-        # real_patch = warped_mask[0].permute(1, 2, 0) * image
-        warped_mask = warped_mask.bool()
-        real_patch = torch.masked_select(torch_image, warped_mask)
-        reap_patch = torch.masked_select(warped_patch, warped_mask)
-        if SAVE_IMG_DEBUG:
             save_image(
                 torch_image * warped_mask, f"tmp/{index:02d}_real_patch.png"
             )
@@ -435,7 +431,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
-    SAVE_IMG_DEBUG = True
+    SAVE_IMG_DEBUG = False
     results = {}
 
     # RELIGHT_METHOD = "percentile"
@@ -454,10 +450,9 @@ if __name__ == "__main__":
     # RELIGHT_METHOD = "color_transfer"
     # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
 
-    RELIGHT_METHOD = "polynomial_max"
+    RELIGHT_METHOD = "polynomial_mean"
     for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
-        # for degree in range(4):
-        for degree in range(1, 4):
+        for degree in range(4):
             params = {"polynomial_degree": degree, "percentile": drop_topk}
             results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
                 RELIGHT_METHOD, params

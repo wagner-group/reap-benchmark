@@ -56,12 +56,10 @@ def main() -> None:
     class_names_dict = DATASET_METADATA["reap"]["class_name"]
     obj_shape_dict = DATASET_METADATA["reap"]["shape"]
     relight_params = {"transform_mode": "perspective"}
-    if RELIGHT_METHOD == "polynomial":
+    if "polynomial" in RELIGHT_METHOD:
         relight_params["polynomial_degree"] = POLY_DEGREE
         relight_params["percentile"] = DROP_TOPK
-        column_name = "poly_coeffs"
-    elif RELIGHT_METHOD == "color_transfer":
-        column_name = "ct_coeffs"
+    column_name = f"{RELIGHT_METHOD}_coeffs"
 
     anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
     anno_df = anno_df.assign(
@@ -152,9 +150,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    RELIGHT_METHOD = "polynomial"  # "polynomial", "color_transfer"
+    RELIGHT_METHOD = "polynomial_mean"  # "polynomial", "color_transfer"
     POLY_DEGREE = 1
-    DROP_TOPK = 0.01
+    DROP_TOPK = 0.0
 
     config: dict[str, dict[str, Any]] = args_util.reap_args_parser(
         is_detectron=True, is_gen_patch=True, is_train=False
