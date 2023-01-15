@@ -219,8 +219,7 @@ class ReapDatasetMapper:
                 name = f"{key}_coeffs"
                 relight_coeffs = dataset_dict["annotations"][i].get(name)
                 if relight_coeffs is not None:
-                    obj[name] = np.array(relight_coeffs)
-                    print(relight_coeffs)
+                    obj[name] = np.array(relight_coeffs[0])
 
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos

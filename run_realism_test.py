@@ -102,6 +102,12 @@ def _compute_relight_params(
         method=relight_method,
         **relight_params,
     )
+
+    if SAVE_IMG_DEBUG:
+        relight_transform = lighting_tf.RelightTransform(method=RELIGHT_METHOD)
+        relighted_syn_obj = relight_transform(syn_obj, coeffs)
+        save_image(relighted_syn_obj, "tmp_relighted_syn_obj.png")
+
     return coeffs
 
 
@@ -429,7 +435,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
-    SAVE_IMG_DEBUG = False
+    SAVE_IMG_DEBUG = True
     results = {}
 
     # RELIGHT_METHOD = "percentile"
@@ -439,14 +445,23 @@ if __name__ == "__main__":
 
     # RELIGHT_METHOD = "polynomial"
     # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
-    #     for degree in range(4):
+    #     # for degree in range(4):
     #         params = {"polynomial_degree": degree, "percentile": drop_topk}
     #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
     #             RELIGHT_METHOD, params
     #         )
 
-    RELIGHT_METHOD = "color_transfer"
-    results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
+    # RELIGHT_METHOD = "color_transfer"
+    # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
+
+    RELIGHT_METHOD = "polynomial_max"
+    for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
+        # for degree in range(4):
+        for degree in range(1, 4):
+            params = {"polynomial_degree": degree, "percentile": drop_topk}
+            results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+                RELIGHT_METHOD, params
+            )
 
     with open("tmp/realism_test_results.pkl", "wb") as f:
         pickle.dump(results, f)

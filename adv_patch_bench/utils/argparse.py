@@ -892,6 +892,7 @@ def _update_save_dir(
             token_list.append("dt" + "_".join(dt_params_list))
 
     # Append custom name at the end
+    token_list = [str(t) for t in token_list]
     exp_name = "-".join(token_list)
     if config_base["name"] is not None:
         name_from_cfg: str = str(config_base["name"])

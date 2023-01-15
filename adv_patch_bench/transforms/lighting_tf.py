@@ -151,15 +151,19 @@ def _color_transfer(
     lab = rgb_to_lab(inputs)
 
     # Compute mean and standard deviation of L, a, b channels and normalize
-    # lab_out = (inputs - mean) / std * pixel_stats["sd"] + pixel_stats["mean"]
     poly_coeffs = poly_coeffs.view(-1, 3, 2, 1, 1)
     lab_out = (lab * poly_coeffs[:, :, 0]) + poly_coeffs[:, :, 1]
 
     # Convert back to LMS space and then RGB space
     rgb_out = lab_to_rgb(lab_out)
-    if not ((rgb_out >= 0) & (rgb_out <= 1)).all():
+    oob_pixels = (rgb_out < 0) | (rgb_out > 1)
+    if oob_pixels.any():
+        num_oob_pixels = oob_pixels.sum().item()
         logger.debug(
-            "Invalid RGB values (min: %.4f, max: %.4f)! Clipping to [0, 1].",
+            "Found %d (out of %d) invalid RGB values (min: %.4f, max: %.4f) in "
+            "Color Transfer! Clipping to [0, 1].",
+            num_oob_pixels,
+            inputs.numel(),
             rgb_out.min().item(),
             rgb_out.max().item(),
         )
@@ -180,7 +184,7 @@ def _polynomial_match(
     Raises:
         ValueError: Invalid shape of poly_coeffs.
     """
-    if poly_coeffs.ndim != 3:
+    if poly_coeffs.ndim == 3:
         raise ValueError(
             "Expect poly_coeffs to have 3 dimensions [batch_size, "
             f"num_channels, num_degree], but got {poly_coeffs.ndim}!"
@@ -190,12 +194,12 @@ def _polynomial_match(
             "poly_coeffs should have batch size of 1 or the same as inputs, "
             f"but got {len(poly_coeffs)}!"
         )
-    if poly_coeffs.shape[1] not in (1, 3):
+    if poly_coeffs.shape[-2] not in (1, 3):
         raise ValueError(
             "poly_coeffs must have channel dimension of 1 or 3, but got "
             f"{poly_coeffs.shape[1]}!"
         )
-    _, _, deg = poly_coeffs.shape
+    deg = poly_coeffs.shape[-1]
     device = inputs.device
     degrees = torch.arange(deg - 1, -1, -1, device=device).view(1, 1, deg, 1, 1)
     outputs = inputs[:, :, None].pow(degrees)
@@ -268,6 +272,7 @@ def _fit_polynomial(
     interp: str = "bilinear",
     polynomial_degree: int = 1,
     percentile: float = 0.0,
+    use_max_mode: bool = False,
 ) -> torch.Tensor:
     if not isinstance(syn_obj, torch.Tensor):
         raise ValueError("syn_obj must be provided as torch.Tensor.")
@@ -281,8 +286,13 @@ def _fit_polynomial(
         padding_mode="zeros",
     )
 
+    if use_max_mode:
+        syn_obj = syn_obj.max(1, keepdim=True)
+        real_pixels_by_channel = torch.stack(real_pixels_by_channel, dim=0)
+        real_pixels_by_channel = real_pixels_by_channel.max(0, keepdim=True)
+
     coeffs = []
-    for channel in range(3):
+    for channel in range(1 if use_max_mode else 3):
         syn_pixels = torch.masked_select(syn_obj[:, channel], warped_obj_mask)
         real_pixels = real_pixels_by_channel[channel]
 
@@ -370,7 +380,7 @@ def compute_relight_params(
     img: BatchImageTensor = img_util.coerce_rank(img, 4)
     obj_mask: BatchMaskTensor = img_util.coerce_rank(obj_mask, 4)
 
-    if method in ("percentile", "polynomial"):
+    if method in ("percentile", "polynomial", "polynomial_max"):
         if transform_mat is None:
             transform_mat = get_transform_matrix(
                 src=src_points, tgt=tgt_points, transform_mode=transform_mode
@@ -409,7 +419,7 @@ def compute_relight_params(
         raise NotImplementedError(
             "Currently, k-mean method is unused as it does not work well."
         )
-    elif method == "polynomial":
+    elif "polynomial" in method:
         obj_mask = obj_mask[:, 0] == 1
         real_pixels = []
         for channel in range(3):
@@ -418,6 +428,7 @@ def compute_relight_params(
             real_pixels,
             warped_obj_mask=obj_mask,
             transform_mat=transform_mat,
+            use_max_mode="max" in method,
             **relight_kwargs,
         )
     elif method == "color_transfer":

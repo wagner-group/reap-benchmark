@@ -57,9 +57,11 @@ class ReapObject(render_object.RenderObject):
             dtype=torch.float32,
         )
         self.relight_coeffs: torch.Tensor = img_util.coerce_rank(
-            relight_coeffs, 4
+            relight_coeffs, 3
         )
-        self.relight_transform = RelightTransform(reap_relight_method)
+        self.relight_transform = RelightTransform(reap_relight_method).to(
+            self._device
+        )
 
         # Get REAP geometric transform params
         self.transform_mat = get_transform_matrix(
