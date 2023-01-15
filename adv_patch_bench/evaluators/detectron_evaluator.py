@@ -126,24 +126,14 @@ class DetectronEvaluator:
             "obj_size_px": self._obj_size_px,
             "interp": interp,
         }
-        if self._synthetic:
-            self._robj_fn = syn_object.SynObject
-            self._robj_kwargs = {
-                **robj_kwargs,
-                "syn_obj_path": config_base["syn_obj_path"],
-                "syn_rotate": config_base["syn_rotate"],
-                "syn_translate": config_base["syn_translate"],
-                "syn_scale": config_base["syn_scale"],
-                "syn_3d_dist": config_base["syn_3d_dist"],
-                "syn_colorjitter": config_base["syn_colorjitter"],
-            }
-        else:
-            self._robj_fn = reap_object.ReapObject
-            self._robj_kwargs = {
-                **robj_kwargs,
-                "reap_transform_mode": config_base["reap_transform_mode"],
-                "reap_use_relight": config_base["reap_use_relight"],
-            }
+        keyword = "syn" if self._synthetic else "reap"
+        self._robj_fn = (
+            syn_object.SynObject if self._synthetic else reap_object.ReapObject
+        )
+        self._robj_kwargs = {
+            **robj_kwargs,
+            **{k: v for k, v in config_base.items() if keyword in k},
+        }
 
         # Set up attack if applicable
         self._attack_type: str = config_base["attack_type"]

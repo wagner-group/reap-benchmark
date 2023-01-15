@@ -31,18 +31,18 @@ class ReapObject(render_object.RenderObject):
     def __init__(
         self,
         obj_dict: dict[str, Any] | None = None,
-        geo_transform_mode: str = "perspective",
-        relight_transform_mode: str = "color_transfer",
-        use_patch_relight: bool = True,
+        reap_geo_method: str = "perspective",
+        reap_relight_method: str = "color_transfer",
         **kwargs,
     ) -> None:
         """Initialize ReapObject.
 
         Args:
-            patch_transform_mode: Type of geometric transform functions to use.
+            obj_dict: Dictionary containing object parameters.
+            reap_geo_method: Type of geometric transform functions to use.
                 Defaults to "perspective".
-            use_patch_relight: Whether to apply relighting transform to
-                adversarial patch. Defaults to True.
+            reap_relight_method: Type of geometric transform functions to use.
+                Defaults to "color_transfer".
 
         Raises:
             NotImplementedError: Invalid transform mode.
@@ -50,20 +50,22 @@ class ReapObject(render_object.RenderObject):
         super().__init__(dataset="reap", pad_to_square=True, **kwargs)
         # Get REAP relighting transform params
         relight_coeffs = torch.tensor(
-            obj_dict["relight_coeffs"] if use_patch_relight else [[1, 0]],
+            obj_dict[f"{reap_relight_method}_coeffs"]
+            if reap_relight_method != "none"
+            else [[1, 0]],
             device=self._device,
             dtype=torch.float32,
         )
         self.relight_coeffs: torch.Tensor = img_util.coerce_rank(
             relight_coeffs, 4
         )
-        self.relight_transform = RelightTransform(relight_transform_mode)
+        self.relight_transform = RelightTransform(reap_relight_method)
 
         # Get REAP geometric transform params
         self.transform_mat = get_transform_matrix(
             src=self.src_points,
             tgt=obj_dict["keypoints"],
-            transform_mode=geo_transform_mode,
+            transform_mode=reap_geo_method,
         ).to(self._device)
 
     @staticmethod

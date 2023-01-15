@@ -87,10 +87,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         Returns:
             dict: a format that builtin models in detectron2 accept
         """
-        if self._relight_params["method"] == "polynomial":
-            column_name = "poly_coeffs"
-        else:
-            column_name = "ct_coeffs"
+        column_name = f'{self._relight_params["method"]}_coeffs'
         # it will be modified by code below
         dataset_dict = copy.deepcopy(dataset_dict)
         # USER: Write your own image loading if it's not from a file
@@ -222,7 +219,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            for key in ("ct_coeffs", "poly_coeffs", "has_reap"):
+            for key in (column_name, "has_reap"):
                 obj[key] = dataset_dict["annotations"][i][key]
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos

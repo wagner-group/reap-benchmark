@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import DATASET_METADATA, LABEL_LIST
+from hparams import DATASET_METADATA, LABEL_LIST, RELIGHT_METHODS
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
@@ -152,8 +152,9 @@ def get_mapillary_dict(
                 "object_id": obj_id,
                 "has_reap": False,
                 "keypoints": [0] * _NUM_KEYPOINTS * 3,
-                "relight_coeffs": None,
             }
+            for name in RELIGHT_METHODS:
+                obj[f"{name}_coeffs"] = None
 
             if obj_df is not None and not obj_df.empty and class_id != bg_class:
                 # Include REAP annotation if exists
@@ -187,11 +188,11 @@ def get_mapillary_dict(
                     keypoints[i] == 2 for i in [2, 5, 8, 11]
                 )
                 obj["keypoints"] = keypoints
-                if "ct_coeffs" in obj_df.columns:
-                    obj["ct_coeffs"] = obj_df["ct_coeffs"].values
-                if "poly_coeffs" in obj_df.columns:
-                    obj["poly_coeffs"] = obj_df["poly_coeffs"].values
                 obj["has_reap"] = True
+                for name in RELIGHT_METHODS:
+                    column_name = f"{name}_coeffs"
+                    if column_name in obj_df.columns:
+                        obj[column_name] = obj_df[column_name].values
 
             objs.append(obj)
 

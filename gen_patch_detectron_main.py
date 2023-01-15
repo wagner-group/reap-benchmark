@@ -196,7 +196,7 @@ def main() -> None:
     keyword = "syn" if synthetic else "reap"
     robj_kwargs = {
         **robj_kwargs,
-        **{key: val for key, val in config_atk_common if keyword in key},
+        **{k: v for k, v in config_atk_common.items() if keyword in k},
     }
 
     # Collect background images for generating patch attack

@@ -35,6 +35,13 @@ SAVE_DIR_YOLO = "./runs/val/"
 # Allowed interpolation methods
 INTERPS = ("nearest", "bilinear", "bicubic")
 
+# TODO(enhancement): Unify relighting transform API
+RELIGHT_METHODS = [
+    "color_transfer",
+    "polynomial",
+    "percentile",
+]
+
 # =========================================================================== #
 
 # Available dataset and class labels

@@ -19,6 +19,8 @@ from detectron2.structures import BoxMode
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import SizePx
 
+from hparams import RELIGHT_METHODS
+
 
 def _build_transform_gen(cfg: detectron2.config.CfgNode, is_train: bool):
     """Create a list of :class:`TransformGen` from config.
@@ -212,8 +214,14 @@ class ReapDatasetMapper:
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            for key in ("ct_coeffs", "poly_coeffs", "has_reap"):
-                obj[key] = dataset_dict["annotations"][i][key]
+            obj["has_reap"] = dataset_dict["annotations"][i].get("has_reap")
+            for key in RELIGHT_METHODS:
+                name = f"{key}_coeffs"
+                relight_coeffs = dataset_dict["annotations"][i].get(name)
+                if relight_coeffs is not None:
+                    obj[name] = np.array(relight_coeffs)
+                    print(relight_coeffs)
+
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos
         return dataset_dict
