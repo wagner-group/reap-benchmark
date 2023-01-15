@@ -176,7 +176,8 @@ def get_mtsd_dict(
                 "category_id": class_index,
                 "has_reap": False,
                 "keypoints": [0] * _NUM_KEYPOINTS * 3,
-                "relight_coeffs": None,
+                "ct_coeffs": None,
+                "poly_coeffs": None,
             }
             objs.append(obj)
 

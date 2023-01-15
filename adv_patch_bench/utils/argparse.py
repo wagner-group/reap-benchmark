@@ -24,10 +24,10 @@ from hparams import (
 
 _TRANSFORM_PARAMS: List[str] = [
     "interp",
-    "reap_transform_mode",
-    "reap_use_relight",
+    "reap_geo_method",
     "reap_relight_method",
     "reap_relight_percentile",
+    "reap_relight_polynomial_degree",
     "syn_obj_width_px",
     "syn_rotate",
     "syn_scale",
@@ -295,13 +295,41 @@ def reap_args_parser(
         help="path to a text file containing image filenames",
     )
     parser.add_argument(
-        "--reap-transform-mode",
+        "--reap-geo-method",
         type=str,
         default="perspective",
         help=(
-            "transform type to use on patch during evaluation: perspective "
-            "(default), affine, translate_scale. This can be different from "
+            'Transform type to use on patch: "perspective" (default), '
+            '"translate_scale". This can be different from '
             "patch generation specified in attack config."
+        ),
+    )
+    parser.add_argument(
+        "--reap-relight-method",
+        type=str,
+        default="color_transfer",
+        help=(
+            'Relight transform method on patch: "color_transfer" (default), '
+            '"percentile", "polynomial".'
+        ),
+    )
+    parser.add_argument(
+        "--reap-relight-polynomial-degree",
+        type=int,
+        default=1,
+        help=(
+            "Degree of polynomial for polynomial relighting (when "
+            'reap_relight_method == "polynomial").'
+        ),
+    )
+    parser.add_argument(
+        "--reap-relight-percentile",
+        type=int,
+        default=1,
+        help=(
+            "Percentile of pixels with highest error to drop when computing "
+            'relight coeffs. Used when reap_relight_method is "polynomial" or '
+            '"percentile".'
         ),
     )
     parser.add_argument(
@@ -312,31 +340,6 @@ def reap_args_parser(
             "Custom attack options; will overwrite config file. Use '.' to "
             'impose hierarchy and space to separate options, e.g., -o "'
             'common.patch_dim=64 rp2.num_steps=1000".'
-        ),
-    )
-    parser.add_argument(
-        "--reap-use-relight",
-        action="store_true",
-        help="If True, apply relighting transform to patch.",
-    )
-    parser.add_argument(
-        "--reap-relight-method",
-        type=str,
-        default="percentile",
-        help=(
-            "Method for calculating relighting params. This option is used "
-            "during MTSD training at the moment. REAP relighting params are "
-            "pre-computed."
-        ),
-    )
-    parser.add_argument(
-        "--reap-relight-percentile",
-        type=int,
-        default=10,
-        help=(
-            "Percentile of pixels considered as min and max of the scaling "
-            'range. Only used when reap_relight_method is "percentile". '
-            "Defaults to 10.0."
         ),
     )
 
@@ -830,10 +833,14 @@ def _update_save_dir(
             for param in _TRANSFORM_PARAMS:
                 if "syn" in param:
                     token_list.append(str(config_atk[param]))
-        if not config_atk["reap_use_relight"]:
-            token_list.append("nolight")
-        if config_atk["reap_transform_mode"] != "perspective":
-            token_list.append(config_atk["reap_transform_mode"])
+        token_list.append(config_atk["reap_relight_method"])
+        if config_atk["reap_relight_method"] == "polynomial":
+            token_list.append(config_atk["reap_relight_polynomial_degree"])
+            token_list.append(config_atk["reap_relight_percentile"])
+        elif config_atk["reap_relight_method"] == "percentile":
+            token_list.append(config_atk["reap_relight_percentile"])
+        if config_atk["reap_geo_method"] != "perspective":
+            token_list.append(config_atk["reap_geo_method"])
 
         token_list.append(f"pd{config_atk['patch_dim']}")
         token_list.append(f"bg{config_atk['num_bg']}")

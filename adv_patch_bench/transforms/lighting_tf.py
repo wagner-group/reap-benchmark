@@ -2,22 +2,178 @@
 
 from __future__ import annotations
 
+import logging
+import math
+from typing import Callable
+
 import kornia.geometry.transform as kornia_tf
 import numpy as np
 import torch
 from sklearn.cluster import KMeans
+from torch import nn
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms.geometric_tf import get_transform_matrix
 from adv_patch_bench.utils.types import BatchImageTensor, BatchMaskTensor
 
+_EPS = 1e-6
+logger = logging.getLogger(__name__)
 
-def relight_transform(
+
+class RGBtoLab(nn.Module):
+    """Convert RGB to Lab color space."""
+
+    def __init__(self) -> None:
+        """Initialize RGBtoLab."""
+        super().__init__()
+        rgb_to_lms = torch.tensor(
+            [
+                [0.3811, 0.5783, 0.0402],
+                [0.1967, 0.7244, 0.0782],
+                [0.0241, 0.1288, 0.8444],
+            ]
+        )
+        scale = torch.tensor(
+            [
+                [1 / math.sqrt(3), 0, 0],
+                [0, 1 / math.sqrt(6), 0],
+                [0, 0, 1 / math.sqrt(2)],
+            ]
+        )
+        loglms_to_lab = scale @ torch.tensor(
+            [[1.0, 1.0, 1.0], [1.0, 1.0, -2.0], [1.0, -1.0, 0.0]]
+        )
+        self.register_buffer("rgb_to_lms", rgb_to_lms)
+        self.register_buffer("loglms_to_lab", loglms_to_lab)
+
+    def forward(self, inputs: BatchImageTensor) -> BatchMaskTensor:
+        """Forward pass."""
+        # Clamp to avoid log(0)
+        inputs = inputs.clamp(_EPS, 1 - _EPS)
+        # Convert to LMS space and then Lab space
+        lms = torch.einsum("bchw,cd->bdhw", inputs, self.rgb_to_lms)
+        lab = torch.einsum("bchw,cd->bdhw", lms.log(), self.loglms_to_lab)
+        return lab
+
+
+class LabtoRGB(nn.Module):
+    """Convert Lab to RGB color space."""
+
+    def __init__(self) -> None:
+        """Initialize LabtoRGB."""
+        super().__init__()
+        scale = torch.tensor(
+            [
+                [1 / math.sqrt(3), 0, 0],
+                [0, 1 / math.sqrt(6), 0],
+                [0, 0, 1 / math.sqrt(2)],
+            ]
+        )
+        lab_to_loglms = (
+            torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, -1.0], [1.0, -2.0, 0.0]])
+            @ scale
+        )
+        lms_to_rgb = torch.tensor(
+            [
+                [4.4679, -3.5873, 0.1193],
+                [-1.2186, 2.3809, -0.1624],
+                [0.0497, -0.2439, 1.2045],
+            ]
+        )
+        self.register_buffer("lab_to_loglms", lab_to_loglms)
+        self.register_buffer("lms_to_rgb", lms_to_rgb)
+
+    def forward(self, inputs: BatchImageTensor) -> BatchMaskTensor:
+        """Forward pass."""
+        # Convert to LMS space and then Lab space
+        loglms = torch.einsum("bchw,cd->bdhw", inputs, self.lab_to_loglms)
+        rgb = torch.einsum("bchw,cd->bdhw", loglms.exp(), self.lms_to_rgb)
+        return rgb
+
+
+class RelightTransform(nn.Module):
+    """Lighting transform for image."""
+
+    def __init__(self, method: str = "color_transfer") -> None:
+        """Initialize RelightTransform.
+
+        Args:
+            method: Method for lighting transform. Defaults to "color_transfer".
+        """
+        super().__init__()
+        self._method: str = method
+        if method == "color_transfer":
+            self._rgb_to_lab = RGBtoLab()
+            self._lab_to_rgb = LabtoRGB()
+
+    def forward(
+        self,
+        inputs: BatchImageTensor,
+        relight_coeffs: torch.Tensor | None = None,
+    ) -> BatchImageTensor:
+        """Forward pass.
+
+        Args:
+            inputs: Input images. Shape: [batch_size, num_channels, H, W].
+
+        Returns:
+            Relighted images.
+        """
+        if self._method == "color_transfer":
+            return _color_transfer(
+                inputs, relight_coeffs, self._rgb_to_lab, self._lab_to_rgb
+            )
+        if self._method == "polynomial":
+            return _polynomial_match(inputs, relight_coeffs)
+        raise NotImplementedError("Invalid lighting transform method!")
+
+
+def _color_transfer(
+    inputs: BatchImageTensor,
+    poly_coeffs: torch.Tensor,
+    rgb_to_lab: Callable[[BatchImageTensor], BatchImageTensor],
+    lab_to_rgb: Callable[[BatchImageTensor], BatchImageTensor],
+) -> BatchImageTensor:
+    """Relight with Color Transfer method from Reinhard, et al. [2021].
+
+    Reference: https://ieeexplore.ieee.org/document/946629.
+
+    Args:
+        inputs: Input images. Expect shape: [batch_size, num_channels, H, W].
+        pixel_stats: Pixel statistics. Expect shape: [batch_size, num_channels].
+        rgb_to_lab: Function to convert RGB to Lab color space.
+        lab_to_rgb: Function to convert Lab to RGB color space.
+
+    Returns:
+        Relighted images.
+    """
+    # Convert to LMS space and then Lab space
+    lab = rgb_to_lab(inputs)
+
+    # Compute mean and standard deviation of L, a, b channels and normalize
+    # lab_out = (inputs - mean) / std * pixel_stats["sd"] + pixel_stats["mean"]
+    poly_coeffs = poly_coeffs.view(-1, 3, 2, 1, 1)
+    lab_out = (lab * poly_coeffs[:, :, 0]) + poly_coeffs[:, :, 1]
+
+    # Convert back to LMS space and then RGB space
+    rgb_out = lab_to_rgb(lab_out)
+    if not ((rgb_out >= 0) & (rgb_out <= 1)).all():
+        logger.debug(
+            "Invalid RGB values (min: %.4f, max: %.4f)! Clipping to [0, 1].",
+            rgb_out.min().item(),
+            rgb_out.max().item(),
+        )
+        rgb_out = rgb_out.clamp(0, 1)
+    return rgb_out
+
+
+def _polynomial_match(
     inputs: BatchImageTensor, poly_coeffs: torch.Tensor
 ) -> BatchImageTensor:
     """Relight transform with polynomial function.
 
     Args:
+        inputs: Input images. Expect shape: [batch_size, num_channels, H, W].
         poly_coeffs: Polynomial coefficients (highest degree first). Expect
             shape: [batch_size, num_channels, num_degree].
 
@@ -110,8 +266,8 @@ def _fit_polynomial(
     warped_obj_mask: torch.Tensor | None = None,
     transform_mat: torch.Tensor | None = None,
     interp: str = "bilinear",
-    poly_degree: int = 1,
-    drop_topk: float = 0.0,
+    polynomial_degree: int = 1,
+    percentile: float = 0.0,
 ) -> torch.Tensor:
     if not isinstance(syn_obj, torch.Tensor):
         raise ValueError("syn_obj must be provided as torch.Tensor.")
@@ -131,23 +287,42 @@ def _fit_polynomial(
         real_pixels = real_pixels_by_channel[channel]
 
         # Drop some high values to reduce outliers
-        num_kept = round((1 - drop_topk) * len(real_pixels))
+        num_kept = round((1 - percentile) * len(real_pixels))
         diff = (syn_pixels - real_pixels).abs()
         indices = torch.topk(diff, num_kept, largest=False).indices
         syn_pixels, real_pixels = syn_pixels[indices], real_pixels[indices]
 
         if syn_pixels.sum() == 0:
-            poly = torch.zeros(poly_degree + 1)
+            poly = torch.zeros(polynomial_degree + 1)
             poly[-1] = real_pixels.mean()
         else:
             # Fit a polynomial to each channel independently
             poly = np.polyfit(
-                syn_pixels.numpy(), real_pixels.numpy(), poly_degree
+                syn_pixels.numpy(), real_pixels.numpy(), polynomial_degree
             )
             poly = torch.from_numpy(poly).float()
         coeffs.append(poly)
 
     return torch.stack(coeffs, dim=0)
+
+
+def _get_color_transform_params(
+    real_pixels_by_channel: list[torch.Tensor],
+    syn_obj: torch.Tensor | None = None,
+    obj_mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    syn_obj = RGBtoLab()(syn_obj)
+    coeffs = torch.zeros(3, 2)
+    for channel in range(3):
+        syn_pixels = torch.masked_select(syn_obj[:, channel], obj_mask)
+        real_pixels = real_pixels_by_channel[channel]
+        # (x - syn_mean) * real_std / syn_std + real_mean
+        coeffs[channel, 0] = real_pixels.std() / syn_pixels.std()
+        coeffs[channel, 1] = (
+            real_pixels.mean() - syn_pixels.mean() * coeffs[channel, 0]
+        )
+    assert not coeffs.isnan().any(), "NaN in Color Transfer coeffs!"
+    return coeffs
 
 
 def _simple_percentile(
@@ -160,9 +335,9 @@ def _simple_percentile(
         percentile: Percentile of pixels considered as min and max of scaling
             range. Only used when method is "percentile". Defaults to 10.0.
     """
-    assert 0 <= percentile <= 100
+    assert 0 <= percentile <= 1
     real_pixels = real_pixels.reshape(-1)
-    percentile = min(percentile, 100 - percentile)
+    percentile = round(min(percentile, 1 - percentile) * 100)
     min_ = np.nanpercentile(real_pixels, percentile)
     max_ = np.nanpercentile(real_pixels, 100 - percentile)
     coeffs = torch.tensor([[max_ - min_, min_]])
@@ -194,17 +369,32 @@ def compute_relight_params(
 
     img: BatchImageTensor = img_util.coerce_rank(img, 4)
     obj_mask: BatchMaskTensor = img_util.coerce_rank(obj_mask, 4)
-    if transform_mat is None:
-        transform_mat = get_transform_matrix(
-            src=src_points, tgt=tgt_points, transform_mode=transform_mode
+
+    if method in ("percentile", "polynomial"):
+        if transform_mat is None:
+            transform_mat = get_transform_matrix(
+                src=src_points, tgt=tgt_points, transform_mode=transform_mode
+            )
+        obj_mask = kornia_tf.warp_perspective(
+            obj_mask,
+            transform_mat,
+            img.shape[-2:],
+            mode="nearest",
+            padding_mode="zeros",
         )
-    obj_mask = kornia_tf.warp_perspective(
-        obj_mask,
-        transform_mat,
-        img.shape[-2:],
-        mode="nearest",
-        padding_mode="zeros",
-    )
+    elif method == "color_transfer":
+        if transform_mat is None:
+            # Swap source and target points
+            transform_mat = get_transform_matrix(
+                src=tgt_points, tgt=src_points, transform_mode=transform_mode
+            )
+        img = kornia_tf.warp_perspective(
+            img,
+            transform_mat,
+            obj_mask.shape[-2:],
+            mode="bilinear",
+            padding_mode="zeros",
+        )
 
     if method == "percentile":
         obj_mask = obj_mask == 1
@@ -229,6 +419,16 @@ def compute_relight_params(
             warped_obj_mask=obj_mask,
             transform_mat=transform_mat,
             **relight_kwargs,
+        )
+    elif method == "color_transfer":
+        # Convert from RGB to Lab first
+        img = RGBtoLab()(img)
+        obj_mask = obj_mask[:, 0] == 1
+        real_pixels = []
+        for channel in range(3):
+            real_pixels.append(torch.masked_select(img[:, channel], obj_mask))
+        coeffs = _get_color_transform_params(
+            real_pixels, obj_mask=obj_mask, **relight_kwargs
         )
     else:
         raise NotImplementedError(f"Method {method} is not implemented!")

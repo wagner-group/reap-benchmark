@@ -11,7 +11,7 @@ import torch
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
 from adv_patch_bench.transforms.geometric_tf import get_transform_matrix
-from adv_patch_bench.transforms.lighting_tf import relight_transform
+from adv_patch_bench.transforms.lighting_tf import RelightTransform
 from adv_patch_bench.transforms.util import identity
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
@@ -31,7 +31,8 @@ class ReapObject(render_object.RenderObject):
     def __init__(
         self,
         obj_dict: dict[str, Any] | None = None,
-        patch_transform_mode: str = "perspective",
+        geo_transform_mode: str = "perspective",
+        relight_transform_mode: str = "color_transfer",
         use_patch_relight: bool = True,
         **kwargs,
     ) -> None:
@@ -56,12 +57,13 @@ class ReapObject(render_object.RenderObject):
         self.relight_coeffs: torch.Tensor = img_util.coerce_rank(
             relight_coeffs, 4
         )
+        self.relight_transform = RelightTransform(relight_transform_mode)
 
         # Get REAP geometric transform params
         self.transform_mat = get_transform_matrix(
             src=self.src_points,
             tgt=obj_dict["keypoints"],
-            transform_mode=patch_transform_mode,
+            transform_mode=geo_transform_mode,
         ).to(self._device)
 
     @staticmethod
@@ -90,6 +92,7 @@ class ReapObject(render_object.RenderObject):
         relight_coeffs = tf_params["relight_coeffs"]
         obj_to_img = tf_params["obj_to_img"]
         obj_mask = tf_params["obj_mask"]
+        relight_transform = tf_params["relight_transform"]
         aug_geo, aug_light = identity, identity
         if not suppress_aug:
             aug_geo, _, aug_light = tf_params["obj_transforms"]
@@ -190,3 +193,5 @@ class ReapObject(render_object.RenderObject):
                 params_dicts[name].append(value)
             else:
                 params_dicts[name] = [value]
+        if "relight_transform" not in params_dicts:
+            params_dicts["relight_transform"] = self.relight_transform

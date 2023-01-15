@@ -78,10 +78,14 @@ def _compute_relight_params(
     )
     obj_numpy = np.array(Image.open(syn_obj_path).convert("RGBA")) / 255
     syn_obj = torch.from_numpy(obj_numpy[:, :, :-1]).float().permute(2, 0, 1)
+    syn_obj = img_util.coerce_rank(syn_obj, 4)
     obj_height, obj_width = syn_obj.shape[-2:]
     orig_height, orig_width = sign_mask.shape[-2:]
     relight_sign_mask = img_util.resize_and_pad(
-        sign_mask, resize_size=(obj_height, obj_width), is_binary=True
+        sign_mask,
+        resize_size=(obj_height, obj_width),
+        is_binary=True,
+        keep_aspect_ratio=False,
     ).float()
     relight_params["obj_mask"] = relight_sign_mask
     src = copy.deepcopy(src)
@@ -90,9 +94,7 @@ def _compute_relight_params(
     relight_params["src_points"] = src
     relight_params["tgt_points"] = tgt
     relight_params["transform_mode"] = "perspective"
-
-    if relight_method == "polynomial":
-        relight_params["syn_obj"] = syn_obj
+    relight_params["syn_obj"] = syn_obj
 
     # calculate relighting parameters
     coeffs = lighting_tf.compute_relight_params(
@@ -141,6 +143,8 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
     # lists to store geometric and lighting errors for each image
     geometric_errors = []
     lighting_errors = []
+
+    relight_transform = lighting_tf.RelightTransform(method=RELIGHT_METHOD)
 
     for index, row in tqdm(annotation_df.iterrows()):
         is_clean = index % 2 == 0
@@ -352,15 +356,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
 
         # apply relighting to transformed synthetic patch
         patch = img_util.coerce_rank(patch, 4)
-        num_degree = len(relight_coeffs[0])
-        degrees = torch.arange(num_degree - 1, -1, -1).view(
-            1, 1, num_degree, 1, 1
-        )
-        patch = patch[:, :, None].pow(degrees)
-        # relight_coeffs: [num_channels, num_degree]
-        patch *= relight_coeffs.view(1, -1, num_degree, 1, 1)
-        patch = patch.sum(2)
-        patch.clamp_(0, 1)
+        patch = relight_transform(patch, relight_coeffs)
         tmp_patch = torch.zeros_like(patch)
         tmp_patch[:, :, h_min:h_max, w_min:w_max] = patch[
             :, :, h_min + shift : h_max + shift, w_min:w_max
@@ -441,13 +437,16 @@ if __name__ == "__main__":
     #     params = {"percentile": percentile}
     #     results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
 
-    RELIGHT_METHOD = "polynomial"
-    for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
-        for degree in range(4):
-            params = {"poly_degree": degree, "drop_topk": drop_topk}
-            results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-                RELIGHT_METHOD, params
-            )
+    # RELIGHT_METHOD = "polynomial"
+    # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
+    #     for degree in range(4):
+    #         params = {"polynomial_degree": degree, "percentile": drop_topk}
+    #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+    #             RELIGHT_METHOD, params
+    #         )
+
+    RELIGHT_METHOD = "color_transfer"
+    results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
 
     with open("tmp/realism_test_results.pkl", "wb") as f:
         pickle.dump(results, f)

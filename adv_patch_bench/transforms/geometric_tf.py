@@ -195,6 +195,7 @@ def get_transform_matrix(
     if not isinstance(tgt, np.ndarray):
         tgt = np.array(tgt, dtype=np.float32)[:, :2]
     tgt = tgt[: len(src)].copy()
+    src = src[: len(tgt)].copy()
 
     if transform_mode == "translate_scale":
         # Use corners of axis-aligned bounding box for transform
@@ -230,7 +231,7 @@ def get_transform_matrix(
         f"{tgt.shape})!"
     )
 
-    if len(src) == 3:
+    if len(src) == 3 or len(tgt) == 3:
         # For triangles which have only 3 keypoints
         transform_mat = cv2.getAffineTransform(src, tgt)
         transform_mat = torch.from_numpy(transform_mat).unsqueeze(0).float()
@@ -241,4 +242,5 @@ def get_transform_matrix(
         src = torch.from_numpy(src).unsqueeze(0)
         tgt = torch.from_numpy(tgt).unsqueeze(0)
         transform_mat = kornia_tf.get_perspective_transform(src, tgt)
+    assert transform_mat.shape == (1, 3, 3)
     return transform_mat

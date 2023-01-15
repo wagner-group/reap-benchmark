@@ -86,9 +86,8 @@ def main():
         mapper=mtsd_dataset_mapper.MtsdDatasetMapper(
             cfg,
             is_train=True,
+            config_base=config_base,
             img_size=config_base["img_size"],
-            relight_method=config_base["reap_relight_method"],
-            relight_percentile=config_base["reap_relight_percentile"],
         ),
         sampler=detectron2.data.samplers.InferenceSampler(len(data_dicts)),
     )

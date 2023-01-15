@@ -212,7 +212,7 @@ class ReapDatasetMapper:
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            for key in ("relight_coeffs", "has_reap"):
+            for key in ("ct_coeffs", "poly_coeffs", "has_reap"):
                 obj[key] = dataset_dict["annotations"][i][key]
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos

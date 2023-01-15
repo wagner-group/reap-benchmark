@@ -159,11 +159,7 @@ def _generate_adv_patch(
 
 
 def main() -> None:
-    """Main function for generating patch.
-
-    Args:
-        config: Config dict containing eval and attack config dicts.
-    """
+    """Main function for generating patch."""
     config_attack: dict[str, dict[str, Any]] = config["attack"]
     config_atk_common: dict[str, Any] = config_attack["common"]
     dataset: str = config_base["dataset"]
@@ -197,28 +193,15 @@ def main() -> None:
         "interp": interp,
         "patch_aug_params": config_atk_common,
     }
-    if synthetic:
-        robj_kwargs = {
-            **robj_kwargs,
-            "syn_obj_path": config_base["syn_obj_path"],
-            "syn_rotate": config_atk_common["syn_rotate"],
-            "syn_scale": config_atk_common["syn_scale"],
-            "syn_translate": config_atk_common["syn_translate"],
-            "syn_3d_dist": config_atk_common["syn_3d_dist"],
-            "syn_colorjitter": config_atk_common["syn_colorjitter"],
-        }
-    else:
-        robj_kwargs = {
-            **robj_kwargs,
-            "reap_transform_mode": config_atk_common["reap_transform_mode"],
-            "reap_use_relight": config_atk_common["reap_use_relight"],
-        }
+    keyword = "syn" if synthetic else "reap"
+    robj_kwargs = {
+        **robj_kwargs,
+        **{key: val for key, val in config_atk_common if keyword in key},
+    }
 
     # Collect background images for generating patch attack
     attack_rimg: render_image.RenderImage = _collect_attack_rimgs(
-        dataloader,
-        rimg_kwargs=rimg_kwargs,
-        robj_kwargs=robj_kwargs,
+        dataloader, rimg_kwargs=rimg_kwargs, robj_kwargs=robj_kwargs
     )
 
     # Save background filenames in txt file if split_file_path was not given

@@ -53,16 +53,20 @@ def main() -> None:
     )
     data_dicts = data_util.get_dataset(config_base)
     hw_ratio_dict = DATASET_METADATA["reap"]["hw_ratio"]
-    class_names_dict = DATASET_METADATA["reap"]["class_names"]
+    class_names_dict = DATASET_METADATA["reap"]["class_name"]
     obj_shape_dict = DATASET_METADATA["reap"]["shape"]
-    relight_params = {
-        "poly_degree": POLY_DEGREE,
-        "drop_topk": DROP_TOPK,
-        "transform_mode": "perspective",
-    }
+    relight_params = {"transform_mode": "perspective"}
+    if RELIGHT_METHOD == "polynomial":
+        relight_params["polynomial_degree"] = POLY_DEGREE
+        relight_params["percentile"] = DROP_TOPK
+        column_name = "poly_coeffs"
+    elif RELIGHT_METHOD == "color_transfer":
+        column_name = "ct_coeffs"
+
     anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
-    anno_df = anno_df.assign(relight_coeffs=[None for _ in range(len(anno_df))])
-    anno_df = anno_df.drop(labels=["alpha", "beta"], axis=1)
+    anno_df = anno_df.assign(
+        **{column_name: [None for _ in range(len(anno_df))]}
+    )
 
     for data_dict in tqdm(data_dicts):
         file_name = data_dict["file_name"].split("/")[-1]
@@ -118,7 +122,10 @@ def main() -> None:
 
             # Resize sign/obj mask to match the size of syn object
             relight_sign_mask = img_util.resize_and_pad(
-                sign_mask, resize_size=(obj_height, obj_width), is_binary=True
+                sign_mask,
+                resize_size=(obj_height, obj_width),
+                is_binary=True,
+                keep_aspect_ratio=False,
             ).float()
             relight_params["obj_mask"] = relight_sign_mask
             src = copy.deepcopy(src)
@@ -127,9 +134,7 @@ def main() -> None:
             src[:, 1] *= obj_height / orig_height
             relight_params["src_points"] = src
             relight_params["tgt_points"] = tgt
-
-            if RELIGHT_METHOD == "polynomial":
-                relight_params["syn_obj"] = syn_obj
+            relight_params["syn_obj"] = syn_obj
 
             # Calculate relighting parameters
             coeffs = lighting_tf.compute_relight_params(
@@ -140,14 +145,14 @@ def main() -> None:
             anno_df.loc[
                 (anno_df["filename"] == file_name)
                 & (anno_df["object_id"] == obj_id),
-                "relight_coeffs",
+                column_name,
             ] = str(coeffs)
 
     anno_df.to_csv(config_base["tgt_csv_filepath"], index=False)
 
 
 if __name__ == "__main__":
-    RELIGHT_METHOD = "polynomial"
+    RELIGHT_METHOD = "polynomial"  # "polynomial", "color_transfer"
     POLY_DEGREE = 1
     DROP_TOPK = 0.01
 

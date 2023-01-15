@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import LABEL_LIST, DATASET_METADATA
+from hparams import DATASET_METADATA, LABEL_LIST
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
@@ -187,7 +187,10 @@ def get_mapillary_dict(
                     keypoints[i] == 2 for i in [2, 5, 8, 11]
                 )
                 obj["keypoints"] = keypoints
-                # obj["relight_coeffs"] = obj_df["relight_coeffs"].values
+                if "ct_coeffs" in obj_df.columns:
+                    obj["ct_coeffs"] = obj_df["ct_coeffs"].values
+                if "poly_coeffs" in obj_df.columns:
+                    obj["poly_coeffs"] = obj_df["poly_coeffs"].values
                 obj["has_reap"] = True
 
             objs.append(obj)

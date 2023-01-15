@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import copy
+import os
+from typing import Any
 
 import detectron2
 import numpy as np
 import torch
+import torchvision
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.structures import BoxMode
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.dataloaders.detectron import reap_dataset_mapper
-from adv_patch_bench.transforms.lighting_tf import compute_relight_params
+from adv_patch_bench.transforms import lighting_tf, util
 from adv_patch_bench.utils.types import DetectronSample
+from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR
 
 
 class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
@@ -27,23 +31,52 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
     def __init__(
         self,
         cfg: detectron2.config.CfgNode,
-        relight_method: str = "percentile",
-        relight_percentile: float = 10.0,
+        config_base: dict[str, Any],
         **kwargs,
     ) -> None:
         """Initialize MtsdDatasetMapper. See ReapDatasetMapper for args.
 
         Args:
             cfg: Detectron2 config.
-            relight_method: Method for computing relighting params. Defaults to
-                "percentile".
-            relight_percentile: Percentile of pixels to use as min/max of the
-                scaling range. See transforms.lighting_tf._find_min_max() for
-                more detail. Defaults to 10.0.
+            config_base: Base config.
         """
         super().__init__(cfg, **kwargs)
-        self._relight_method: str = relight_method
-        self._relight_percentile: float = relight_percentile
+        metadata = DATASET_METADATA["mtsd_no_color"]
+        class_names = metadata["class_name"]
+        hw_ratio_dict = metadata["hw_ratio"]
+        shape_dict = metadata["shape"]
+
+        self._syn_objs = {}
+        self._syn_obj_masks = {}
+        self._relight_params = {
+            "method": config_base["reap_relight_method"],
+            "polynomial_degree": config_base["reap_relight_polynomial_degree"],
+            "percentile": config_base["reap_relight_percentile"] / 100,
+            "interp": config_base["interp"],
+            "transform_mat": torch.eye(3, dtype=torch.float32).view(1, 1, 3, 3),
+        }
+
+        # Load dict of syn objs and masks
+        for obj_class, class_name in class_names.items():
+            obj_mask, _ = util.gen_sign_mask(
+                shape_dict[obj_class],
+                hw_ratio=hw_ratio_dict[obj_class],
+                obj_width_px=config_base["obj_size_px"][1],
+                pad_to_square=False,
+            )
+            syn_obj_path = os.path.join(
+                DEFAULT_SYN_OBJ_DIR, f"{class_name}.png"
+            )
+            syn_obj = (
+                torchvision.io.read_image(
+                    syn_obj_path, mode=torchvision.io.ImageReadMode.RGB
+                )
+                / 255
+            )
+            syn_obj = img_util.coerce_rank(syn_obj, 4)
+            obj_mask = img_util.coerce_rank(obj_mask, 4)
+            self._syn_objs[obj_class] = syn_obj
+            self._syn_obj_masks[obj_class] = obj_mask
 
     def __call__(self, dataset_dict: DetectronSample):
         """Modify sample directly loaded from Detectron2 dataset.
@@ -54,6 +87,10 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         Returns:
             dict: a format that builtin models in detectron2 accept
         """
+        if self._relight_params["method"] == "polynomial":
+            column_name = "poly_coeffs"
+        else:
+            column_name = "ct_coeffs"
         # it will be modified by code below
         dataset_dict = copy.deepcopy(dataset_dict)
         # USER: Write your own image loading if it's not from a file
@@ -132,13 +169,20 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
                 obj = image[:, ymin:ymax, xmin:xmax]
                 # Compute relighting params from cropped object
-                alpha, beta = compute_relight_params(
-                    obj / 255,
-                    method=self._relight_method,
-                    percentile=self._relight_percentile,
+                obj_class = anno["category_id"]
+                obj_mask = img_util.resize_and_pad(
+                    obj=self._syn_obj_masks[obj_class],
+                    resize_size=(ymax - ymin, xmax - xmin),
+                    keep_aspect_ratio=False,
+                    is_binary=True,
                 )
-                anno["alpha"] = alpha if 0 <= alpha <= 1 else 1.0
-                anno["beta"] = beta if -1 <= beta <= 1 else 0.0
+                coeffs = lighting_tf.compute_relight_params(
+                    obj / 255,
+                    syn_obj=self._syn_objs[obj_class],
+                    obj_mask=obj_mask,
+                    **self._relight_params,
+                )
+                anno[column_name] = coeffs
                 anno["keypoints"] = np.array(
                     [
                         [xmin, ymin, 2],
@@ -178,7 +222,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            for key in ("alpha", "beta", "has_reap"):
+            for key in ("ct_coeffs", "poly_coeffs", "has_reap"):
                 obj[key] = dataset_dict["annotations"][i][key]
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos

@@ -133,7 +133,6 @@ class RenderImage:
                         obj_dict=obj,
                         obj_class=obj["category_id"],
                         device=device,
-                        # image=image,
                         img_size=image.shape[-2:],
                         **robj_kwargs,
                     )

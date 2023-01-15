@@ -162,7 +162,7 @@ DATASET_METADATA: Dict[str, Dict[str, Any]] = {
         "size_mm": _MPL_NO_COLOR_SIZE_MM,
         "hw_ratio": _MPL_NO_COLOR_RATIO,
         "shape": _MPL_NO_COLOR_SHAPE,
-        "class_names": dict(enumerate(TS_NO_COLOR_LABEL_LIST)),
+        "class_name": dict(enumerate(TS_NO_COLOR_LABEL_LIST)),
     }
 }
 DATASET_METADATA["reap"] = DATASET_METADATA["mapillary_no_color"]
