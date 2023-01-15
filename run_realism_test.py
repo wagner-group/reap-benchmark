@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import lighting_tf, util
-from hparams import OBJ_DIM_DICT, TS_COLOR_DICT
+from hparams import DATASET_METADATA, TS_COLOR_DICT
 
 # list of point colors for visualizing image points
 POINT_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
@@ -220,7 +220,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
             patch, patch_mask = pickle.load(file)
 
         patch_size_in_pixel = patch.shape[-1]
-        hw_ratio_dict = OBJ_DIM_DICT["mapillary_no_color"]["hw_ratio"]
+        hw_ratio_dict = DATASET_METADATA["mapillary_no_color"]["hw_ratio"]
         # get aspect ratio for current object class
         hw_ratio = hw_ratio_dict[(index // 2) % len(traffic_sign_classes)]
         obj_shape = obj_class_to_shape[obj_class]
@@ -443,7 +443,7 @@ if __name__ == "__main__":
 
     RELIGHT_METHOD = "polynomial"
     for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
-        for degree in range(1, 4):
+        for degree in range(4):
             params = {"poly_degree": degree, "drop_topk": drop_topk}
             results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
                 RELIGHT_METHOD, params

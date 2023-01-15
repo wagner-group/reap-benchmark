@@ -9,7 +9,7 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 
 from adv_patch_bench.dataloaders.detectron import mapillary
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import LABEL_LIST, OBJ_DIM_DICT
+from hparams import LABEL_LIST, DATASET_METADATA
 
 _NUM_KEYPOINTS = 4
 
@@ -75,6 +75,6 @@ def register_reap(
         thing_classes=class_names,
         keypoint_names=[f"p{i}" for i in range(_NUM_KEYPOINTS)],
         keypoint_flip_map=[(f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)],
-        obj_dim_dict=OBJ_DIM_DICT["reap"],
+        obj_dim_dict=DATASET_METADATA["reap"],
         bg_class=bg_class,
     )

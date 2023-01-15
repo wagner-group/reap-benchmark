@@ -153,10 +153,12 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
             "available."
         )
 
-    # Load additional metadata for MTSD
-    mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(
-        base_path, config_base["use_color"], "orig" in dataset, class_names
-    )
+    mtsd_anno = {}
+    if "mtsd" in dataset:
+        # Load additional metadata for MTSD
+        mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(
+            base_path, config_base["use_color"], "orig" in dataset, class_names
+        )
 
     data_dict: List[DetectronSample] = _LOAD_DATASET[base_dataset](
         split=split,

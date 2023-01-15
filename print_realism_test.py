@@ -8,7 +8,7 @@ import skimage
 from torchvision import transforms
 
 from adv_patch_bench.attacks.patch_mask_util import gen_patch_mask
-from hparams import OBJ_DIM_DICT, TS_COLOR_DICT
+from hparams import DATASET_METADATA, TS_COLOR_DICT
 
 
 def _to_rgba(img):
@@ -32,8 +32,8 @@ patch_path = pathlib.Path(
 save_path = pathlib.Path("attack_assets/realism_test")
 save_path.mkdir(exist_ok=True)
 patch_size = (patch_size[0], patch_size[1] * 25.4, patch_size[2] * 25.4)
-hw_ratio_dict = OBJ_DIM_DICT["mapillary_no_color"]["hw_ratio"]
-obj_size_dict = OBJ_DIM_DICT["mapillary_no_color"]["size_mm"]
+hw_ratio_dict = DATASET_METADATA["mapillary_no_color"]["hw_ratio"]
+obj_size_dict = DATASET_METADATA["mapillary_no_color"]["size_mm"]
 class_list = list(TS_COLOR_DICT.keys())
 
 for path in img_path.glob("*.png"):

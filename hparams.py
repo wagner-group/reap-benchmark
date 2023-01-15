@@ -157,16 +157,17 @@ _MPL_NO_COLOR_RATIO = {
     i: size[0] / size[1] for i, size in enumerate(_MPL_NO_COLOR_SIZE_MM.values())
 }
 
-OBJ_DIM_DICT: Dict[str, Dict[str, Any]] = {
+DATASET_METADATA: Dict[str, Dict[str, Any]] = {
     "mapillary_no_color": {
         "size_mm": _MPL_NO_COLOR_SIZE_MM,
         "hw_ratio": _MPL_NO_COLOR_RATIO,
         "shape": _MPL_NO_COLOR_SHAPE,
+        "class_names": dict(enumerate(TS_NO_COLOR_LABEL_LIST)),
     }
 }
-OBJ_DIM_DICT["reap"] = OBJ_DIM_DICT["mapillary_no_color"]
-OBJ_DIM_DICT["synthetic"] = OBJ_DIM_DICT["mapillary_no_color"]
-OBJ_DIM_DICT["mtsd_no_color"] = OBJ_DIM_DICT["mapillary_no_color"]
+DATASET_METADATA["reap"] = DATASET_METADATA["mapillary_no_color"]
+DATASET_METADATA["synthetic"] = DATASET_METADATA["mapillary_no_color"]
+DATASET_METADATA["mtsd_no_color"] = DATASET_METADATA["mapillary_no_color"]
 
 # =========================================================================== #
 

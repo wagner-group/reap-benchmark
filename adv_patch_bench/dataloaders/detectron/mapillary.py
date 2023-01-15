@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import LABEL_LIST, OBJ_DIM_DICT
+from hparams import LABEL_LIST, DATASET_METADATA
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
@@ -152,8 +152,7 @@ def get_mapillary_dict(
                 "object_id": obj_id,
                 "has_reap": False,
                 "keypoints": [0] * _NUM_KEYPOINTS * 3,
-                "alpha": None,
-                "beta": None,
+                "relight_coeffs": None,
             }
 
             if obj_df is not None and not obj_df.empty and class_id != bg_class:
@@ -188,8 +187,7 @@ def get_mapillary_dict(
                     keypoints[i] == 2 for i in [2, 5, 8, 11]
                 )
                 obj["keypoints"] = keypoints
-                obj["alpha"] = obj_df["alpha"].values
-                obj["beta"] = obj_df["beta"].values
+                # obj["relight_coeffs"] = obj_df["relight_coeffs"].values
                 obj["has_reap"] = True
 
             objs.append(obj)
@@ -254,6 +252,6 @@ def register_mapillary(
             keypoint_flip_map=[
                 (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
             ],
-            obj_dim_dict=OBJ_DIM_DICT[f"mapillary_{color}"],
+            obj_dim_dict=DATASET_METADATA[f"mapillary_{color}"],
             bg_class=bg_class,
         )

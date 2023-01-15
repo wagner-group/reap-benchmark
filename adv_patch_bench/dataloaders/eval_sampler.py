@@ -1,6 +1,9 @@
-"""Code is copied from
+"""DistributedEvalSampler.
+
+Code is copied from
 https://github.com/SeungjunNah/DeepDeblur-PyTorch/blob/master/src/data/sampler.py
 """
+
 import torch
 import torch.distributed as dist
 from torch.utils.data import Sampler

@@ -12,6 +12,43 @@ from adv_patch_bench.transforms.geometric_tf import get_transform_matrix
 from adv_patch_bench.utils.types import BatchImageTensor, BatchMaskTensor
 
 
+def relight_transform(
+    inputs: BatchImageTensor, poly_coeffs: torch.Tensor
+) -> BatchImageTensor:
+    """Relight transform with polynomial function.
+
+    Args:
+        poly_coeffs: Polynomial coefficients (highest degree first). Expect
+            shape: [batch_size, num_channels, num_degree].
+
+    Raises:
+        ValueError: Invalid shape of poly_coeffs.
+    """
+    if poly_coeffs.ndim != 3:
+        raise ValueError(
+            "Expect poly_coeffs to have 3 dimensions [batch_size, "
+            f"num_channels, num_degree], but got {poly_coeffs.ndim}!"
+        )
+    if len(poly_coeffs) != len(inputs) and len(poly_coeffs) != 1:
+        raise ValueError(
+            "poly_coeffs should have batch size of 1 or the same as inputs, "
+            f"but got {len(poly_coeffs)}!"
+        )
+    if poly_coeffs.shape[1] not in (1, 3):
+        raise ValueError(
+            "poly_coeffs must have channel dimension of 1 or 3, but got "
+            f"{poly_coeffs.shape[1]}!"
+        )
+    _, _, deg = poly_coeffs.shape
+    device = inputs.device
+    degrees = torch.arange(deg - 1, -1, -1, device=device).view(1, 1, deg, 1, 1)
+    outputs = inputs[:, :, None].pow(degrees)
+    outputs *= poly_coeffs[..., None, None]
+    outputs = outputs.sum(2)
+    outputs.clamp_(0, 1)
+    return outputs
+
+
 def _run_kmean_single(
     img: np.ndarray,
     k: int,

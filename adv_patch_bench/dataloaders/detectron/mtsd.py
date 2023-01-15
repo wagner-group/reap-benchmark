@@ -16,7 +16,7 @@ from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DEFAULT_PATH_MTSD_LABEL,
     LABEL_LIST,
-    OBJ_DIM_DICT,
+    DATASET_METADATA,
     OLD_TO_NEW_LABELS,
     PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
@@ -176,8 +176,7 @@ def get_mtsd_dict(
                 "category_id": class_index,
                 "has_reap": False,
                 "keypoints": [0] * _NUM_KEYPOINTS * 3,
-                "alpha": None,
-                "beta": None,
+                "relight_coeffs": None,
             }
             objs.append(obj)
 
@@ -252,6 +251,6 @@ def register_mtsd(
             keypoint_flip_map=[
                 (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
             ],
-            obj_dim_dict=OBJ_DIM_DICT[f"mtsd_{color}"],
+            obj_dim_dict=DATASET_METADATA[f"mtsd_{color}"],
             bg_class=bg_class,
         )

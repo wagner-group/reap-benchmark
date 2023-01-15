@@ -19,7 +19,7 @@ from hparams import (
     INTERPS,
     LABEL_LIST,
     NUM_CLASSES,
-    OBJ_DIM_DICT,
+    DATASET_METADATA,
 )
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -767,7 +767,7 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
     config_base = config["base"]
     # Get real object size of that class
     dataset = config_base["dataset"]
-    obj_dim_dict = OBJ_DIM_DICT[dataset]
+    obj_dim_dict = DATASET_METADATA[dataset]
     obj_class = config_base["obj_class"]
 
     hw_ratio = 1.0

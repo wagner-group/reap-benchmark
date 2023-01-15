@@ -44,7 +44,7 @@ def _build_transform_gen(cfg: detectron2.config.CfgNode, is_train: bool):
     logger = logging.getLogger(__name__)
     tfm_gens = []
     tfm_gens.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
-    # Remove orizontal flipping
+    # Remove horizontal flipping
     # if is_train:
     #     tfm_gens.append(T.RandomFlip())
     logger.info("TransformGens: %s", str(tfm_gens))
@@ -212,7 +212,7 @@ class ReapDatasetMapper:
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            for key in ("alpha", "beta", "has_reap"):
+            for key in ("relight_coeffs", "has_reap"):
                 obj[key] = dataset_dict["annotations"][i][key]
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos

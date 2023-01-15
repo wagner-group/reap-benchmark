@@ -53,24 +53,11 @@ class GradAttack(base_attack.DetectorAttackModule):
 
         # Exponential moving average const
         self._ema_const: float = 0.9
-
-        # TODO(feature): Allow more threat models
-        self.targeted: bool = False
-
-        # Use change of variable on delta with alpha and beta.
-        # Mostly used with per-sign or real attack. Only makes difference when
-        # PGD is used as optimizer.
-        self._use_var_change_ab: bool = "var_change_ab" in self._attack_mode
-        if self._use_var_change_ab and self._optimizer_name != "pgd":
-            logger.warning(
-                "var_change_ab mode only makes difference when optimizer is "
-                "pgd, but optimizer is currently set to %s!",
-                self._optimizer_name,
-            )
-
         self._ema_loss: float | None = None
         self._start_time = time.time()
         self._optimizer, self._lr_schedule = None, None
+        # TODO(feature): Allow more threat models
+        self._targeted: bool = False
 
     def _reset_run(self, opt_var: torch.Tensor) -> None:
         """Reset each attack run."""
@@ -107,18 +94,6 @@ class GradAttack(base_attack.DetectorAttackModule):
     ) -> BatchImageTensor:
         bg_idx: torch.Tensor | None = None
         delta = z_delta
-        # Initialize religting params
-        if self._use_var_change_ab:
-            beta = rimg.tf_params["beta"].clone()
-            half_alpha = rimg.tf_params["alpha"] / 2
-            # Temporary set alphas and betas to 1 and 0 so patch does not get
-            # rescaled again inside RenderObject
-            rimg.tf_params["beta"].zero_()
-            rimg.tf_params["alpha"].fill_(1)
-        else:
-            beta = torch.zeros_like(rimg.tf_params["beta"])
-            half_alpha = torch.ones_like(rimg.tf_params["beta"]) / 2
-
         if not batch_mode:
             patch_mask = patch_mask.expand(self._num_eot, -1, -1, -1)
 
@@ -133,12 +108,12 @@ class GradAttack(base_attack.DetectorAttackModule):
 
             if "pgd" in self._optimizer_name:
                 z_delta.detach_()
-                delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
+                delta = self._to_input_space(z_delta)
                 delta.requires_grad_()
             else:
                 self._optimizer.zero_grad()
                 z_delta.requires_grad_()
-                delta = self._to_input_space(z_delta, half_alpha, beta, bg_idx)
+                delta = self._to_input_space(z_delta)
 
             # Apply patch with transforms and compute loss
             adv_img, adv_target = rimg.apply_objects(
@@ -172,10 +147,6 @@ class GradAttack(base_attack.DetectorAttackModule):
             if self._lr_schedule is not None:
                 self._lr_schedule.step(loss)
             self._print_loss(loss, step)
-
-        if self._use_var_change_ab:
-            rimg.tf_params["beta"] = beta
-            rimg.tf_params["alpha"] = half_alpha * 2
 
         assert (
             not z_delta.isnan().any()
@@ -291,28 +262,15 @@ class GradAttack(base_attack.DetectorAttackModule):
             return args
         return [tensor.index_select(0, indices) for tensor in args]
 
-    def _to_input_space(
-        self,
-        images: torch.Tensor,
-        half_alpha: torch.Tensor | float = 0.5,
-        beta: torch.Tensor | float = 0.0,
-        indices: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+    def _to_input_space(self, images: torch.Tensor) -> torch.Tensor:
         """Transforms an input from the attack space to the model space."""
-        half_alpha, beta = self._select_tensors(indices, half_alpha, beta)
         if self._optimizer_name == "pgd":
-            if isinstance(half_alpha, float):
-                images = images.clamp(beta, beta + 2 * half_alpha)
-            else:
-                images = torch.maximum(images, beta)
-                images = torch.minimum(images, beta + 2 * half_alpha)
-            return images
+            return images.clamp(0, 1)
         # Map from (-inf, +inf) to (-1, +1)
         images = torch.tanh(images)
-        # Map from (-1, +1) to (low, high)
-        # Need to copy images here since torch.tanh needs output to compute grad
-        images = images * half_alpha
-        images.add_(half_alpha).add_(beta)
+        # Map from (-1, +1) to (0, 1)
+        images = images / 2
+        images += 0.5
         return images
 
     def _to_opt_space(self, images):

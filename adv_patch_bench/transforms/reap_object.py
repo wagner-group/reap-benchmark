@@ -11,6 +11,7 @@ import torch
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import render_object
 from adv_patch_bench.transforms.geometric_tf import get_transform_matrix
+from adv_patch_bench.transforms.lighting_tf import relight_transform
 from adv_patch_bench.transforms.util import identity
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
@@ -47,18 +48,14 @@ class ReapObject(render_object.RenderObject):
         """
         super().__init__(dataset="reap", pad_to_square=True, **kwargs)
         # Get REAP relighting transform params
-        if use_patch_relight:
-            alpha = torch.tensor(
-                obj_dict["alpha"], device=self._device, dtype=torch.float32
-            )
-            beta = torch.tensor(
-                obj_dict["beta"], device=self._device, dtype=torch.float32
-            )
-        else:
-            alpha = torch.tensor(1.0, device=self._device, dtype=torch.float32)
-            beta = torch.tensor(0.0, device=self._device, dtype=torch.float32)
-        self.alpha: torch.Tensor = img_util.coerce_rank(alpha, 4)
-        self.beta: torch.Tensor = img_util.coerce_rank(beta, 4)
+        relight_coeffs = torch.tensor(
+            obj_dict["relight_coeffs"] if use_patch_relight else [[1, 0]],
+            device=self._device,
+            dtype=torch.float32,
+        )
+        self.relight_coeffs: torch.Tensor = img_util.coerce_rank(
+            relight_coeffs, 4
+        )
 
         # Get REAP geometric transform params
         self.transform_mat = get_transform_matrix(
@@ -90,8 +87,7 @@ class ReapObject(render_object.RenderObject):
             return images, targets
 
         transform_mat = tf_params["transform_mat"]
-        alpha = tf_params["alpha"]
-        beta = tf_params["beta"]
+        relight_coeffs = tf_params["relight_coeffs"]
         obj_to_img = tf_params["obj_to_img"]
         obj_mask = tf_params["obj_mask"]
         aug_geo, aug_light = identity, identity
@@ -110,7 +106,7 @@ class ReapObject(render_object.RenderObject):
                 f"targets and images must have the same length ({len(targets)} "
                 f"vs {batch_size})!"
             )
-        if any(len(inpt) != num_objs for inpt in (transform_mat, alpha, beta)):
+        if any(len(m) != num_objs for m in (transform_mat, relight_coeffs)):
             raise IndexError(
                 "Transform data must have length equal to the number of objects"
                 f" ({num_objs})!"
@@ -123,11 +119,7 @@ class ReapObject(render_object.RenderObject):
                 )
 
         # Apply relighting transform (brightness and contrast)
-        if adv_patch.is_leaf:
-            adv_patch = adv_patch * alpha
-        else:
-            adv_patch.mul_(alpha)
-        adv_patch.add_(beta)
+        adv_patch = relight_transform(adv_patch, relight_coeffs)
         adv_patch.clamp_(0 + _EPS, 1 - _EPS)
 
         # Apply extra lighting augmentation on patch
@@ -190,8 +182,7 @@ class ReapObject(render_object.RenderObject):
         """Append self transform params to params_dicts."""
         params = {
             "transform_mat": self.transform_mat,
-            "alpha": self.alpha,
-            "beta": self.beta,
+            "relight_coeffs": self.relight_coeffs,
             "obj_mask": self.obj_mask,
         }
         for name, value in params.items():
