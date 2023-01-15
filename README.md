@@ -119,6 +119,21 @@ Coming soon!
 
 - `mtsd_label_metadata.csv` is a mapping between the original MTSD classes to classes in REAP. It contains shapes and sizes for each MTSD class.
 
+#### Computing Religting Params
+
+**Realism Test.** Run script to test out different relighting methods on the printed signs and patches.
+
+```bash
+python run_realism_test.py
+```
+
+After deciding on the relighting method, set variables in `gen_relight_coeffs_main.py` and run the script to generate the relighting coeffs for this method and then write to `reap_annotations.csv`.
+
+```bash
+# Script for running gen_relight_coeffs_main.py
+bash scripts/gen_relight_coeffs.sh
+```
+
 ## TODOs
 
 - `NewDataset`: Changes required to make an addition of new dataset possible.
