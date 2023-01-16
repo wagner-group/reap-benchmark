@@ -64,8 +64,8 @@ INPUT:
   #   DEBUG_VIS: True
   #   # MOSAIC_WIDTH: 960
   #   # MOSAIC_HEIGHT: 540
-  MOSAIC_AND_MIXUP:
-    ENABLED: True
+  MOSAIC_AND_MIXUP:  # TODO(feature): mosaic is not implemented yet
+    ENABLED: False
     DEBUG_VIS: False
     ENABLE_MIXUP: True
     DISABLE_AT_ITER: 40000
