@@ -216,8 +216,8 @@ def _polynomial_match(
     device = inputs.device
     degrees = torch.arange(deg - 1, -1, -1, device=device).view(1, 1, deg, 1, 1)
     outputs = inputs[:, :, None].pow(degrees)
-    outputs *= poly_coeffs[..., None, None]
-    outputs = outputs.sum(2)
+    # outputs = torch.einsum("bcdhw,bcd->bchw", outputs, poly_coeffs)
+    outputs = (outputs * poly_coeffs[..., None, None]).sum(2)
     outputs.clamp_(0, 1)
     return outputs
 

@@ -40,6 +40,7 @@ RELIGHT_METHODS = [
     "color_transfer",
     "polynomial",
     "polynomial_max",
+    "polynomial_mean",
     "percentile",
 ]
 
