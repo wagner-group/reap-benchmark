@@ -132,8 +132,11 @@ def resize_and_pad(
             max(0, pad_size[1] - resize_size[1] - left),  # right
             max(0, pad_size[0] - resize_size[0] - top),  # bottom
         )
+        assert padding[1] + padding[3] + resize_size[0] == pad_size[0]
+        assert padding[0] + padding[2] + resize_size[1] == pad_size[1]
         if obj is not None:
             obj = T.pad(obj, padding)
+            assert obj.shape[-2:] == pad_size
 
     if return_params:
         return obj, scales, padding

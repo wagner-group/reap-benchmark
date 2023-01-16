@@ -50,7 +50,7 @@ class SynObject(render_object.RenderObject):
             syn_3d_dist: _description_. Defaults to None.
             syn_colorjitter: _description_. Defaults to None.
         """
-        super().__init__(dataset="synthetic", pad_to_square=False, **kwargs)
+        super().__init__(dataset="synthetic", pad_to_square=True, **kwargs)
         if img_size is None:
             raise ValueError("img_size must be specified for SynObject!")
         if syn_obj_path is None:
@@ -61,8 +61,9 @@ class SynObject(render_object.RenderObject):
         resized_obj_mask: MaskTensor = img_util.resize_and_pad(
             self.obj_mask,
             pad_size=self._img_size,
-            resize_size=self._obj_size_px,
+            resize_size=(self._obj_size_px[1], self._obj_size_px[1]),
             is_binary=True,
+            keep_aspect_ratio=True,
         )
         self._resized_obj_mask: BatchMaskTensor = img_util.coerce_rank(
             resized_obj_mask, 4
@@ -94,9 +95,10 @@ class SynObject(render_object.RenderObject):
         obj: BatchImageTensor = img_util.resize_and_pad(
             obj,
             pad_size=self._img_size,
-            resize_size=self._obj_size_px,
+            resize_size=(self._obj_size_px[1], self._obj_size_px[1]),
             is_binary=False,
             interp=self._interp,
+            keep_aspect_ratio=True,
         )
         return obj
 

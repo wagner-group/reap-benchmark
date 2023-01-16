@@ -178,10 +178,11 @@ def gen_sign_mask(
 
     mask = torch.from_numpy(mask)
     img_util.coerce_rank(mask, 4)
+    pad_size = (obj_width_px, obj_width_px)
     mask, scales, padding = img_util.resize_and_pad(
         obj=mask,
-        resize_size=(round(hw_ratio * obj_width_px), obj_width_px),
-        pad_size=(obj_width_px, obj_width_px) if pad_to_square else None,
+        resize_size=pad_size,
+        pad_size=pad_size if pad_to_square else None,
         is_binary=True,
         keep_aspect_ratio=True,
         return_params=True,

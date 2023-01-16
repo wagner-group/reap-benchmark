@@ -77,7 +77,9 @@ class RenderObject:
         self._obj_size_px: SizePx = obj_size_px
 
         # Generate object mask and source points for geometric transforms
-        mask_src = self._get_obj_mask(use_box_mode, pad_to_square)
+        mask_src = self._get_obj_mask(
+            use_box_mode=use_box_mode, pad_to_square=pad_to_square
+        )
         self.obj_mask: MaskTensor = mask_src[0].to(device)
         self.src_points: np.ndarray = mask_src[1]
 
@@ -124,9 +126,9 @@ class RenderObject:
         """
         shape: str = self._metadata["shape"][self._obj_class]
         obj_mask, src = util.gen_sign_mask(
-            shape,
-            self._obj_size_px[0] / self._obj_size_px[1],
-            self._obj_size_px[1],
+            shape=shape,
+            hw_ratio=self._obj_size_px[0] / self._obj_size_px[1],
+            obj_width_px=self._obj_size_px[1],
             use_box_mode=use_box_mode,
             pad_to_square=pad_to_square,
         )

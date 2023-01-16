@@ -21,8 +21,10 @@ iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
     "interp",
-    "reap_transform_mode",
-    "reap_use_relight",
+    "reap_geo_method",
+    "reap_relight_method",
+    "reap_relight_polynomial_degree",
+    "reap_relight_percentile",
     "syn_obj_width_px",
     "syn_rotate",
     "syn_scale",
@@ -195,10 +197,10 @@ def main(args):
                     if "gtScores" not in metrics:
                         continue
                     cls_scores = metrics["gtScores"]
-                    tf_mode = results["reap_transform_mode"]
-                    base_sid = f"reap | {attack_type} | {tf_mode}"
-                    if not results["reap_use_relight"]:
-                        base_sid += "_nolight"
+                    # tf_mode = results["reap_geo_method"]
+                    tf_mode = "perspective"
+                    rl_mode = results["reap_relight_method"]
+                    base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"
 
                 if base_sid not in tp_scores:
