@@ -1013,9 +1013,6 @@ def setup_detectron_cfg(
     weight_path = config_base["weights"]
     if isinstance(config_base["weights"], list):
         weight_path = weight_path[0]
-    assert isinstance(
-        weight_path, str
-    ), f"weight_path must be string, but it is {weight_path}!"
     cfg.MODEL.WEIGHTS = weight_path
 
     # YOLOv7 configs
