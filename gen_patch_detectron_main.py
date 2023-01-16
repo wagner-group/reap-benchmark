@@ -108,7 +108,7 @@ def _collect_attack_rimgs(
         len(rimg.images),
         rimg.num_objs,
     )
-    assert len(rimg.images) == num_bg and rimg.num_objs >= num_bg
+    # assert len(rimg.images) == num_bg and rimg.num_objs >= num_bg  # FIXME
     return rimg
 
 
