@@ -51,7 +51,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         self._relight_params = {
             "method": config_base["reap_relight_method"],
             "polynomial_degree": config_base["reap_relight_polynomial_degree"],
-            "percentile": config_base["reap_relight_percentile"] / 100,
+            "percentile": config_base["reap_relight_percentile"],
             "interp": config_base["interp"],
             "transform_mat": torch.eye(3, dtype=torch.float32).view(1, 1, 3, 3),
         }

@@ -34,9 +34,9 @@ base:
 
   # REAP benchmark params
   reap_geo_method: 'perspective'  # Transform mode for patch during eval
-  reap_relight_method: 'color_transfer'  # 'polynomial', 'percentile', 'color_transfer'
+  reap_relight_method: 'percentile'  # 'polynomial', 'percentile', 'color_transfer'
   reap_relight_polynomial_degree: 1  # Linear
-  reap_relight_percentile: 1
+  reap_relight_percentile: 0.2
 
   # Synthetic benchmark params
   syn_obj_width_px: 64
