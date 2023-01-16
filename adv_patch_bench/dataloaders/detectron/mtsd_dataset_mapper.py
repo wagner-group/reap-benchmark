@@ -167,7 +167,11 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 if not self.keypoint_on:
                     anno.pop("keypoints", None)
 
+                anno[column_name] = None
                 xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
+                if xmax <= xmin or ymax <= ymin:
+                    anno["keypoints"] = np.zeros((4, 3), dtype=np.float32)
+                    continue
                 anno["keypoints"] = np.array(
                     [
                         [xmin, ymin, 2],
@@ -180,7 +184,6 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
 
                 obj_class = anno["category_id"]
                 if obj_class not in self._syn_objs:
-                    anno[column_name] = None
                     continue
                 # Compute relighting params from cropped object
                 obj_mask = img_util.resize_and_pad(
