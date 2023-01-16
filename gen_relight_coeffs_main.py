@@ -59,6 +59,8 @@ def main() -> None:
     if "polynomial" in RELIGHT_METHOD:
         relight_params["polynomial_degree"] = POLY_DEGREE
         relight_params["percentile"] = DROP_TOPK
+    elif "percentile" in RELIGHT_METHOD:
+        relight_params["percentile"] = DROP_TOPK
     column_name = f"{RELIGHT_METHOD}_coeffs"
 
     anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
@@ -132,7 +134,8 @@ def main() -> None:
             src[:, 1] *= obj_height / orig_height
             relight_params["src_points"] = src
             relight_params["tgt_points"] = tgt
-            relight_params["syn_obj"] = syn_obj
+            if "percentile" not in RELIGHT_METHOD:
+                relight_params["syn_obj"] = syn_obj
 
             # Calculate relighting parameters
             coeffs = lighting_tf.compute_relight_params(
@@ -150,9 +153,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    RELIGHT_METHOD = "polynomial_hsv-sv"  # "polynomial", "color_transfer"
+    RELIGHT_METHOD = "percentile"  # "polynomial", "color_transfer", "percentile"
     POLY_DEGREE = 1
-    DROP_TOPK = 0.0
+    DROP_TOPK = 0.2
 
     config: dict[str, dict[str, Any]] = args_util.reap_args_parser(
         is_detectron=True, is_gen_patch=True, is_train=False

@@ -38,6 +38,8 @@ INTERPS = ("nearest", "bilinear", "bicubic")
 # TODO(enhancement): Unify relighting transform API
 RELIGHT_METHODS = [
     "color_transfer",
+    "color_transfer_hsv-sv",
+    "color_transfer_lab-l",
     "polynomial",
     "polynomial_max",
     "polynomial_mean",

@@ -94,7 +94,7 @@ def _compute_relight_params(
     relight_params["src_points"] = src
     relight_params["tgt_points"] = tgt
     relight_params["transform_mode"] = "perspective"
-    if RELIGHT_METHOD != "percentile":
+    if "percentile" not in RELIGHT_METHOD:
         relight_params["syn_obj"] = syn_obj
 
     # calculate relighting parameters
@@ -109,7 +109,7 @@ def _compute_relight_params(
 def main(relight_method: str, relight_params: dict[str, Any] | None = None):
     """Main function for running realism test."""
     # file directory where images are stored
-    file_dir = "~/data/reap-benchmark/reap_realism_test/images/"
+    file_dir = "~/data/reap-benchmark/reap_realism_test/images_jpg/"
     file_dir = os.path.expanduser(file_dir)
 
     # path to directory where patch files are stored
@@ -145,7 +145,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
     geometric_errors = []
     lighting_errors = []
 
-    relight_transform = lighting_tf.RelightTransform(method=RELIGHT_METHOD)
+    relight_transform = lighting_tf.RelightTransform(method=relight_method)
 
     for index, row in tqdm(annotation_df.iterrows()):
         is_clean = index % 2 == 0
@@ -162,7 +162,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
         ]
 
         # get file path for image
-        filename = row["file_name"]
+        filename = row["file_name"].replace(".png", ".jpg")
         filepath = os.path.join(file_dir, filename)
         # check if file exists
         if not os.path.exists(filepath):
@@ -176,7 +176,8 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
         torch_image /= 255.0
 
         # get image dimensions
-        img_width, img_height = row["width"], row["height"]
+        # img_width, img_height = row["width"], row["height"]
+        img_height, img_width = torch_image.shape[-2:]
 
         # get labeled coordinates for object in image
         (
@@ -277,13 +278,14 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
                     [patch_x4, patch_y4],
                 ]
             ).astype(np.float32)
+            patch_tgt *= 1024 / 6036
 
         transform_func = kornia_tf.warp_perspective
         if len(src) == 3:
             tgt = np.array(
                 [[sign_x1, sign_y1], [sign_x2, sign_y2], [sign_x3, sign_y3]]
             ).astype(np.float32)
-
+            tgt *= 1024 / 6036
             sign_tf_matrix = (
                 torch.from_numpy(cv.getAffineTransform(src, tgt))
                 .unsqueeze(0)
@@ -303,6 +305,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
                     [sign_x4, sign_y4],
                 ]
             ).astype(np.float32)
+            tgt *= 1024 / 6036
             src = torch.from_numpy(src).unsqueeze(0)
             tgt = torch.from_numpy(tgt).unsqueeze(0)
             sign_tf_matrix = get_perspective_transform(src, tgt)
@@ -432,13 +435,15 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
-    SAVE_IMG_DEBUG = True
+    SAVE_IMG_DEBUG = False
     results = {}
 
-    # RELIGHT_METHOD = "percentile"
-    # for percentile in range(1, 21):
-    #     params = {"percentile": percentile}
-    #     results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
+    # RELIGHT_METHOD = "percentile_hsv-sv"
+    # for percentile in range(1, 30):
+    #     params = {"percentile": percentile / 100}
+    #     results[f"{RELIGHT_METHOD}_{percentile / 100}"] = main(
+    #         RELIGHT_METHOD, params
+    #     )
 
     # RELIGHT_METHOD = "polynomial"
     # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
@@ -451,7 +456,7 @@ if __name__ == "__main__":
     # RELIGHT_METHOD = "color_transfer"
     # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
 
-    # RELIGHT_METHOD = "polynomial_mean"
+    # RELIGHT_METHOD = "polynomial_max"
     # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
     #     for degree in range(4):
     #         params = {"polynomial_degree": degree, "percentile": drop_topk}
@@ -460,16 +465,34 @@ if __name__ == "__main__":
     #         )
 
     # RELIGHT_METHOD = "polynomial_hsv-sv"
-    RELIGHT_METHOD = "polynomial_lab-l"
-    degree, drop_topk = 1, 0.0
-    params = {"polynomial_degree": degree, "percentile": drop_topk}
-    results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-        RELIGHT_METHOD, params
-    )
-    # RELIGHT_METHOD = "percentile"
-    # percentile = 0.18
-    # params = {"percentile": percentile}
-    # results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
+    # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
+    #     for degree in range(4):
+    #         params = {"polynomial_degree": degree, "percentile": drop_topk}
+    #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+    #             RELIGHT_METHOD, params
+    #         )
+
+    # RELIGHT_METHOD = "polynomial_lab-l"
+    # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
+    #     for degree in range(4):
+    #         params = {"polynomial_degree": degree, "percentile": drop_topk}
+    #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+    #             RELIGHT_METHOD, params
+    #         )
+
+    # RELIGHT_METHOD = "color_transfer_hsv-sv"
+    # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
+
+    # RELIGHT_METHOD = "polynomial_hsv-sv"
+    # degree, drop_topk = 1, 0.0
+    # params = {"polynomial_degree": degree, "percentile": drop_topk}
+    # results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+    #     RELIGHT_METHOD, params
+    # )
+    RELIGHT_METHOD = "percentile"
+    percentile = 0.2
+    params = {"percentile": percentile}
+    results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
 
     with open("tmp/realism_test_results.pkl", "wb") as f:
         pickle.dump(results, f)
