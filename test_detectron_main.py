@@ -471,10 +471,8 @@ if __name__ == "__main__":
     logger.addHandler(file_handler)
     logger.info(config)
 
-    dt_log = logging.getLogger("detectron2")
-    dt_log.setLevel(log_level)
-    dt_log = logging.getLogger("fvcore")
-    dt_log.setLevel(log_level)
+    logging.getLogger("detectron2").setLevel(log_level)
+    logging.getLogger("fvcore").setLevel(log_level)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
 

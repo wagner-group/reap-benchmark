@@ -145,8 +145,7 @@ def train(cfg, config, model, attack):
     robj_kwargs = {
         "obj_size_px": config_base["obj_size_px"],
         "interp": config_base["interp"],
-        "reap_transform_mode": config_base["reap_transform_mode"],
-        "reap_use_relight": config_base["reap_use_relight"],
+        **{k: v for k, v in config_base.items() if "reap" in k},
     }
     # Get augmentation for mask only
     _, trn_aug_mask, trn_aug_color = RenderObject.get_augmentation(
@@ -263,7 +262,7 @@ def train(cfg, config, model, attack):
                     )
 
                     if config_base["debug"]:
-                        logger.info(
+                        logger.debug(
                             "Saving debug training batch %d...", iteration
                         )
                         torchvision.utils.save_image(
@@ -331,6 +330,7 @@ def main(config):
         if config["base"]["debug"] or config["base"]["verbose"]
         else logging.INFO,
     )
+    logging.getLogger("yolov7_d2").setLevel(logging.ERROR)
 
     data_util.register_dataset(config["base"])
 

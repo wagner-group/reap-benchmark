@@ -53,11 +53,13 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
             "polynomial_degree": config_base["reap_relight_polynomial_degree"],
             "percentile": config_base["reap_relight_percentile"],
             "interp": config_base["interp"],
-            "transform_mat": torch.eye(3, dtype=torch.float32).view(1, 1, 3, 3),
+            "transform_mat": torch.eye(3, dtype=torch.float32).view(1, 3, 3),
         }
 
         # Load dict of syn objs and masks
         for obj_class, class_name in class_names.items():
+            if class_name == "other":
+                continue
             obj_mask, _ = util.gen_sign_mask(
                 shape_dict[obj_class],
                 hw_ratio=hw_ratio_dict[obj_class],
@@ -65,18 +67,16 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 pad_to_square=False,
             )
             syn_obj_path = os.path.join(
-                DEFAULT_SYN_OBJ_DIR, f"{class_name}.png"
+                DEFAULT_SYN_OBJ_DIR, "synthetic", f"{class_name}.png"
             )
-            syn_obj = (
-                torchvision.io.read_image(
-                    syn_obj_path, mode=torchvision.io.ImageReadMode.RGB
-                )
-                / 255
+            syn_obj = torchvision.io.read_image(
+                syn_obj_path, mode=torchvision.io.ImageReadMode.RGB
             )
+            syn_obj = syn_obj.float() / 255
             syn_obj = img_util.coerce_rank(syn_obj, 4)
             obj_mask = img_util.coerce_rank(obj_mask, 4)
             self._syn_objs[obj_class] = syn_obj
-            self._syn_obj_masks[obj_class] = obj_mask
+            self._syn_obj_masks[obj_class] = obj_mask.float()
 
     def __call__(self, dataset_dict: DetectronSample):
         """Modify sample directly loaded from Detectron2 dataset.
@@ -164,20 +164,21 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                     anno.pop("keypoints", None)
 
                 xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
-                obj = image[:, ymin:ymax, xmin:xmax]
-                # Compute relighting params from cropped object
                 obj_class = anno["category_id"]
+                if obj_class not in self._syn_objs:
+                    continue
+                # Compute relighting params from cropped object
                 obj_mask = img_util.resize_and_pad(
                     obj=self._syn_obj_masks[obj_class],
                     resize_size=(ymax - ymin, xmax - xmin),
                     keep_aspect_ratio=False,
                     is_binary=True,
                 )
+                if "percentile" not in self._relight_params["method"]:
+                    self._relight_params["syn_obj"] = self._syn_objs[obj_class]
+                obj = image[:, ymin:ymax, xmin:xmax]
                 coeffs = lighting_tf.compute_relight_params(
-                    obj / 255,
-                    syn_obj=self._syn_objs[obj_class],
-                    obj_mask=obj_mask,
-                    **self._relight_params,
+                    obj / 255, obj_mask=obj_mask, **self._relight_params
                 )
                 anno[column_name] = coeffs
                 anno["keypoints"] = np.array(

@@ -15,11 +15,11 @@ from yolov7.config import add_yolo_config
 from yolov7.utils.d2overrides import default_setup
 
 from hparams import (
+    DATASET_METADATA,
     DEFAULT_SYN_OBJ_DIR,
     INTERPS,
     LABEL_LIST,
     NUM_CLASSES,
-    DATASET_METADATA,
 )
 
 _TRANSFORM_PARAMS: List[str] = [
