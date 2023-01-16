@@ -130,7 +130,6 @@ def evaluate(cfg, config, model):
 def train(cfg, config, model, attack):
     """Main training loop."""
     config_base = config["base"]
-    resume: bool = config_base["resume"]
     use_attack: bool = config_base["attack_type"] != "none"
     train_dataset = cfg.DATASETS.TRAIN[0]
 
@@ -159,12 +158,17 @@ def train(cfg, config, model, attack):
     checkpointer = DetectionCheckpointer(
         model, cfg.OUTPUT_DIR, optimizer=optimizer, scheduler=scheduler
     )
-    start_iter = (
-        checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get(
+    if config_base["resume"]:
+        # If resume, load from last checkpoint
+        weight_path = checkpointer.get_checkpoint_file()
+        start_iter = checkpointer.resume_or_load(weight_path, resume=True).get(
             "iteration", -1
         )
-        + 1
-    )
+    else:
+        # If not resume, load from specified weight and start from itearation 0
+        checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=False)
+        start_iter = -1
+    start_iter += 1
     max_iter = cfg.SOLVER.MAX_ITER
 
     periodic_checkpointer = PeriodicCheckpointer(
@@ -344,13 +348,6 @@ def main(config):
         model=model,
         verbose=config["base"]["verbose"],
     )
-
-    if config["base"]["eval_only"]:
-        logger.info("Running evaluation only...")
-        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-            cfg.MODEL.WEIGHTS, resume=config["base"]["resume"]
-        )
-        return evaluate(cfg, config, model)
 
     distributed = comm.get_world_size() > 1
     if distributed:
