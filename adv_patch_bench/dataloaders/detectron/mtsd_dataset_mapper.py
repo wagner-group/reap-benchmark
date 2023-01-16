@@ -50,11 +50,15 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         self._syn_obj_masks = {}
         self._relight_params = {
             "method": config_base["reap_relight_method"],
-            "polynomial_degree": config_base["reap_relight_polynomial_degree"],
             "percentile": config_base["reap_relight_percentile"],
-            "interp": config_base["interp"],
             "transform_mat": torch.eye(3, dtype=torch.float32).view(1, 3, 3),
         }
+        if "polynomial" in config_base["reap_relight_method"]:
+            self._relight_params["polynomial_degree"] = config_base[
+                "reap_relight_polynomial_degree"
+            ]
+        if "percentile" not in config_base["reap_relight_method"]:
+            self._relight_params["interp"] = config_base["interp"]
 
         # Load dict of syn objs and masks
         for obj_class, class_name in class_names.items():
@@ -164,8 +168,19 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                     anno.pop("keypoints", None)
 
                 xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
+                anno["keypoints"] = np.array(
+                    [
+                        [xmin, ymin, 2],
+                        [xmax, ymin, 2],
+                        [xmax, ymax, 2],
+                        [xmin, ymax, 2],
+                    ],
+                    dtype=np.float32,
+                )
+
                 obj_class = anno["category_id"]
                 if obj_class not in self._syn_objs:
+                    anno[column_name] = None
                     continue
                 # Compute relighting params from cropped object
                 obj_mask = img_util.resize_and_pad(
@@ -181,15 +196,6 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                     obj / 255, obj_mask=obj_mask, **self._relight_params
                 )
                 anno[column_name] = coeffs
-                anno["keypoints"] = np.array(
-                    [
-                        [xmin, ymin, 2],
-                        [xmax, ymin, 2],
-                        [xmax, ymax, 2],
-                        [xmin, ymax, 2],
-                    ],
-                    dtype=np.float32,
-                )
 
             # USER: Implement additional transformations if you have other types of data
             annos = [

@@ -47,7 +47,13 @@ class ReapObject(render_object.RenderObject):
         Raises:
             NotImplementedError: Invalid transform mode.
         """
-        super().__init__(dataset="reap", pad_to_square=True, **kwargs)
+        if "dataset" not in kwargs:
+            kwargs["dataset"] = "reap"
+        if "pad_to_square" not in kwargs:
+            kwargs["pad_to_square"] = True
+        if "use_box_mode" not in kwargs:
+            kwargs["use_box_mode"] = False
+        super().__init__(**kwargs)
         # Get REAP relighting transform params
         relight_coeffs = torch.tensor(
             obj_dict[f"{reap_relight_method}_coeffs"]

@@ -233,6 +233,19 @@ def register_mtsd(
         if ignore_bg_class:
             thing_classes = thing_classes[:-1]
 
+    metadata = {
+        "thing_classes": thing_classes,
+        "keypoint_names": [f"p{i}" for i in range(_NUM_KEYPOINTS)],
+        "keypoint_flip_map": [
+            (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
+        ],
+        "obj_dim_dict": DATASET_METADATA[f"mtsd_{color}"],
+        "bg_class": bg_class,
+    }
+    # Register dataset without split to keep metadata
+    DatasetCatalog.register(dataset, lambda x: [])
+    MetadataCatalog.get(dataset).set(**metadata)
+
     for split in _ALLOWED_SPLITS:
         dataset_with_split: str = f"mtsd_{color}_{split}"
         DatasetCatalog.register(
@@ -246,12 +259,4 @@ def register_mtsd(
                 **mtsd_anno,
             ),
         )
-        MetadataCatalog.get(dataset_with_split).set(
-            thing_classes=thing_classes,
-            keypoint_names=[f"p{i}" for i in range(_NUM_KEYPOINTS)],
-            keypoint_flip_map=[
-                (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
-            ],
-            obj_dim_dict=DATASET_METADATA[f"mtsd_{color}"],
-            bg_class=bg_class,
-        )
+        MetadataCatalog.get(dataset_with_split).set(**metadata)

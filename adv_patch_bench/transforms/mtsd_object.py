@@ -10,4 +10,9 @@ class MtsdObject(reap_object.ReapObject):
 
     def __init__(self, **kwargs) -> None:
         """Initialize MtsdObject."""
-        super().__init__(use_box_mode=True, pad_to_square=True, **kwargs)
+        super().__init__(
+            dataset="mtsd_no_color",
+            pad_to_square=True,
+            use_box_mode=True,
+            **kwargs,
+        )

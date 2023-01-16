@@ -457,6 +457,7 @@ def compute_relight_params(
     src_points: np.ndarray | None = None,
     tgt_points: np.ndarray | None = None,
     transform_mode: str = "perspective",
+    interp: str = "bilinear",
     **relight_kwargs,
 ) -> torch.Tensor:
     """Compute params of relighting transform.
@@ -497,7 +498,7 @@ def compute_relight_params(
             img,
             transform_mat,
             obj_mask.shape[-2:],
-            mode="bilinear",
+            mode=interp,
             padding_mode="zeros",
         )
 
@@ -522,6 +523,7 @@ def compute_relight_params(
             warped_obj_mask=obj_mask,
             transform_mat=transform_mat,
             mode=mode,
+            interp=interp,
             **relight_kwargs,
         )
     elif "color_transfer" in method:
