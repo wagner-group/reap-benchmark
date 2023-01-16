@@ -197,8 +197,7 @@ def main(args):
                     if "gtScores" not in metrics:
                         continue
                     cls_scores = metrics["gtScores"]
-                    # tf_mode = results["reap_geo_method"]
-                    tf_mode = "perspective"
+                    tf_mode = results.get("reap_geo_method", "perspective")
                     rl_mode = results["reap_relight_method"]
                     base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"

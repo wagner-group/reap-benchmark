@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import pathlib
 import pickle
 import random
 import sys
@@ -267,6 +268,7 @@ def _dump_results(results: Dict[str, Any]) -> None:
     """
     result_dir = config_base["result_dir"]
     debug = config_base["debug"]
+    dataset = config_base["dataset"]
     if debug:
         return
     # Keep only eval params that matter (uniquely identifies evaluation setting)
@@ -291,23 +293,22 @@ def _dump_results(results: Dict[str, Any]) -> None:
 
     if config_base["compute_conf_thres"]:
         # Try to load existing metadata
-        metadata_dir = os.path.join(
-            config_base["base_dir"], config_base["name"], "metadata.pkl"
+        metadata_dir = (
+            pathlib.Path(config_base["weights"]).parent / "metadata.pkl"
         )
-        metadata = {}
-        if os.path.isfile(metadata_dir):
-            logger.info("Existing metadata file found at %s.", metadata_dir)
-            with open(metadata_dir, "rb") as file:
-                metadata = pickle.load(file)
+        base_metadata, metadata = {}, {}
+        if metadata_dir.is_file():
+            logger.info("Existing metadata found at %s.", str(metadata_dir))
+            with metadata_dir.open("rb") as file:
+                base_metadata = pickle.load(file)
+            metadata = base_metadata.get(dataset, {})
 
         if "conf_thres" not in metadata:
             logger.info(
                 "conf_thres does not exist in metadata. Creating an empty "
                 "one..."
             )
-            metadata["conf_thres"] = [
-                None for _ in LABEL_LIST[config_base["dataset"]]
-            ]
+            metadata["conf_thres"] = [None for _ in LABEL_LIST[dataset]]
 
         # Write new conf_thres
         conf_thres = results["bbox"]["conf_thres"]
@@ -316,9 +317,12 @@ def _dump_results(results: Dict[str, Any]) -> None:
         else:
             metadata["conf_thres"][config_base["obj_class"]] = conf_thres
 
-        with open(metadata_dir, "wb") as file:
-            pickle.dump(metadata, file)
-        logger.info("Metadata is saved at %s.", metadata_dir)
+        if dataset not in base_metadata:
+            base_metadata[dataset] = {}
+        base_metadata[dataset]["conf_thres"] = metadata["conf_thres"]
+        with metadata_dir.open("wb") as file:
+            pickle.dump(base_metadata, file)
+        logger.info("Metadata is saved at %s.", str(metadata_dir))
 
     logger.info("Results are saved at %s.", result_dir)
 

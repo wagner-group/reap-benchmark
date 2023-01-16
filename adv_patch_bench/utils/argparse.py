@@ -604,13 +604,14 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
 
 def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
     config_base = config["base"]
+    dataset = config_base["dataset"]
     if config_base["compute_conf_thres"]:
         config_base["conf_thres"] = None
     if config_base["conf_thres"] is None:
         config_base["compute_conf_thres"] = True
     if (
         config_base["compute_conf_thres"]
-        and config_base["dataset"] == "synthetic"
+        and dataset == "synthetic"
         and config_base["syn_desired_fnr"] is None
     ):
         raise ValueError(
@@ -622,18 +623,19 @@ def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
         not config_base["compute_conf_thres"]
         and config_base["conf_thres"] is None
     ):
-        metadata_dir = os.path.join(
-            config_base["base_dir"], config_base["name"], "metadata.pkl"
+        metadata_dir = (
+            pathlib.Path(config_base["weights"]).parent / "metadata.pkl"
         )
-        if not os.path.isfile(metadata_dir):
+        if not metadata_dir.is_file():
             raise FileNotFoundError(
-                f"Metadata is not found in the default location {metadata_dir}!"
-                " when loading conf_thres. Please place metadata.pkl there, or "
-                "set compute_conf_thres to False and specify conf_thres."
+                "Metadata is not found in the default location "
+                f"{str(metadata_dir)}! when loading conf_thres. Please place "
+                "metadata.pkl there, or set compute_conf_thres to False and "
+                "specify conf_thres."
             )
-        with open(metadata_dir, "rb") as file:
-            metadata = pickle.load(file)
-        config_base["conf_thres"] = metadata["conf_thres"]
+        with metadata_dir.open("rb") as file:
+            base_metadata = pickle.load(file)
+        config_base["conf_thres"] = base_metadata[dataset]["conf_thres"]
 
 
 def _update_dataset_name(
