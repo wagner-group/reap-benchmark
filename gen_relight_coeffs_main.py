@@ -150,7 +150,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    RELIGHT_METHOD = "polynomial_mean"  # "polynomial", "color_transfer"
+    RELIGHT_METHOD = "polynomial_hsv-sv"  # "polynomial", "color_transfer"
     POLY_DEGREE = 1
     DROP_TOPK = 0.0
 

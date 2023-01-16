@@ -6,6 +6,7 @@ import logging
 import math
 from typing import Callable
 
+import kornia
 import kornia.geometry.transform as kornia_tf
 import numpy as np
 import torch
@@ -18,6 +19,7 @@ from adv_patch_bench.utils.types import BatchImageTensor, BatchMaskTensor
 
 _EPS = 1e-6
 logger = logging.getLogger(__name__)
+_ColorTF = Callable[[BatchImageTensor], BatchImageTensor]
 
 
 class RGBtoLab(nn.Module):
@@ -105,10 +107,34 @@ class RelightTransform(nn.Module):
         # Trying to use color transfer method for L channel only still affects
         # the color significantly. Using kornia's RGB<>Lab conversion helps a
         # little but still looks worse than polynomial method.
-        self._l_channel_only = False
         if method == "color_transfer":
+            self._l_channel_only = True
             self._rgb_to_lab = RGBtoLab()
             self._lab_to_rgb = LabtoRGB()
+        elif "polynomial" in method:
+            color_space = method.split("_")[-1].split("-")[0]
+
+            if len(method.split("-")) == 1:
+                self._channels = None
+                channels = None
+            else:
+                channels = method.split("-")[1]
+
+            self._color_tfs = None
+            if color_space == "hsv":
+                self._color_tfs = [
+                    kornia.color.RgbToHsv(),
+                    kornia.color.HsvToRgb(),
+                ]
+                if channels == "sv":
+                    self._channels = [1, 2]
+            elif color_space == "lab":
+                self._color_tfs = [
+                    kornia.color.RgbToLab(),
+                    kornia.color.LabToRgb(),
+                ]
+                if channels == "l":
+                    self._channels = [0]
 
     def forward(
         self,
@@ -131,16 +157,21 @@ class RelightTransform(nn.Module):
                 self._lab_to_rgb,
                 l_channel_only=self._l_channel_only,
             )
-        if self._method in ("polynomial", "polynomial_max", "polynomial_mean"):
-            return _polynomial_match(inputs, relight_coeffs)
+        if self._method == "percentile" or "polynomial" in self._method:
+            return _polynomial_match(
+                inputs,
+                relight_coeffs,
+                channels=self._channels,
+                color_space_transforms=self._color_tfs,
+            )
         raise NotImplementedError("Invalid lighting transform method!")
 
 
 def _color_transfer(
     inputs: BatchImageTensor,
     poly_coeffs: torch.Tensor,
-    rgb_to_lab: Callable[[BatchImageTensor], BatchImageTensor],
-    lab_to_rgb: Callable[[BatchImageTensor], BatchImageTensor],
+    rgb_to_lab: _ColorTF,
+    lab_to_rgb: _ColorTF,
     l_channel_only: bool = False,
 ) -> BatchImageTensor:
     """Relight with Color Transfer method from Reinhard, et al. [2021].
@@ -185,7 +216,10 @@ def _color_transfer(
 
 
 def _polynomial_match(
-    inputs: BatchImageTensor, poly_coeffs: torch.Tensor
+    inputs: BatchImageTensor,
+    poly_coeffs: torch.Tensor,
+    channels: list[int] | None = None,
+    color_space_transforms: tuple[_ColorTF, _ColorTF] | None = None,
 ) -> BatchImageTensor:
     """Relight transform with polynomial function.
 
@@ -207,7 +241,7 @@ def _polynomial_match(
             "poly_coeffs should have batch size of 1 or the same as inputs, "
             f"but got {len(poly_coeffs)}!"
         )
-    if poly_coeffs.shape[-2] not in (1, 3):
+    if poly_coeffs.shape[-2] not in (1, 3, len(channels)):
         raise ValueError(
             "poly_coeffs must have channel dimension of 1 or 3, but got "
             f"{poly_coeffs.shape[1]}!"
@@ -215,9 +249,27 @@ def _polynomial_match(
     deg = poly_coeffs.shape[-1]
     device = inputs.device
     degrees = torch.arange(deg - 1, -1, -1, device=device).view(1, 1, deg, 1, 1)
+    if color_space_transforms is not None:
+        inputs = color_space_transforms[0](inputs)
     outputs = inputs[:, :, None].pow(degrees)
-    outputs *= poly_coeffs[..., None, None]
-    outputs = outputs.sum(2)
+
+    if channels is None:
+        outputs = torch.einsum("bcdhw, bcd -> bchw", outputs, poly_coeffs)
+    else:
+        new_outputs = []
+        for channel in range(3):
+            if channel in channels:
+                tmp = (
+                    outputs[:, channel]
+                    * poly_coeffs[:, channels.index(channel), :, None, None]
+                ).sum(1)
+            else:
+                tmp = inputs[:, channel]
+            new_outputs.append(tmp)
+        outputs = torch.stack(new_outputs, dim=1)
+
+    if color_space_transforms is not None:
+        outputs = color_space_transforms[1](outputs)
     outputs.clamp_(0, 1)
     return outputs
 
@@ -298,17 +350,28 @@ def _fit_polynomial(
         mode=interp,
         padding_mode="zeros",
     )
+    if "hsv" in mode:
+        syn_obj = kornia.color.rgb_to_hsv(syn_obj)
+    elif "lab" in mode:
+        syn_obj = kornia.color.rgb_to_lab(syn_obj)
 
     real_pixels_by_channel = torch.stack(real_pixels_by_channel, dim=0)
+    channels = [0]
     if mode == "max":
         syn_obj = syn_obj.max(1, keepdim=True)[0]
         real_pixels_by_channel = real_pixels_by_channel.max(0, keepdim=True)[0]
     elif mode == "mean":
         syn_obj = syn_obj.mean(1, keepdim=True)
         real_pixels_by_channel = real_pixels_by_channel.mean(0, keepdim=True)
+    elif "-sv" in mode:
+        channels = [1, 2]
+    elif "-l" in mode:
+        channels = [0]
+    else:
+        channels = [0, 1, 2]
 
     coeffs = []
-    for channel in range(1 if mode else 3):
+    for channel in channels:
         syn_pixels = torch.masked_select(syn_obj[:, channel], warped_obj_mask)
         real_pixels = real_pixels_by_channel[channel]
 
@@ -436,6 +499,11 @@ def compute_relight_params(
             "Currently, k-mean method is unused as it does not work well."
         )
     elif "polynomial" in method:
+        mode = method.split("_")[-1]
+        if "hsv" in mode:
+            img = kornia.color.rgb_to_hsv(img)
+        elif "lab" in mode:
+            img = kornia.color.rgb_to_lab(img)
         obj_mask = obj_mask[:, 0] == 1
         real_pixels = []
         for channel in range(3):
@@ -444,7 +512,7 @@ def compute_relight_params(
             real_pixels,
             warped_obj_mask=obj_mask,
             transform_mat=transform_mat,
-            mode=method.split("_")[-1],
+            mode=mode,
             **relight_kwargs,
         )
     elif method == "color_transfer":

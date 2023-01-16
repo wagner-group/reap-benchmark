@@ -94,7 +94,8 @@ def _compute_relight_params(
     relight_params["src_points"] = src
     relight_params["tgt_points"] = tgt
     relight_params["transform_mode"] = "perspective"
-    relight_params["syn_obj"] = syn_obj
+    if RELIGHT_METHOD != "percentile":
+        relight_params["syn_obj"] = syn_obj
 
     # calculate relighting parameters
     coeffs = lighting_tf.compute_relight_params(
@@ -431,7 +432,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
-    SAVE_IMG_DEBUG = False
+    SAVE_IMG_DEBUG = True
     results = {}
 
     # RELIGHT_METHOD = "percentile"
@@ -450,13 +451,25 @@ if __name__ == "__main__":
     # RELIGHT_METHOD = "color_transfer"
     # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
 
-    RELIGHT_METHOD = "polynomial_mean"
-    for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
-        for degree in range(4):
-            params = {"polynomial_degree": degree, "percentile": drop_topk}
-            results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-                RELIGHT_METHOD, params
-            )
+    # RELIGHT_METHOD = "polynomial_mean"
+    # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
+    #     for degree in range(4):
+    #         params = {"polynomial_degree": degree, "percentile": drop_topk}
+    #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+    #             RELIGHT_METHOD, params
+    #         )
+
+    # RELIGHT_METHOD = "polynomial_hsv-sv"
+    RELIGHT_METHOD = "polynomial_lab-l"
+    degree, drop_topk = 1, 0.0
+    params = {"polynomial_degree": degree, "percentile": drop_topk}
+    results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
+        RELIGHT_METHOD, params
+    )
+    # RELIGHT_METHOD = "percentile"
+    # percentile = 0.18
+    # params = {"percentile": percentile}
+    # results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
 
     with open("tmp/realism_test_results.pkl", "wb") as f:
         pickle.dump(results, f)
