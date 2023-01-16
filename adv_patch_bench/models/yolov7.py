@@ -11,6 +11,7 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torchvision
 from alfred.dl.metrics.iou_loss import ciou
 from detectron2.modeling.backbone import build_backbone
@@ -68,6 +69,7 @@ class YOLOV7(nn.Module):
 
         self.change_iter = 10
         self.iter = 0
+        self.use_l1 = False
         anchors = cfg.MODEL.YOLO.ANCHORS
 
         assert (
@@ -195,23 +197,23 @@ class YOLOV7(nn.Module):
         )
 
         # sync image size for all gpus
-        # comm.synchronize()
-        # if training and self.iter == self.max_iter - 49990:
-        #     meg = torch.BoolTensor(1).to(self.device)
-        #     comm.synchronize()
-        #     if comm.is_main_process():
-        #         logger.info(
-        #             "[master] enable l1 loss now at iter: {}".format(self.iter)
-        #         )
-        #         # enable l1 loss at last 50000 iterations
-        #         meg.fill_(True)
+        comm.synchronize()
+        if training and self.iter == self.max_iter - 49990:
+            meg = torch.BoolTensor(1).to(self.device)
+            comm.synchronize()
+            if comm.is_main_process():
+                logger.info(
+                    "[master] enable l1 loss now at iter: %d", self.iter
+                )
+                # enable l1 loss at last 50000 iterations
+                meg.fill_(True)
 
-        #     if comm.get_world_size() > 1:
-        #         comm.synchronize()
-        #         dist.broadcast(meg, 0)
-        #     # self.head.use_l1 = meg.item()
-        #     self.use_l1 = meg.item()
-        #     comm.synchronize()
+            if comm.get_world_size() > 1:
+                comm.synchronize()
+                dist.broadcast(meg, 0)
+            # self.head.use_l1 = meg.item()
+            self.use_l1 = meg.item()
+            comm.synchronize()
 
         labels = None
         if training:
@@ -362,11 +364,12 @@ class YOLOHead(nn.Module):
         self.build_target_type = (
             cfg.MODEL.YOLO.LOSS.BUILD_TARGET_TYPE
         )  # v5 or default
-        self.mse_loss = nn.MSELoss(reduction="none")
-        self.l1_loss = nn.L1Loss(reduction="none")
-        self.bce_loss = nn.BCELoss(reduction="none")
+        self.mse_loss = nn.MSELoss(reduction="mean")
+        self.l1_loss = nn.L1Loss(reduction="mean")
+        self.bce_loss = nn.BCELoss(reduction="mean")
         self.bce_obj = nn.BCEWithLogitsLoss(reduction="none")
-        self.bce_cls = nn.BCEWithLogitsLoss(reduction="none")
+        # self.ce_cls = nn.BCEWithLogitsLoss(reduction="none")
+        self.ce_cls = nn.CrossEntropyLoss(reduction="mean")
         if self.build_target_type == "v5":
             self.cur_get_target = self.get_target_v5
         else:
@@ -398,9 +401,6 @@ class YOLOHead(nn.Module):
         conf = prediction[..., 4]  # Conf
         pred_cls = prediction[..., 5:]  # Cls pred.
 
-        def LongTensor(x):
-            return torch.LongTensor(x).to(pred_cls.device)  # noqa
-
         # Calculate offsets for each grid
         grid_x = torch.linspace(
             0, in_w - 1, in_w, dtype=torch.float32, device=device
@@ -420,8 +420,12 @@ class YOLOHead(nn.Module):
             .view(center_y.shape)
         )
         # Calculate anchor w, h
-        anchor_w = scaled_anchors.index_select(1, LongTensor([0]))
-        anchor_h = scaled_anchors.index_select(1, LongTensor([1]))
+        anchor_w = scaled_anchors.index_select(
+            1, torch.zeros(1, dtype=torch.long, device=device)
+        )
+        anchor_h = scaled_anchors.index_select(
+            1, torch.ones(1, dtype=torch.long, device=device)
+        )
         anchor_w = (
             anchor_w.repeat(batch_size, 1)
             .repeat(1, 1, in_h * in_w)
@@ -446,117 +450,119 @@ class YOLOHead(nn.Module):
         pred_boxes[..., 3] = torch.exp(box_h) * anchor_h
 
         loss = None
-        if targets is not None:
-            #  build target
+        conf = torch.sigmoid(conf)
+        pred_cls = torch.sigmoid(pred_cls)
+        # Results
+        output = torch.cat(
             (
-                mask,
-                obj_mask,
-                tx,
-                ty,
-                tw,
-                th,
-                tgt_scale,
-                tcls,
-            ) = self.cur_get_target(
-                targets,
-                pred_boxes,
-                image_size,
-                in_w,
-                in_h,
-                stride_w,
-                stride_h,
+                pred_boxes.view(batch_size, -1, 4),
+                conf.view(batch_size, -1, 1),
+                pred_cls.view(batch_size, -1, self.num_classes),
+            ),
+            dim=-1,
+        )
+
+        if targets is None:
+            return output, loss
+
+        #  build target
+        (
+            mask,
+            obj_mask,
+            tx,
+            ty,
+            tw,
+            th,
+            tgt_scale,
+            tcls,
+        ) = self.cur_get_target(
+            targets,
+            pred_boxes,
+            image_size,
+            in_w,
+            in_h,
+            stride_w,
+            stride_h,
+        )
+
+        if self.loss_type == "v7":
+            # mask is positive samples
+            loss_obj = self.bce_obj(conf, mask)
+            loss_obj *= obj_mask
+            loss_obj = loss_obj.mean()
+            loss_cls = 0
+            mask = mask.to(torch.bool)
+            if mask.any():
+                loss_cls = self.ce_cls(pred_cls[mask], tcls[mask])
+
+            # loss_xy and loss_wh
+            loss_x = torch.abs(center_x - tx)
+            loss_y = torch.abs(center_y - ty)
+            loss_xy = tgt_scale * (loss_x + loss_y)
+            loss_xy = loss_xy.mean()
+
+            loss_w = torch.abs(box_w - tw)
+            loss_h = torch.abs(box_h - th)
+            loss_wh = tgt_scale * (loss_w + loss_h)
+            loss_wh = loss_wh.mean()
+
+            # replace with iou loss
+            mask_viewed = mask.view(batch_size, -1)
+            tgt_scale = tgt_scale.view(batch_size, -1)
+
+            pboxes = torch.stack([center_x, center_y, box_w, box_h], dim=-1)
+            pboxes = pboxes.view(batch_size, -1, 4)
+
+            tboxes = torch.stack([tx, ty, tw, th], dim=-1)
+            tboxes = tboxes.view(batch_size, -1, 4)
+
+            tboxes = tboxes[mask_viewed]
+            pboxes = pboxes[mask_viewed]
+            tgt_scale = tgt_scale[mask_viewed]
+
+            if pboxes.shape[0] > 0:
+                lbox = ciou(pboxes, tboxes, sum=False)
+                lbox = (lbox * tgt_scale).mean()
+            else:
+                lbox = torch.tensor(self._EPS).to(pboxes.device)
+
+            loss = {
+                "loss_xy": loss_xy,
+                "loss_wh": loss_wh,
+                "loss_iou": lbox * self.lambda_iou,
+                "loss_conf": loss_obj * self.lambda_conf,
+                "loss_cls": loss_cls * self.lambda_cls,
+            }
+        else:
+            # FIXME: adapt to new losses (mean instead of none reduction)
+            loss_conf = (obj_mask * self.bce_obj(conf, mask)).sum() / batch_size
+            loss_cls = (
+                self.ce_cls(pred_cls[mask == 1], tcls[mask == 1]).sum()
+                / batch_size
             )
 
-            if self.loss_type == "v7":
-                # mask is positive samples
-                loss_obj = self.bce_obj(conf, mask)
-                loss_obj = obj_mask * loss_obj
-                loss_obj = loss_obj.sum()
+            loss_x = (
+                mask * tgt_scale * self.bce_loss(center_x * mask, tx * mask)
+            ).sum() / batch_size
+            loss_y = (
+                mask * tgt_scale * self.bce_loss(center_y * mask, ty * mask)
+            ).sum() / batch_size
+            loss_w = (
+                mask * tgt_scale * self.l1_loss(box_w * mask, tw * mask)
+            ).sum() / batch_size
+            loss_h = (
+                mask * tgt_scale * self.l1_loss(box_h * mask, th * mask)
+            ).sum() / batch_size
 
-                loss_cls = self.bce_cls(
-                    pred_cls[mask == 1], tcls[mask == 1]
-                ).sum()
-
-                center_x = center_x.unsqueeze(-1)
-                center_y = center_y.unsqueeze(-1)
-                box_w = box_w.unsqueeze(-1)
-                box_h = box_h.unsqueeze(-1)
-                tx = tx.unsqueeze(-1)
-                ty = ty.unsqueeze(-1)
-                tw = tw.unsqueeze(-1)
-                th = th.unsqueeze(-1)
-
-                # loss_xy and loss_wh
-                loss_x = torch.abs(center_x - tx)
-                loss_y = torch.abs(center_y - ty)
-                loss_xy = tgt_scale.unsqueeze(-1) * (loss_x + loss_y)
-                loss_xy = loss_xy.sum([1, 2, 3, 4]).mean()
-
-                loss_w = torch.abs(box_w - tw)
-                loss_h = torch.abs(box_h - th)
-                loss_wh = tgt_scale.unsqueeze(-1) * (loss_w + loss_h)
-                loss_wh = loss_wh.sum([1, 2, 3, 4]).mean()
-
-                # replace with iou loss
-                mask_viewed = mask.view(batch_size, -1).to(torch.bool)
-                tgt_scale = tgt_scale.view(batch_size, -1)
-
-                pboxes = torch.cat([center_x, center_y, box_w, box_h], dim=-1)
-                pboxes = pboxes.view(batch_size, -1, 4)
-
-                tboxes = torch.cat([tx, ty, tw, th], dim=-1)
-                tboxes = tboxes.view(batch_size, -1, 4).to(device)
-
-                tboxes = tboxes[mask_viewed]
-                pboxes = pboxes[mask_viewed]
-                tgt_scale = tgt_scale[mask_viewed]
-
-                if pboxes.shape[0] > 0:
-                    lbox = ciou(pboxes, tboxes, sum=False).to(pboxes.device)
-                    # FIXME: .T
-                    lbox = tgt_scale * lbox.T
-                    lbox = lbox.sum()
-                else:
-                    lbox = torch.tensor(self._EPS).to(pboxes.device)
-
-                loss = {
-                    "loss_xy": loss_xy / batch_size,
-                    "loss_wh": loss_wh / batch_size,
-                    "loss_iou": (lbox / batch_size) * self.lambda_iou,
-                    "loss_conf": (loss_obj / batch_size) * self.lambda_conf,
-                    "loss_cls": (loss_cls / batch_size) * self.lambda_cls,
-                }
-            else:
-                loss_conf = (
-                    obj_mask * self.bce_obj(conf, mask)
-                ).sum() / batch_size
-                loss_cls = (
-                    self.bce_cls(pred_cls[mask == 1], tcls[mask == 1]).sum()
-                    / batch_size
-                )
-
-                loss_x = (
-                    mask * tgt_scale * self.bce_loss(center_x * mask, tx * mask)
-                ).sum() / batch_size
-                loss_y = (
-                    mask * tgt_scale * self.bce_loss(center_y * mask, ty * mask)
-                ).sum() / batch_size
-                loss_w = (
-                    mask * tgt_scale * self.l1_loss(box_w * mask, tw * mask)
-                ).sum() / batch_size
-                loss_h = (
-                    mask * tgt_scale * self.l1_loss(box_h * mask, th * mask)
-                ).sum() / batch_size
-
-                # we are not using loss_x, loss_y here, just using a simple ciou loss
-                loss = {
-                    "loss_x": loss_x * self.lambda_xy,
-                    "loss_y": loss_y * self.lambda_xy,
-                    "loss_w": loss_w * self.lambda_wh,
-                    "loss_h": loss_h * self.lambda_wh,
-                    "loss_conf": loss_conf * self.lambda_conf,
-                    "loss_cls": loss_cls * self.lambda_cls,
-                }
+            # we are not using loss_x, loss_y here, just using a simple ciou loss
+            loss = {
+                "loss_x": loss_x * self.lambda_xy,
+                "loss_y": loss_y * self.lambda_xy,
+                "loss_w": loss_w * self.lambda_wh,
+                "loss_h": loss_h * self.lambda_wh,
+                "loss_conf": loss_conf * self.lambda_conf,
+                "loss_cls": loss_cls * self.lambda_cls,
+            }
 
         conf = torch.sigmoid(conf)
         pred_cls = torch.sigmoid(pred_cls)

@@ -18,7 +18,7 @@ class RP2YOLOAttack(rp2_base.RP2BaseAttack):
     def __init__(
         self, attack_config: dict[str, Any], core_model: nn.Module, **kwargs
     ) -> None:
-        """Initialize RP2FasterRCNNAttack.
+        """Initialize RP2YOLOAttack.
 
         Args:
             attack_config: Dictionary of attack params.
