@@ -41,6 +41,8 @@ RELIGHT_METHODS = [
     "polynomial",
     "polynomial_max",
     "polynomial_mean",
+    "polynomial_hsv-sv",
+    "polynomial_lab-l",
     "percentile",
 ]
 
