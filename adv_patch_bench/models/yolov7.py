@@ -124,7 +124,7 @@ class YOLOV7(nn.Module):
         self.normalizer = (
             lambda x: (x / 255.0 - self.pixel_mean) / self.pixel_std
         )
-        self.padded_value = cfg.MODEL.PADDED_VALUE
+        self.padded_value = cfg.MODEL.PADDED_VALUE / 255.0
         self.loss_evaluators = [
             YOLOHead(cfg, anchor, level) for level, anchor in enumerate(anchors)
         ]
@@ -193,7 +193,7 @@ class YOLOV7(nn.Module):
         images = ImageList.from_tensors(
             images,
             size_divisibility=self.size_divisibility,
-            pad_value=self.padded_value / 255.0,
+            pad_value=self.padded_value,
         )
 
         # sync image size for all gpus
@@ -355,6 +355,7 @@ class YOLOHead(nn.Module):
         self.bbox_attrs = 5 + self.num_classes
 
         self.iou_threshold = cfg.MODEL.YOLO.IGNORE_THRESHOLD
+        # All default lambda values are 1.0
         self.lambda_xy = cfg.MODEL.YOLO.LOSS.LAMBDA_XY
         self.lambda_wh = cfg.MODEL.YOLO.LOSS.LAMBDA_WH
         self.lambda_conf = cfg.MODEL.YOLO.LOSS.LAMBDA_CONF
@@ -367,9 +368,8 @@ class YOLOHead(nn.Module):
         self.mse_loss = nn.MSELoss(reduction="mean")
         self.l1_loss = nn.L1Loss(reduction="mean")
         self.bce_loss = nn.BCELoss(reduction="mean")
-        self.bce_obj = nn.BCEWithLogitsLoss(reduction="none")
-        # self.ce_cls = nn.BCEWithLogitsLoss(reduction="none")
-        self.ce_cls = nn.CrossEntropyLoss(reduction="mean")
+        self.bce_obj = nn.BCEWithLogitsLoss(reduction="mean")
+        self.ce_cls = nn.BCEWithLogitsLoss(reduction="mean")
         if self.build_target_type == "v5":
             self.cur_get_target = self.get_target_v5
         else:
@@ -487,48 +487,38 @@ class YOLOHead(nn.Module):
 
         if self.loss_type == "v7":
             # mask is positive samples
-            loss_obj = self.bce_obj(conf, mask)
-            loss_obj *= obj_mask
-            loss_obj = loss_obj.mean()
-            loss_cls = 0
+            loss_obj, loss_cls = 0, 0
+            obj_mask = obj_mask.to(torch.bool)
+            if obj_mask.any():
+                loss_obj = self.bce_obj(conf[obj_mask], mask[obj_mask])
             mask = mask.to(torch.bool)
             if mask.any():
                 loss_cls = self.ce_cls(pred_cls[mask], tcls[mask])
 
-            # loss_xy and loss_wh
-            loss_x = torch.abs(center_x - tx)
-            loss_y = torch.abs(center_y - ty)
-            loss_xy = tgt_scale * (loss_x + loss_y)
-            loss_xy = loss_xy.mean()
-
-            loss_w = torch.abs(box_w - tw)
-            loss_h = torch.abs(box_h - th)
-            loss_wh = tgt_scale * (loss_w + loss_h)
-            loss_wh = loss_wh.mean()
-
-            # replace with iou loss
-            mask_viewed = mask.view(batch_size, -1)
-            tgt_scale = tgt_scale.view(batch_size, -1)
-
             pboxes = torch.stack([center_x, center_y, box_w, box_h], dim=-1)
             pboxes = pboxes.view(batch_size, -1, 4)
-
             tboxes = torch.stack([tx, ty, tw, th], dim=-1)
             tboxes = tboxes.view(batch_size, -1, 4)
 
-            tboxes = tboxes[mask_viewed]
-            pboxes = pboxes[mask_viewed]
-            tgt_scale = tgt_scale[mask_viewed]
+            tgt_scale = tgt_scale.view(batch_size, -1, 1)
+            diff = tgt_scale * (pboxes - tboxes).abs()
+            loss_xy = diff[..., :2].sum(-1).mean()
+            loss_wh = diff[..., 2:].sum(-1).mean()
 
-            if pboxes.shape[0] > 0:
+            lbox = 0
+            if mask.any():
+                # replace with iou loss
+                mask_viewed = mask.view(batch_size, -1)
+                tgt_scale = tgt_scale.view(batch_size, -1)
+                tboxes = tboxes[mask_viewed]
+                pboxes = pboxes[mask_viewed]
+                tgt_scale = tgt_scale[mask_viewed]
                 lbox = ciou(pboxes, tboxes, sum=False)
                 lbox = (lbox * tgt_scale).mean()
-            else:
-                lbox = torch.tensor(self._EPS).to(pboxes.device)
 
             loss = {
-                "loss_xy": loss_xy,
-                "loss_wh": loss_wh,
+                "loss_xy": loss_xy * self.lambda_xy,
+                "loss_wh": loss_wh * self.lambda_wh,
                 "loss_iou": lbox * self.lambda_iou,
                 "loss_conf": loss_obj * self.lambda_conf,
                 "loss_cls": loss_cls * self.lambda_cls,
