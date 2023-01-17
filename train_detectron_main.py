@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import pickle
 import sys
 import warnings
 from collections import OrderedDict
@@ -202,13 +203,14 @@ def train(cfg, config, model, attack):
 
     # Initialize and load cached adv_patch_cache when resuming
     adv_patch_cache = {}
-    cache_file_name = f"{cfg.OUTPUT_DIR}/trn_adv_patch_cache.pt"
+    cache_file_name = f"{cfg.OUTPUT_DIR}/trn_adv_patch_cache.pkl"
     if (
         start_iter > 10
         and config_base["attack_type"] == "per-sign"
         and os.path.isfile(cache_file_name)
     ):
-        adv_patch_cache = torch.load(cache_file_name)
+        with open(cache_file_name, "rb") as file:
+            adv_patch_cache = pickle.load(file)
 
     sampler = _get_sampler(cfg)
     # pylint: disable=missing-kwoa,too-many-function-args
@@ -322,7 +324,8 @@ def train(cfg, config, model, attack):
             periodic_checkpointer.step(iteration)
             if (iteration + 1) % periodic_checkpointer.period == 0:
                 # Manually checkpoint cached adv patch
-                torch.save(adv_patch_cache, cache_file_name)
+                with open(cache_file_name, "wb") as file:
+                    pickle.dump(adv_patch_cache, file)
 
 
 # Need cfg/config for launch. pylint: disable=redefined-outer-name
