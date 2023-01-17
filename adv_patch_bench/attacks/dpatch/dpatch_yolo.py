@@ -7,11 +7,11 @@ from typing import Any
 import torch
 from detectron2 import structures
 
-from adv_patch_bench.attacks.rp2 import rp2_faster_rcnn
+from adv_patch_bench.attacks.rp2 import rp2_yolo
 from adv_patch_bench.utils.types import BatchImageTensor, Target
 
 
-class DPatchFasterRCNNAttack(rp2_faster_rcnn.RP2FasterRCNNAttack):
+class DPatchFasterRCNNAttack(rp2_yolo.RP2YoloAttack):
     """DPatch Attack for Detectron2 models."""
 
     def _loss_func(
@@ -35,32 +35,18 @@ class DPatchFasterRCNNAttack(rp2_faster_rcnn.RP2FasterRCNNAttack):
             inpt["image"] = adv_imgs[i]
             instances.append(inpt["instances"].to(device))
 
-        # Get features
-        images = self._core_model.preprocess_image(inputs)
-        features = self._core_model.backbone(images.tensor)
+        _, _, losses = self._core_model(inputs, compute_loss=True)
 
-        # Get bounding box proposals
-        proposals, proposal_losses = self._generate_proposal(
-            images,
-            features,
-            compute_loss=True,
-            gt_instances=instances,
-        )
-
-        # Get proposal boxes' classification scores
-        _, roi_losses = self._get_roi_heads_predictions(
-            features,
-            proposals,
-            compute_loss=True,
-            gt_instances=instances,
-        )
+        # import pdb
+        # pdb.set_trace()
 
         # TODO(feature): Custom weights on losses
-        loss = (
-            proposal_losses["loss_rpn_cls"]
-            + proposal_losses["loss_rpn_loc"]
-            + roi_losses["loss_cls"]
-            + roi_losses["loss_box_reg"]
-        )
+        # loss = (
+        #     proposal_losses["loss_rpn_cls"]
+        #     + proposal_losses["loss_rpn_loc"]
+        #     + roi_losses["loss_cls"]
+        #     + roi_losses["loss_box_reg"]
+        # )
+        loss = sum(losses.values())
 
         return -loss

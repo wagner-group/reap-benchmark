@@ -66,7 +66,7 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.proposal_generator.nms_thresh = self._nms_thresh
+        self._core_model.proposal_generator.nms_thresh = self._nms_thres
         self._core_model.proposal_generator.post_nms_topk = self._post_nms_topk
         self._core_model.roi_heads.proposal_matcher.thresholds = (
             self._iou_thres_roi

@@ -24,7 +24,7 @@ from hparams import DEFAULT_PATH_DEBUG_PATCH
 _ATTACK_DICT = {
     "none": no_attack.NoAttackModule,
     "rp2-frcnn": rp2_faster_rcnn.RP2FasterRCNNAttack,
-    "rp2-yolo": rp2_yolo.RP2YOLOAttack,
+    "rp2-yolo": rp2_yolo.RP2YoloAttack,
     "dpatch-frcnn": dpatch_faster_rcnn.DPatchFasterRCNNAttack,
 }
 

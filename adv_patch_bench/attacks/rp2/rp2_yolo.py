@@ -12,13 +12,13 @@ from torch import nn
 from adv_patch_bench.attacks.rp2 import rp2_base
 
 
-class RP2YOLOAttack(rp2_base.RP2BaseAttack):
+class RP2YoloAttack(rp2_base.RP2BaseAttack):
     """RP2 Attack for YOLO models."""
 
     def __init__(
         self, attack_config: dict[str, Any], core_model: nn.Module, **kwargs
     ) -> None:
-        """Initialize RP2YOLOAttack.
+        """Initialize RP2YoloAttack.
 
         Args:
             attack_config: Dictionary of attack params.

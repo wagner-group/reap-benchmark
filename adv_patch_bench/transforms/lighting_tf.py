@@ -134,6 +134,11 @@ class RelightTransform(nn.Module):
             if channels == "l":
                 self._channels = [0]
 
+        if self._color_tfs is None and "color_transfer" in method:
+            raise ValueError(
+                "Non-RGB color space transform is required for Color Transfer!"
+            )
+
     def forward(
         self,
         inputs: BatchImageTensor,
