@@ -49,4 +49,4 @@ DATASETS:
   TRAIN: ('mtsd_no_color_train', )  # EDIT
   TEST: ('mtsd_no_color_val', )  # EDIT
 TEST:
-  EVAL_PERIOD: 4000
+  EVAL_PERIOD: 5000
