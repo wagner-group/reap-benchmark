@@ -119,6 +119,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 image,
             )
         else:
+            # Scale and shift bbox according to new image size
             for anno in dataset_dict["annotations"]:
                 xmin, ymin, xmax, ymax = anno["bbox"]
                 ymin = ymin * scales[0] + padding[1]
@@ -186,6 +187,9 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 if obj_class not in self._syn_objs:
                     continue
                 # Compute relighting params from cropped object
+                # We don't know true keypoints for MTSD objects so the mask is
+                # simply scaled to match the object size  without any other
+                # geometric transformations
                 obj_mask = img_util.resize_and_pad(
                     obj=self._syn_obj_masks[obj_class],
                     resize_size=(ymax - ymin, xmax - xmin),
