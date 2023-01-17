@@ -108,7 +108,11 @@ def evaluate(cfg, config, model):
     results = OrderedDict()
     for dataset_name in cfg.DATASETS.TEST:
         # pylint: disable=missing-kwoa,too-many-function-args
-        data_loader = build_detection_test_loader(cfg, dataset_name)
+        data_loader = build_detection_test_loader(
+            cfg,
+            dataset_name,
+            batch_size=int(cfg.SOLVER.IMS_PER_BATCH / comm.get_world_size()),
+        )
         evaluator = _get_evaluator(
             cfg,
             dataset_name,
