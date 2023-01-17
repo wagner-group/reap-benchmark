@@ -354,7 +354,7 @@ class YOLOHead(nn.Module):
         self.num_classes = cfg.MODEL.YOLO.CLASSES
         self.bbox_attrs = 5 + self.num_classes
 
-        self.ignore_threshold = cfg.MODEL.YOLO.IGNORE_THRESHOLD
+        self.iou_threshold = cfg.MODEL.YOLO.IGNORE_THRESHOLD
         self.lambda_xy = cfg.MODEL.YOLO.LOSS.LAMBDA_XY
         self.lambda_wh = cfg.MODEL.YOLO.LOSS.LAMBDA_WH
         self.lambda_conf = cfg.MODEL.YOLO.LOSS.LAMBDA_CONF
@@ -638,7 +638,7 @@ class YOLOHead(nn.Module):
 
             pred_ious = bboxes_iou(pred_box.view(-1, 4), truth_box, xyxy=False)
             pred_best_iou, _ = pred_ious.max(dim=1)
-            pred_best_iou = pred_best_iou > self.ignore_threshold
+            pred_best_iou = pred_best_iou > self.iou_threshold
             pred_best_iou = pred_best_iou.view(pred_box.shape[:3])
             obj_mask[b] = ~pred_best_iou
 
@@ -747,7 +747,7 @@ class YOLOHead(nn.Module):
             pred_ious = bboxes_iou(pred_box.view(-1, 4), truth_box, xyxy=False)
 
             pred_best_iou, _ = pred_ious.max(dim=1)
-            pred_best_iou = pred_best_iou > self.ignore_threshold
+            pred_best_iou = pred_best_iou > self.iou_threshold
             pred_best_iou = pred_best_iou.view(pred_box.shape[:3])
             obj_mask[b] = ~pred_best_iou
 

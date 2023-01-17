@@ -103,10 +103,9 @@ attack:
     optimizer: 'adam'  # 'adam', 'sgd', 'pgd'
     step_size: 0.01
     use_lr_schedule: False
-    # var_change_ab: Use variable change on alpha, beta 
-    # attack_mode: 'var_change_ab'
     obj_loss_const: 0
     iou_thres: 0
+    nms_thres: null
 
   dpatch:
     attack_mode: ''
@@ -117,10 +116,9 @@ attack:
     optimizer: 'adam'  # 'adam', 'sgd', 'pgd'
     step_size: 0.01
     use_lr_schedule: False
-    # var_change_ab: Use variable change on alpha, beta 
-    # attack_mode: 'var_change_ab'
     obj_loss_const: 0
     iou_thres: 0
+    nms_thres: null
 
 # Shapeshifter attack
 # https://github.com/shangtse/robust-physical-attack/blob/master/Makefile#L76

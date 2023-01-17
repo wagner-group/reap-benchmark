@@ -29,6 +29,7 @@ class RP2BaseAttack(grad_attack.GradAttack):
         super().__init__(attack_config, core_model, **kwargs)
         self._obj_const: float = attack_config["obj_loss_const"]
         self._iou_thres: float = attack_config["iou_thres"]
+        self._nms_thres: float = attack_config["nms_thres"]
 
     def compute_loss(
         self,

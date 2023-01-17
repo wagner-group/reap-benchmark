@@ -25,28 +25,67 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
             core_model: Traget model to attack.
         """
         super().__init__(attack_config, core_model, **kwargs)
-        self._nms_thresh_orig = copy.deepcopy(
+        # NOTE: Score threshold is used in rp2_base.RP2BaseAttack
+        self._nms_thres_orig = copy.deepcopy(
             core_model.proposal_generator.nms_thresh
+        )
+        # RPN iou_thres: [-inf, 0.3, 0.7, inf]
+        self._iou_thres_rpn_orig = copy.deepcopy(
+            core_model.proposal_generator.anchor_matcher.thresholds
+        )
+        # ROI heads iou_thres: [-inf, 0.5, inf]
+        self._iou_thres_roi_orig = copy.deepcopy(
+            core_model.roi_heads.proposal_matcher.thresholds
         )
         self._post_nms_topk_orig = copy.deepcopy(
             core_model.proposal_generator.post_nms_topk
         )
         # self.nms_thresh = 0.9
         # self.post_nms_topk = {True: 5000, False: 5000}
-        self._nms_thresh = self._nms_thresh_orig
         self._post_nms_topk = self._post_nms_topk_orig
+        if self._nms_thres is None:
+            self._nms_thres = self._nms_thres_orig
+        if self._iou_thres is None:
+            self._iou_thres_rpn = self._iou_thres_rpn_orig
+            self._iou_thres_roi = self._iou_thres_roi_orig
+        else:
+            # Replace foreground threshold with iou_thres for RPN
+            self._iou_thres_rpn = [
+                self._iou_thres_rpn_orig[0],
+                min(self._iou_thres_rpn_orig[1], self._iou_thres - 1e-3),
+                self._iou_thres,
+                self._iou_thres_rpn_orig[3],
+            ]
+            # Replace threshold with iou_thres for ROI heads
+            self._iou_thres_roi = [
+                self._iou_thres_roi_orig[0],
+                self._iou_thres,
+                self._iou_thres_roi_orig[2],
+            ]
 
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
         self._core_model.proposal_generator.nms_thresh = self._nms_thresh
         self._core_model.proposal_generator.post_nms_topk = self._post_nms_topk
+        self._core_model.roi_heads.proposal_matcher.thresholds = (
+            self._iou_thres_roi
+        )
+        self._core_model.proposal_generator.anchor_matcher.thresholds = (
+            self._iou_thres_rpn
+        )
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
-        self._core_model.proposal_generator.nms_thresh = self._nms_thresh_orig
+        self._core_model.proposal_generator.nms_thresh = self._nms_thres_orig
         self._core_model.proposal_generator.post_nms_topk = (
             self._post_nms_topk_orig
+        )
+        self._core_model.roi_heads.proposal_matcher.thresholds = (
+            self._iou_thres_roi_orig
+        )
+        self._core_model.proposal_generator.anchor_matcher.thresholds = (
+            self._iou_thres_rpn_orig
         )
 
     def _get_targets(
