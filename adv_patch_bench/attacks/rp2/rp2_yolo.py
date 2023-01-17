@@ -27,7 +27,10 @@ class RP2YoloAttack(rp2_base.RP2BaseAttack):
         super().__init__(attack_config, core_model, **kwargs)
         self._nms_thres_orig = copy.deepcopy(core_model.nms_threshold)
         self._conf_thres_orig = copy.deepcopy(core_model.conf_threshold)
-        self._iou_thres_orig = copy.deepcopy(core_model.iou_threshold)
+        # loss_evaluators[0] is YOLOHead
+        self._iou_thres_orig = copy.deepcopy(
+            core_model.loss_evaluators[0].iou_threshold
+        )
         if self._nms_thres is None:
             self._nms_thres = self._nms_thres_orig
         if self._min_conf is None:
@@ -40,13 +43,13 @@ class RP2YoloAttack(rp2_base.RP2BaseAttack):
         self._core_model.eval()
         self._core_model.nms_threshold = self._nms_thres
         self._core_model.conf_threshold = self._min_conf
-        self._core_model.iou_threshold = self._iou_thres
+        self._core_model.loss_evaluators[0].iou_threshold = self._iou_thres
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
         self._core_model.nms_threshold = self._nms_thres_orig
         self._core_model.conf_threshold = self._conf_thres_orig
-        self._core_model.iou_threshold = self._iou_thres_orig
+        self._core_model.loss_evaluators[0].iou_threshold = self._iou_thres_orig
 
     def _get_targets(
         self,

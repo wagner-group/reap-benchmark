@@ -37,16 +37,13 @@ class DPatchFasterRCNNAttack(rp2_yolo.RP2YoloAttack):
 
         _, _, losses = self._core_model(inputs, compute_loss=True)
 
-        # import pdb
-        # pdb.set_trace()
-
-        # TODO(feature): Custom weights on losses
-        # loss = (
-        #     proposal_losses["loss_rpn_cls"]
-        #     + proposal_losses["loss_rpn_loc"]
-        #     + roi_losses["loss_cls"]
-        #     + roi_losses["loss_box_reg"]
-        # )
+        # TODO(enhancement): Add loss weights (lambdas) are set in model init
+        # with the following configs:
+        # self.lambda_xy = cfg.MODEL.YOLO.LOSS.LAMBDA_XY
+        # self.lambda_wh = cfg.MODEL.YOLO.LOSS.LAMBDA_WH
+        # self.lambda_conf = cfg.MODEL.YOLO.LOSS.LAMBDA_CONF
+        # self.lambda_cls = cfg.MODEL.YOLO.LOSS.LAMBDA_CLS
+        # self.lambda_iou = cfg.MODEL.YOLO.LOSS.LAMBDA_IOU
         loss = sum(losses.values())
 
         return -loss
