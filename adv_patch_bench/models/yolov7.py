@@ -803,7 +803,7 @@ def get_matching_anchors(gt_boxes, anchors, anchor_ratio_thresh=2.1, xyxy=True):
     return matched
 
 
-def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
+def postprocess(prediction, num_classes, conf_thres=0.7, nms_thres=0.45):
     """Postprocess the prediction."""
     box_corner = prediction.new(prediction.shape)
     box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
@@ -825,7 +825,7 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
         cls_logits = image_pred[:, 5 : 5 + num_classes]
 
         conf_mask = (
-            image_pred[:, 4] * class_conf.squeeze() >= conf_thre
+            image_pred[:, 4] * class_conf.squeeze() >= conf_thres
         ).squeeze()
 
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
@@ -841,7 +841,7 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
             detections[:, :4],
             detections[:, 4] * detections[:, 5],
             detections[:, 6],
-            nms_thre,
+            nms_thres,
         )
         detections = detections[nms_out_index]
         cls_logits = cls_logits[nms_out_index]
