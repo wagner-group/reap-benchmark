@@ -1,14 +1,16 @@
 _BASE_: "./Base-YOLOv7.yaml"
 MODEL:
   META_ARCHITECTURE: "YOLOV7"
-  WEIGHTS: ""
+  # WEIGHTS: ""
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"  # EDIT(ResNet-50)
   MASK_ON: False
   BACKBONE:
-    NAME: "build_res2net_backbone"
+    # NAME: "build_res2net_backbone"
+    NAME: "build_resnet_fpn_backbone"  # EDIT(ResNet-50)
   FPN:
     IN_FEATURES: ["res3", "res4", "res5"]
   RESNETS:
-    R2TYPE: "res2net50_v1b"
+    # R2TYPE: "res2net50_v1b"  # EDIT(ResNet-50)
     DEPTH: 50
     OUT_FEATURES: ["res3", "res4", "res5"] # fpn produce 4 levels, only using 3 for now
   YOLO:
@@ -26,7 +28,8 @@ MODEL:
         [[7, 8], [12, 11], [10, 24]],
       ]
     CLASSES: 80  # EDIT: Automatically changed in argparse.py
-    IN_FEATURES: ["res3", "res4", "res5"] # p3, p4, p5 from FPN
+    # IN_FEATURES: ["res3", "res4", "res5"] # p3, p4, p5 from FPN
+    IN_FEATURES: ["p3", "p4", "p5"] # EDIT(ResNet-50): p3, p4, p5 from FPN 
     CONF_THRESHOLD: 0.001
     NMS_THRESHOLD: 0.65
     IGNORE_THRESHOLD: 0.7
