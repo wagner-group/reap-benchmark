@@ -209,6 +209,7 @@ def train(cfg, config, model, attack):
         and config_base["attack_type"] == "per-sign"
         and os.path.isfile(cache_file_name)
     ):
+        logger.info("Loading cached adv_patch from %s", cache_file_name)
         with open(cache_file_name, "rb") as file:
             adv_patch_cache = pickle.load(file)
 

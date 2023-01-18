@@ -72,6 +72,17 @@ class YOLOV7(nn.Module):
         self.use_l1 = False
         anchors = cfg.MODEL.YOLO.ANCHORS
 
+        logger.info(
+            "YOLOv7 params: num_classes=%s, max_boxes_num=%s, in_features=%s, "
+            "conf_threshold=%s, nms_threshold=%s, anchors=%s",
+            str(self.num_classes),
+            str(self.max_boxes_num),
+            str(self.in_features),
+            str(self.conf_threshold),
+            str(self.nms_threshold),
+            str(anchors),
+        )
+
         assert (
             len(
                 [i for i in supported_backbones if i in cfg.MODEL.BACKBONE.NAME]
@@ -450,14 +461,14 @@ class YOLOHead(nn.Module):
         pred_boxes[..., 3] = torch.exp(box_h) * anchor_h
 
         loss = None
-        conf = torch.sigmoid(conf)
-        pred_cls = torch.sigmoid(pred_cls)
+        conf_sigmoid = torch.sigmoid(conf)
+        pred_sigmoid = torch.sigmoid(pred_cls)
         # Results
         output = torch.cat(
             (
                 pred_boxes.view(batch_size, -1, 4),
-                conf.view(batch_size, -1, 1),
-                pred_cls.view(batch_size, -1, self.num_classes),
+                conf_sigmoid.view(batch_size, -1, 1),
+                pred_sigmoid.view(batch_size, -1, self.num_classes),
             ),
             dim=-1,
         )
