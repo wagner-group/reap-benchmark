@@ -378,7 +378,7 @@ class YOLOHead(nn.Module):
         )  # v5 or default
         self.mse_loss = nn.MSELoss(reduction="mean")
         self.l1_loss = nn.L1Loss(reduction="mean")
-        self.bce_loss = nn.BCELoss(reduction="mean")
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction="mean")
         self.bce_obj = nn.BCEWithLogitsLoss(reduction="mean")
         if self.build_target_type == "v5":
             self.cur_get_target = self.get_target_v5
