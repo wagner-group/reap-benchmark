@@ -607,8 +607,6 @@ def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
     dataset = config_base["dataset"]
     if config_base["compute_conf_thres"]:
         config_base["conf_thres"] = None
-    if config_base["conf_thres"] is None:
-        config_base["compute_conf_thres"] = True
     if (
         config_base["compute_conf_thres"]
         and dataset == "synthetic"
@@ -997,7 +995,7 @@ def setup_detectron_cfg(
     # Assume that "other" class is always last
     cfg.other_catId = NUM_CLASSES[dataset] - 1
     config_base["other_sign_class"] = cfg.other_catId
-    cfg.conf_thres = config_base["conf_thres"]
+    # cfg.conf_thres = config_base["conf_thres"]
 
     # Set detectron image size from argument
     # Let img_size be (1536, 2048). This tries to set the smaller side of the
