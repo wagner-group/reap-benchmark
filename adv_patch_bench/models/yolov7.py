@@ -208,23 +208,23 @@ class YOLOV7(nn.Module):
         )
 
         # sync image size for all gpus
-        comm.synchronize()
-        if training and self.iter == self.max_iter - 49990:
-            meg = torch.BoolTensor(1).to(self.device)
-            comm.synchronize()
-            if comm.is_main_process():
-                logger.info(
-                    "[master] enable l1 loss now at iter: %d", self.iter
-                )
-                # enable l1 loss at last 50000 iterations
-                meg.fill_(True)
+        # comm.synchronize()
+        # if training and self.iter == self.max_iter - 49990:
+        #     meg = torch.BoolTensor(1).to(self.device)
+        #     comm.synchronize()
+        #     if comm.is_main_process():
+        #         logger.info(
+        #             "[master] enable l1 loss now at iter: %d", self.iter
+        #         )
+        #         # enable l1 loss at last 50000 iterations
+        #         meg.fill_(True)
 
-            if comm.get_world_size() > 1:
-                comm.synchronize()
-                dist.broadcast(meg, 0)
-            # self.head.use_l1 = meg.item()
-            self.use_l1 = meg.item()
-            comm.synchronize()
+        #     if comm.get_world_size() > 1:
+        #         comm.synchronize()
+        #         dist.broadcast(meg, 0)
+        #     # self.head.use_l1 = meg.item()
+        #     self.use_l1 = meg.item()
+        #     comm.synchronize()
 
         labels = None
         if training:
@@ -380,7 +380,6 @@ class YOLOHead(nn.Module):
         self.l1_loss = nn.L1Loss(reduction="mean")
         self.bce_loss = nn.BCELoss(reduction="mean")
         self.bce_obj = nn.BCEWithLogitsLoss(reduction="mean")
-        self.ce_cls = nn.BCEWithLogitsLoss(reduction="mean")
         if self.build_target_type == "v5":
             self.cur_get_target = self.get_target_v5
         else:
@@ -451,8 +450,8 @@ class YOLOHead(nn.Module):
         pred_boxes = prediction[..., :4].clone()
 
         # Prevent inf box sizes
-        box_w.clamp_(-16, 16)
-        box_h.clamp_(-16, 16)
+        # box_w.clamp_(-16, 16)
+        # box_h.clamp_(-16, 16)
 
         # (todo) modified to adopt YOLOv5 style offsets
         pred_boxes[..., 0] = (center_x + grid_x) * stride_w
@@ -504,7 +503,7 @@ class YOLOHead(nn.Module):
                 loss_obj = self.bce_obj(conf[obj_mask], mask[obj_mask])
             mask = mask.to(torch.bool)
             if mask.any():
-                loss_cls = self.ce_cls(pred_cls[mask], tcls[mask])
+                loss_cls = self.bce_loss(pred_cls[mask], tcls[mask])
 
             pboxes = torch.stack([center_x, center_y, box_w, box_h], dim=-1)
             pboxes = pboxes.view(batch_size, -1, 4)
@@ -512,9 +511,12 @@ class YOLOHead(nn.Module):
             tboxes = tboxes.view(batch_size, -1, 4)
 
             tgt_scale = tgt_scale.view(batch_size, -1, 1)
-            diff = tgt_scale * (pboxes - tboxes).abs()
-            loss_xy = diff[..., :2].sum(-1).mean()
-            loss_wh = diff[..., 2:].sum(-1).mean()
+            diff = tgt_scale * (pboxes - tboxes)
+            diff.abs_()
+            loss_xy = diff[..., :2].mean()
+            loss_wh = diff[..., 2:].mean()
+            loss_xy *= 2
+            loss_wh *= 2
 
             lbox = 0
             if mask.any():
@@ -524,7 +526,11 @@ class YOLOHead(nn.Module):
                 tboxes = tboxes[mask_viewed]
                 pboxes = pboxes[mask_viewed]
                 tgt_scale = tgt_scale[mask_viewed]
+                # sum=False means we loss is actually 1 - iou since we're
+                # minimizing the loss
                 lbox = ciou(pboxes, tboxes, sum=False)
+                # lbox = (lbox * tgt_scale).sum()
+                # lbox /= batch_size * in_h * in_w
                 lbox = (lbox * tgt_scale).mean()
 
             loss = {
@@ -538,7 +544,7 @@ class YOLOHead(nn.Module):
             # FIXME: adapt to new losses (mean instead of none reduction)
             loss_conf = (obj_mask * self.bce_obj(conf, mask)).sum() / batch_size
             loss_cls = (
-                self.ce_cls(pred_cls[mask == 1], tcls[mask == 1]).sum()
+                self.bce_loss(pred_cls[mask == 1], tcls[mask == 1]).sum()
                 / batch_size
             )
 
