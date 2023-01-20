@@ -40,6 +40,17 @@ pip install timm kornia opencv-python albumentations
 # Detectron2 has to be installed afterward
 pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
+# Install mish_cuda for DarkNet backbone of YOLO (optional). If you have
+# trouble installing mish_cuda, you can rename _mish_cuda.py to mish_cuda.py to
+# silence some warning from YOLOv7.
+git clone https://github.com/thomasbrandon/mish-cuda
+cd mish-cuda
+python setup.py build install
+
+git clone https://github.com/chensnathan/YOLOF.git
+cd YOLOF
+python setup.py develop
+
 # Install YOLOv7 (required Detectron2)
 git clone https://github.com/jinfagang/yolov7_d2
 cd yolov7_d2

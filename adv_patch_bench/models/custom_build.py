@@ -1,3 +1,5 @@
+"""Build custom model."""
+
 import torch
 from detectron2.modeling import META_ARCH_REGISTRY
 from detectron2.utils.logger import _log_api_usage
@@ -19,12 +21,19 @@ def build_model(cfg):
     ``cfg.MODEL.META_ARCHITECTURE``. Note that it does not load any weights
     from ``cfg``.
     """
-    # Import our yolov7p to be registered in CUSTOM_META_ARCH_REGISTRY
-    # pylint: disable=unused-import,import-outside-toplevel
-    from adv_patch_bench.models import yolov6, yolov7, yolov7p
-    _ = yolov6, yolov7, yolov7p  # Unused imports
-
     meta_arch = cfg.MODEL.META_ARCHITECTURE
+    if meta_arch == "YOLOF":
+        # pylint: disable=unused-import,import-outside-toplevel
+        from adv_patch_bench.models import yolof
+
+        _ = yolof  # Unused imports
+    elif meta_arch in ("YOLOV6", "YOLOV7", "YOLOV7P"):
+        # Import our yolov7p to be registered in CUSTOM_META_ARCH_REGISTRY
+        # pylint: disable=unused-import,import-outside-toplevel
+        from adv_patch_bench.models import yolov6, yolov7, yolov7p
+
+        _ = yolov6, yolov7, yolov7p  # Unused imports
+
     # Search our custom registry first
     if meta_arch in CUSTOM_META_ARCH_REGISTRY:
         model = CUSTOM_META_ARCH_REGISTRY.get(meta_arch)(cfg)

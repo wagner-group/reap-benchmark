@@ -10,9 +10,15 @@ from typing import Any, Dict, List, Optional, Union
 
 import detectron2
 import yaml
+import yolof
 from detectron2.engine import default_argument_parser
-from yolov7.config import add_yolo_config
-from yolov7.utils.d2overrides import default_setup
+
+# from yolov7.config import add_yolo_config
+# from yolov7.utils.d2overrides import default_setup
+from detectron2.engine import default_setup
+from yolof.config import get_cfg
+from detectron2.utils import comm
+
 
 from hparams import (
     DATASET_METADATA,
@@ -620,6 +626,7 @@ def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
     if (
         not config_base["compute_conf_thres"]
         and config_base["conf_thres"] is None
+        and config_base["weights"] is not None
     ):
         metadata_dir = (
             pathlib.Path(config_base["weights"]).parent / "metadata.pkl"
@@ -978,8 +985,10 @@ def setup_detectron_cfg(
             config_base["save_dir"], "adv_patch.pkl"
         )
 
-    cfg = detectron2.config.get_cfg()
-    add_yolo_config(cfg)
+    # cfg = detectron2.config.get_cfg()
+    # cfg = yolof.config.get_cfg()
+    cfg = get_cfg()
+    # add_yolo_config(cfg)
     cfg.merge_from_file(config_base["config_file"])
     cfg.merge_from_list(config_base["opts"])
 
@@ -1014,7 +1023,8 @@ def setup_detectron_cfg(
     cfg.MODEL.WEIGHTS = weight_path
 
     # YOLOv7 configs
-    cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+    # cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+    _find_and_set_bn(cfg)
 
     cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around
@@ -1041,3 +1051,15 @@ def setup_yolo_test_args(config, other_sign_class):
 
     # Set to default value. This is different from conf_thres in detectron
     # args.conf_thres = 0.001
+
+
+def _find_and_set_bn(cfg_node):
+    """Replace SyncBN with BN in config if not in distributed mode."""
+    if comm.get_world_size() > 1:
+        return
+    if not isinstance(cfg_node, detectron2.config.CfgNode):
+        return
+    for key, value in cfg_node.items():
+        if isinstance(value, str):
+            cfg_node[key] = value.replace("SyncBN", "BN")
+        _find_and_set_bn(value)

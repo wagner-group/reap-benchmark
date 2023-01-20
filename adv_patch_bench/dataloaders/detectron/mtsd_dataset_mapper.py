@@ -167,42 +167,14 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                     anno.pop("segmentation", None)
                 if not self.keypoint_on:
                     anno.pop("keypoints", None)
-
-                anno[column_name] = None
-                xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
-                if xmax <= xmin or ymax <= ymin:
-                    anno["keypoints"] = np.zeros((4, 3), dtype=np.float32)
-                    continue
-                anno["keypoints"] = np.array(
-                    [
-                        [xmin, ymin, 2],
-                        [xmax, ymin, 2],
-                        [xmax, ymax, 2],
-                        [xmin, ymax, 2],
-                    ],
-                    dtype=np.float32,
+                get_mtsd_transforms(
+                    anno,
+                    image,
+                    column_name,
+                    self._syn_objs,
+                    self._syn_obj_masks,
+                    self._relight_params,
                 )
-
-                obj_class = anno["category_id"]
-                if obj_class not in self._syn_objs:
-                    continue
-                # Compute relighting params from cropped object
-                # We don't know true keypoints for MTSD objects so the mask is
-                # simply scaled to match the object size  without any other
-                # geometric transformations
-                obj_mask = img_util.resize_and_pad(
-                    obj=self._syn_obj_masks[obj_class],
-                    resize_size=(ymax - ymin, xmax - xmin),
-                    keep_aspect_ratio=False,
-                    is_binary=True,
-                )
-                if "percentile" not in self._relight_params["method"]:
-                    self._relight_params["syn_obj"] = self._syn_objs[obj_class]
-                obj = image[:, ymin:ymax, xmin:xmax]
-                coeffs = lighting_tf.compute_relight_params(
-                    obj / 255, obj_mask=obj_mask, **self._relight_params
-                )
-                anno[column_name] = coeffs
 
             # USER: Implement additional transformations if you have other types of data
             annos = [
@@ -239,3 +211,47 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         dataset_dict["annotations"] = new_annos
 
         return dataset_dict
+
+
+def get_mtsd_transforms(
+    anno, image, column_name, syn_objs, syn_obj_masks, relight_params
+):
+    if isinstance(image, np.ndarray):
+        image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
+    anno[column_name] = None
+    xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
+    if xmax <= xmin or ymax <= ymin:
+        anno["keypoints"] = np.zeros((4, 3), dtype=np.float32)
+        return None
+
+    anno["keypoints"] = np.array(
+        [
+            [xmin, ymin, 2],
+            [xmax, ymin, 2],
+            [xmax, ymax, 2],
+            [xmin, ymax, 2],
+        ],
+        dtype=np.float32,
+    )
+
+    obj_class = anno["category_id"]
+    if obj_class not in syn_objs:
+        return None
+
+    # Compute relighting params from cropped object
+    # We don't know true keypoints for MTSD objects so the mask is
+    # simply scaled to match the object size  without any other
+    # geometric transformations
+    obj_mask = img_util.resize_and_pad(
+        obj=syn_obj_masks[obj_class],
+        resize_size=(ymax - ymin, xmax - xmin),
+        keep_aspect_ratio=False,
+        is_binary=True,
+    )
+    if "percentile" not in relight_params["method"]:
+        relight_params["syn_obj"] = syn_objs[obj_class]
+    obj = image[:, ymin:ymax, xmin:xmax]
+    coeffs = lighting_tf.compute_relight_params(
+        obj / 255, obj_mask=obj_mask, **relight_params
+    )
+    anno[column_name] = coeffs
