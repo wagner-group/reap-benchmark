@@ -192,6 +192,7 @@ def main() -> None:
         "obj_size_px": config_base["obj_size_px"],
         "interp": interp,
         "patch_aug_params": config_atk_common,
+        "syn_obj_path": config_base["syn_obj_path"],
     }
     keyword = "syn" if synthetic else "reap"
     robj_kwargs = {
