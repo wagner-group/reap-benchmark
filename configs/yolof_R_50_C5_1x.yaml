@@ -1,35 +1,22 @@
 _BASE_: "Base-YOLOF.yaml"
-SEED: 0   # EDIT
-CUDNN_BENCHMARK: True   # EDIT
 MODEL:
-  WEIGHTS: "./pretrained_models/YOLOF_CSP_D_53_DC5_9x.pth"
-  # or
-  # WEIGHTS: "./output/yolof/CSP_D_53_DC5_9x/model_final.pth"
-  META_ARCHITECTURE: "YOLOF"
-  MASK_ON: False
-  BACKBONE:
-    NAME: "build_darknet_backbone"
-  DARKNET:
-    NORM: "SyncBN"
-    RES5_DILATION: 2
-  ANCHOR_GENERATOR:
-    SIZES: [[16, 32, 64, 128, 256, 512]]
-  YOLOF:
-    ENCODER:
-      IN_CHANNELS: 1024
-      NUM_RESIDUAL_BLOCKS: 8
-      BLOCK_DILATIONS: [1, 2, 3, 4, 5, 6, 7, 8]
-      NORM: "SyncBN"
-      ACTIVATION: "LeakyReLU"
-    DECODER:
-      NUM_ANCHORS: 6
-      NORM: "SyncBN"
-      ACTIVATION: "LeakyReLU"
-    POS_IGNORE_THRESHOLD: 0.1
-    NEG_IGNORE_THRESHOLD: 0.8
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  RESNETS:
+    DEPTH: 50
+# SOLVER:
+#   IMS_PER_BATCH: 64
+#   BASE_LR: 0.12
+#   WARMUP_FACTOR: 0.00066667
+#   WARMUP_ITERS: 1500
+#   STEPS: (15000, 20000)
+#   MAX_ITER: 22500
+#   CHECKPOINT_PERIOD: 2500
 SOLVER:
-  BASE_LR: 0.01  # Original: 0.02
-  BACKBONE_MULTIPLIER: 1.0
+  BASE_LR: 0.01
+  WEIGHT_DECAY: 0.0001
+  WEIGHT_DECAY_NORM: 0.0
+  MOMENTUM: 0.9
+  BACKBONE_LR_FACTOR: 0.334
   STEPS: (52500, 62500)
   MAX_ITER: 80000
   CHECKPOINT_PERIOD: 5000
@@ -71,4 +58,23 @@ DATALOADER:
 DATASETS:
   TRAIN: ('mtsd_no_color_train', )  # EDIT
   TEST: ('mtsd_no_color_val', )  # EDIT
-OUTPUT_DIR: "output/yolof/CSP_D_53_DC5_3x"
+OUTPUT_DIR: "output/yolof/R_50_C5_1x"
+
+
+# LR_SCHEDULER=dict(
+#     STEPS=(15000, 20000),
+#     MAX_ITER=22500,
+#     WARMUP_FACTOR=0.00066667,
+#     WARMUP_ITERS=1500
+# ),
+# OPTIMIZER=dict(
+#     NAME="D2SGD",
+#     BASE_LR=0.12,
+#     BIAS_LR_FACTOR=1.0,
+#     WEIGHT_DECAY=0.0001,
+#     WEIGHT_DECAY_NORM=0.0,
+#     MOMENTUM=0.9,
+#     BACKBONE_LR_FACTOR=0.334
+# ),
+# IMS_PER_BATCH=64,
+# IMS_PER_DEVICE=8,

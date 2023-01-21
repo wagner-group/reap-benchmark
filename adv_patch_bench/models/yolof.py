@@ -435,9 +435,27 @@ class YOLOF(nn.Module):
         matched_predicted_boxes = predicted_boxes.reshape(-1, 4)[
             src_idx[~pos_ignore_idx]
         ]
-        loss_box_reg = giou_loss(
-            matched_predicted_boxes, target_boxes, reduction="sum"
-        )
+        if predicted_boxes.isnan().any():
+            logger.error("predicted_boxes is nan!")
+            loss_box_reg = 0
+        elif (
+            matched_predicted_boxes[..., 0] > matched_predicted_boxes[..., 2]
+        ).any() or (
+            matched_predicted_boxes[..., 1] > matched_predicted_boxes[..., 3]
+        ).any():
+            logger.error(
+                "matched_predicted_boxes has wrong bbox!\n%s",
+                str(matched_predicted_boxes),
+            )
+            loss_box_reg = 0
+        else:
+            loss_box_reg = giou_loss(
+                matched_predicted_boxes, target_boxes, reduction="sum"
+            )
+
+        if loss_cls.isnan().any():
+            logger.error("loss_cls is nan!")
+            raise ValueError("loss_cls is nan!")
 
         return {
             "loss_cls": loss_cls / max(1, num_foreground),
