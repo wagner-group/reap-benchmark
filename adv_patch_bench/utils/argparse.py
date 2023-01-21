@@ -1032,7 +1032,7 @@ def setup_detectron_cfg(
     if "YOLO" in cfg.MODEL:
         cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
     if "YOLOF" in cfg.MODEL:
-        cfg.MODEL.YOLOF.DECODER.CLASSES = NUM_CLASSES[dataset]
+        cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = NUM_CLASSES[dataset]
 
     cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around
