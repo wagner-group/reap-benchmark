@@ -35,13 +35,17 @@ SOLVER:
   CHECKPOINT_PERIOD: 5000
 INPUT:
   JITTER_CROP:
-    ENABLED: True
+    # ENABLED: True
+    ENABLED: False
   RESIZE:
-    ENABLED: True
+    # ENABLED: True
+    ENABLED: False
   DISTORTION:
-    ENABLED: True
+    # ENABLED: True
+    ENABLED: False
   MOSAIC:
-    ENABLED: True
+    # ENABLED: True
+    ENABLED: False
   RANDOM_FLIP: 'none'  # EDIT: traffic sign can be flipped?. Option: 'none' (orig), 'horizontal' (shape)
   # EDIT: follow MTSD paper: no resizing during training but crop to (1000, 1000)
   # TODO: does setting to 0 disables resizing? 
