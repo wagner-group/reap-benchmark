@@ -1029,6 +1029,11 @@ def setup_detectron_cfg(
     # Replace SynBN with BN when running on one GPU
     _find_and_set_bn(cfg)
 
+    if "YOLO" in cfg.MODEL:
+        cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+    if "YOLOF" in cfg.MODEL:
+        cfg.MODEL.YOLOF.DECODER.CLASSES = NUM_CLASSES[dataset]
+
     cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around
     detectron2.config.set_global_cfg(cfg)
@@ -1036,10 +1041,8 @@ def setup_detectron_cfg(
     if "yolov7" in config_base["model_name"]:
         from yolov7.utils.d2overrides import default_setup as y7_default_setup
 
-        cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
         y7_default_setup(cfg, argparse.Namespace(**config_base))
     elif "yolof" in config_base["model_name"]:
-        cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = NUM_CLASSES[dataset]
         default_setup(cfg, argparse.Namespace(**config_base))
     else:
         default_setup(cfg, argparse.Namespace(**config_base))
