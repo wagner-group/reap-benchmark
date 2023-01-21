@@ -48,7 +48,7 @@ from detectron2.evaluation import (
     inference_on_dataset,
     print_csv_format,
 )
-from detectron2.solver import build_lr_scheduler, build_optimizer
+from detectron2.solver import build_lr_scheduler
 from detectron2.utils import comm
 from detectron2.utils.events import EventStorage
 from torch.nn.parallel import DistributedDataParallel
@@ -61,6 +61,7 @@ from adv_patch_bench.dataloaders.detectron import (
     mtsd_yolo_dataset_mapper,
 )
 from adv_patch_bench.models.custom_build import build_model
+from adv_patch_bench.models.optimizer import build_optimizer
 from adv_patch_bench.transforms.render_image import RenderImage
 from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
@@ -70,40 +71,6 @@ _EPS = 1e-6
 logger = logging.getLogger(__name__)
 # This is to ignore a warning from detectron2/structures/keypoints.py:29
 warnings.filterwarnings("ignore", category=UserWarning)
-
-
-def _build_yolof_optimizer(cfg, model):
-    from torch import nn
-    norm_module_types = (
-        nn.BatchNorm2d,
-        nn.SyncBatchNorm,
-        nn.GroupNorm
-    )
-
-    params: list[dict[str, Any]] = []
-    memo: set[torch.nn.parameter.Parameter] = set()
-    for name, module in model.named_modules():
-        for key, value in module.named_parameters(recurse=False):
-            if not value.requires_grad:
-                continue
-            # Avoid duplicating parameters
-            if value in memo:
-                continue
-            memo.add(value)
-            lr = cfg.SOLVER.BASE_LR
-            weight_decay = cfg.SOLVER.WEIGHT_DECAY
-            if "backbone" in name:
-                lr = lr * cfg.SOLVER.BACKBONE_MULTIPLIER
-            if isinstance(module, norm_module_types):
-                weight_decay = cfg.SOLVER.WEIGHT_DECAY_NORM
-            params += [
-                {"params": [value], "lr": lr, "weight_decay": weight_decay}
-            ]
-
-    optimizer = torch.optim.SGD(
-        params, cfg.SOLVER.BASE_LR, momentum=cfg.SOLVER.MOMENTUM
-    )
-    return optimizer
 
 
 def _get_sampler(cfg):
@@ -195,16 +162,17 @@ def train(cfg, config, model, attack):
     )
 
     model.train()
-    # optimizer = build_optimizer(cfg, model)
-    optimizer = _build_yolof_optimizer(cfg, model)
+    optimizer = build_optimizer(cfg, model)
     scheduler = build_lr_scheduler(cfg, optimizer)
 
-    # checkpointer = DetectionCheckpointer(
-    #     model, cfg.OUTPUT_DIR, optimizer=optimizer, scheduler=scheduler
-    # )
-    checkpointer = YOLOFCheckpointer(
+    if cfg.MODEL.META_ARCHITECTURE == "YOLOF":
+        checkpointer_fn = YOLOFCheckpointer
+    else:
+        checkpointer_fn = DetectionCheckpointer
+    checkpointer = checkpointer_fn(
         model, cfg.OUTPUT_DIR, optimizer=optimizer, scheduler=scheduler
     )
+
     if config_base["resume"]:
         # If resume, load from last checkpoint
         weight_path = checkpointer.get_checkpoint_file()
@@ -256,12 +224,16 @@ def train(cfg, config, model, attack):
             adv_patch_cache = pickle.load(file)
 
     sampler = _get_sampler(cfg)
+    if cfg.MODEL.META_ARCHITECTURE == "YOLOF":
+        logger.info("Using YOLOF dataset mapper")
+        dataset_mapper_fn = mtsd_yolo_dataset_mapper.MtsdYoloDatasetMapper
+    else:
+        dataset_mapper_fn = mtsd_dataset_mapper.MtsdDatasetMapper
     # pylint: disable=missing-kwoa,too-many-function-args
     data_loader = build_detection_train_loader(
         cfg,
         sampler=sampler,
-        # mapper=mtsd_dataset_mapper.MtsdDatasetMapper(
-        mapper=mtsd_yolo_dataset_mapper.MtsdYoloDatasetMapper(
+        mapper=dataset_mapper_fn(
             cfg,
             config_base=config_base,
             is_train=True,

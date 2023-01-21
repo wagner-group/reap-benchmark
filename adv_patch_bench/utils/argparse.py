@@ -10,16 +10,8 @@ from typing import Any, Dict, List, Optional, Union
 
 import detectron2
 import yaml
-import yolof
-from detectron2.engine import default_argument_parser
-
-# from yolov7.config import add_yolo_config
-# from yolov7.utils.d2overrides import default_setup
-from detectron2.engine import default_setup
-from yolof.config import get_cfg
+from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
-
-
 from hparams import (
     DATASET_METADATA,
     DEFAULT_SYN_OBJ_DIR,
@@ -985,10 +977,19 @@ def setup_detectron_cfg(
             config_base["save_dir"], "adv_patch.pkl"
         )
 
-    # cfg = detectron2.config.get_cfg()
-    # cfg = yolof.config.get_cfg()
-    cfg = get_cfg()
-    # add_yolo_config(cfg)
+    if config_base["model_name"] == "yolof":
+        # TODO(enhancement): Combine get_cfg with a wrapper.
+        from yolof.config import get_cfg
+
+        cfg = get_cfg()
+    elif "yolov7" in config_base["model_name"]:
+        # We import here to avoid backbone being registered twice
+        from yolov7.config import add_yolo_config
+
+        cfg = detectron2.config.get_cfg()
+        add_yolo_config(cfg)
+    else:
+        cfg = detectron2.config.get_cfg()
     cfg.merge_from_file(config_base["config_file"])
     cfg.merge_from_list(config_base["opts"])
 
@@ -1022,15 +1023,21 @@ def setup_detectron_cfg(
         weight_path = weight_path[0]
     cfg.MODEL.WEIGHTS = weight_path
 
-    # YOLOv7 configs
-    # cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+    # Replace SynBN with BN when running on one GPU
     _find_and_set_bn(cfg)
 
     cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around
     detectron2.config.set_global_cfg(cfg)
     config_base.pop("config_file")  # Remove to avoid logging
-    default_setup(cfg, argparse.Namespace(**config_base))
+    if "yolov7" in config_base["model_name"]:
+        from yolov7.utils.d2overrides import default_setup as y7_default_setup
+
+        cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+        y7_default_setup(cfg, argparse.Namespace(**config_base))
+    else:
+        default_setup(cfg, argparse.Namespace(**config_base))
+
     return cfg
 
 
