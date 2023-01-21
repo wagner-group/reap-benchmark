@@ -1035,6 +1035,9 @@ def setup_detectron_cfg(
 
         cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
         y7_default_setup(cfg, argparse.Namespace(**config_base))
+    elif "yolof" in config_base["model_name"]:
+        cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = NUM_CLASSES[dataset]
+        default_setup(cfg, argparse.Namespace(**config_base))
     else:
         default_setup(cfg, argparse.Namespace(**config_base))
 
