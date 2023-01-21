@@ -545,7 +545,7 @@ def reap_args_parser(
     _update_attack_transforms(config)
     _update_save_dir(config, is_detectron=is_detectron, is_train=is_train)
     _update_result_dir(config)
-    _update_conf_thres(config)
+    _update_conf_thres(config, is_train=is_train)
 
     if config["base"]["debug"]:
         config["base"]["verbose"] = True
@@ -600,7 +600,9 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
             )
 
 
-def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
+def _update_conf_thres(
+    config: Dict[str, Dict[str, Any]], is_train: bool = False
+) -> None:
     config_base = config["base"]
     dataset = config_base["dataset"]
     if config_base["compute_conf_thres"]:
@@ -619,6 +621,7 @@ def _update_conf_thres(config: Dict[str, Dict[str, Any]]) -> None:
         not config_base["compute_conf_thres"]
         and config_base["conf_thres"] is None
         and config_base["weights"] is not None
+        and not is_train
     ):
         metadata_dir = (
             pathlib.Path(config_base["weights"]).parent / "metadata.pkl"
