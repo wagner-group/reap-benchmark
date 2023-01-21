@@ -3,6 +3,9 @@ MODEL:
   WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
   RESNETS:
     DEPTH: 50
+  BOX_TRANSFORM:
+    ADD_CTR_CLAMP: True
+    CTR_CLAMP: 16
 # SOLVER:
 #   IMS_PER_BATCH: 64
 #   BASE_LR: 0.12

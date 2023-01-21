@@ -310,26 +310,25 @@ class YOLOF(nn.Module):
                         images.image_sizes,
                     )
                     self.visualize_training(batched_inputs, results)
-
             return losses
-        else:
-            results = self.inference(
-                anchors_image,
-                pred_logits,
-                pred_anchor_deltas,
-                images.image_sizes,
-            )
-            if torch.jit.is_scripting():
-                return results
-            processed_results = []
-            for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
-            ):
-                height = input_per_image.get("height", image_size[0])
-                width = input_per_image.get("width", image_size[1])
-                r = detector_postprocess(results_per_image, height, width)
-                processed_results.append({"instances": r})
-            return processed_results
+
+        results = self.inference(
+            anchors_image,
+            pred_logits,
+            pred_anchor_deltas,
+            images.image_sizes,
+        )
+        if torch.jit.is_scripting():
+            return results
+        processed_results = []
+        for results_per_image, input_per_image, image_size in zip(
+            results, batched_inputs, images.image_sizes
+        ):
+            height = input_per_image.get("height", image_size[0])
+            width = input_per_image.get("width", image_size[1])
+            r = detector_postprocess(results_per_image, height, width)
+            processed_results.append({"instances": r})
+        return processed_results
 
     def losses(
         self,
