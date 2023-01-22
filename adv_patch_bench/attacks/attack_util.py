@@ -11,7 +11,11 @@ import torchvision
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.attacks import base_attack, no_attack, patch_mask_util
-from adv_patch_bench.attacks.dpatch import dpatch_faster_rcnn
+from adv_patch_bench.attacks.dpatch import (
+    dpatch_faster_rcnn,
+    dpatch_yolo,
+    dpatch_yolof,
+)
 from adv_patch_bench.attacks.rp2 import rp2_faster_rcnn, rp2_yolo
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
@@ -26,6 +30,8 @@ _ATTACK_DICT = {
     "rp2-frcnn": rp2_faster_rcnn.RP2FasterRCNNAttack,
     "rp2-yolo": rp2_yolo.RP2YoloAttack,
     "dpatch-frcnn": dpatch_faster_rcnn.DPatchFasterRCNNAttack,
+    "dpatch-yolo": dpatch_yolo.DPatchYoloAttack,
+    "dpatch-yolof": dpatch_yolof.DPatchYolofAttack,
 }
 
 
@@ -43,6 +49,8 @@ def setup_attack(
         attack_fn_name = "none"
     elif "rcnn" in config["base"]["model_name"]:
         attack_fn_name = f"{attack_name}-frcnn"
+    elif "yolof" in config["base"]["model_name"]:
+        attack_fn_name = f"{attack_name}-yolof"
     elif "yolo" in config["base"]["model_name"]:
         attack_fn_name = f"{attack_name}-yolo"
     else:

@@ -180,9 +180,9 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
     def __call__(self, dataset_dict):
         """Map dataset_dict."""
         dataset_dict = super().__call__(dataset_dict)
-        if self.is_train:
-            dataset_dict.pop("annotations", None)
-            return dataset_dict
+        # if self.is_train:
+        #     dataset_dict.pop("annotations", None)
+        #     return dataset_dict
         instances = dataset_dict["instances"]
         new_annos = []
         num_instances = len(instances)

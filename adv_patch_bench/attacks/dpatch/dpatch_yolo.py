@@ -11,7 +11,7 @@ from adv_patch_bench.attacks.rp2 import rp2_yolo
 from adv_patch_bench.utils.types import BatchImageTensor, Target
 
 
-class DPatchFasterRCNNAttack(rp2_yolo.RP2YoloAttack):
+class DPatchYoloAttack(rp2_yolo.RP2YoloAttack):
     """DPatch Attack for Detectron2 models."""
 
     def _loss_func(
