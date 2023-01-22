@@ -980,7 +980,7 @@ def setup_detectron_cfg(
             config_base["save_dir"], "adv_patch.pkl"
         )
 
-    if config_base["model_name"] == "yolof":
+    if "yolof" in config_base["model_name"]:
         # TODO(enhancement): Combine get_cfg with a wrapper.
         from yolof.config import get_cfg
 
