@@ -175,6 +175,7 @@ def main() -> None:
 
     # Set up model from config
     model = build_model(cfg)
+    model.eval()
 
     # Load data to use as background
     dataloader, _ = data_util.get_dataloader(config_base, sampler="shuffle")
