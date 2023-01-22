@@ -34,13 +34,13 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
     subprocess.check_output = _hacky_subprocess_fix
 
 # pylint: disable=wrong-import-position
-import detectron2
 import torch
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
 from adv_patch_bench.evaluators import detectron_evaluator
+from adv_patch_bench.models.custom_build import build_model
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
-from hparams import LABEL_LIST
+from hparams import LABEL_LIST, NUM_CLASSES
 
 logger = logging.getLogger(__name__)
 # This is to ignore a warning from detectron2/structures/keypoints.py:29
@@ -312,10 +312,12 @@ def _dump_results(results: Dict[str, Any]) -> None:
 
         # Write new conf_thres
         conf_thres = results["bbox"]["conf_thres"]
-        if isinstance(conf_thres, list) or config_base["obj_class"] == -1:
-            metadata["conf_thres"] = conf_thres
-        else:
+        if isinstance(conf_thres, float):
             metadata["conf_thres"][config_base["obj_class"]] = conf_thres
+        else:
+            assert len(conf_thres) == NUM_CLASSES[dataset]
+            for i, conf in enumerate(conf_thres):
+                metadata["conf_thres"][i] = conf
 
         if dataset not in base_metadata:
             base_metadata[dataset] = {}
@@ -344,7 +346,8 @@ def main() -> None:
         config_attack = config["attack"]
 
     # Build model
-    model = detectron2.engine.DefaultPredictor(cfg).model
+    model = build_model(cfg)
+    model.eval()
 
     # Build dataloader
     dataloader, split_file_names = data_util.get_dataloader(config_base)

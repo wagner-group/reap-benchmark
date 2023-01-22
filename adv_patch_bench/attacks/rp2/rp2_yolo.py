@@ -41,12 +41,14 @@ class RP2YoloAttack(rp2_base.RP2BaseAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
+        self._core_model.attack_mode = True
         self._core_model.nms_threshold = self._nms_thres
         self._core_model.conf_threshold = self._min_conf
         self._core_model.loss_evaluators[0].iou_threshold = self._iou_thres
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
+        self._core_model.attack_mode = False
         self._core_model.nms_threshold = self._nms_thres_orig
         self._core_model.conf_threshold = self._conf_thres_orig
         self._core_model.loss_evaluators[0].iou_threshold = self._iou_thres_orig

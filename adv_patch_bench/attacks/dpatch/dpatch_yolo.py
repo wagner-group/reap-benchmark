@@ -35,7 +35,7 @@ class DPatchYoloAttack(rp2_yolo.RP2YoloAttack):
             inpt["image"] = adv_imgs[i]
             instances.append(inpt["instances"].to(device))
 
-        _, _, losses = self._core_model(inputs, compute_loss=True)
+        _, _, losses = self._core_model(inputs)
 
         # TODO(enhancement): Add loss weights (lambdas) are set in model init
         # with the following configs:
