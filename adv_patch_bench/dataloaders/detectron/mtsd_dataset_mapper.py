@@ -177,6 +177,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                     self._syn_objs,
                     self._syn_obj_masks,
                     self._relight_params,
+                    bg_class=global_cfg.other_catId,
                 )
 
             # USER: Implement additional transformations if you have other types of data
@@ -222,6 +223,7 @@ def get_mtsd_transforms(
     syn_objs: dict[int, torch.Tensor],
     syn_obj_masks: dict[int, torch.Tensor],
     relight_params: dict[str, Any],
+    bg_class: int = -1,
 ) -> None:
     """Generate transform params for MTSD dataset.
 
@@ -231,6 +233,7 @@ def get_mtsd_transforms(
         syn_objs: Dict of synthetic objects.
         syn_obj_masks: Dict of synthetic object masks.
         relight_params: Relighting parameters.
+        bg_class: Background class id.
     """
     if isinstance(image, np.ndarray):
         image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
@@ -238,13 +241,13 @@ def get_mtsd_transforms(
     anno[column_name] = torch.tensor([[1, 0]], dtype=torch.float32)
     xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
     if xmax <= xmin or ymax <= ymin:
-        anno["keypoints"] = np.zeros((4, 3), dtype=np.float32)
-        anno["category_id"] = global_cfg.other_catId
         logger.warning(
             "Invalid bbox: xmin, ymin, xmax, ymax = %s\nSetting category_id to "
             "background class and skipping.",
             str(anno["bbox"]),
         )
+        anno["keypoints"] = np.zeros((4, 3), dtype=np.float32)
+        anno["category_id"] = bg_class
         return
 
     anno["keypoints"] = np.array(

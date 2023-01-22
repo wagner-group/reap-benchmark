@@ -9,6 +9,7 @@ import detectron2
 import numpy as np
 import torch
 import torchvision
+from detectron2.config import global_cfg
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.structures import BoxMode
@@ -134,6 +135,7 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
                     self._syn_objs,
                     self._syn_obj_masks,
                     self._relight_params,
+                    bg_class=global_cfg.other_catId,
                 )
                 # =========================================================== #
 
