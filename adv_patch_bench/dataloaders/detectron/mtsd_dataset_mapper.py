@@ -85,6 +85,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
             obj_mask = img_util.coerce_rank(obj_mask, 4)
             self._syn_objs[obj_class] = syn_obj
             self._syn_obj_masks[obj_class] = obj_mask.float()
+        self._bg_class: int = global_cfg.other_catId
 
     def __call__(self, dataset_dict: DetectronSample):
         """Modify sample directly loaded from Detectron2 dataset.
@@ -177,7 +178,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                     self._syn_objs,
                     self._syn_obj_masks,
                     self._relight_params,
-                    bg_class=global_cfg.other_catId,
+                    bg_class=self._bg_class,
                 )
 
             # USER: Implement additional transformations if you have other types of data

@@ -95,6 +95,7 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
             self._syn_objs[obj_class] = syn_obj
             self._syn_obj_masks[obj_class] = obj_mask.float()
         self._column_name = f'{self._relight_params["method"]}_coeffs'
+        self._bg_class: int = global_cfg.other_catId
 
     def _load_image_with_annos(self, dataset_dict):
         """Load the image and annotations given a dataset_dict."""
@@ -135,7 +136,7 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
                     self._syn_objs,
                     self._syn_obj_masks,
                     self._relight_params,
-                    bg_class=global_cfg.other_catId,
+                    bg_class=self._bg_class,
                 )
                 # =========================================================== #
 
