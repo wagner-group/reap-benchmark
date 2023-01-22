@@ -250,7 +250,7 @@ class YOLOF(nn.Module):
         )
         storage.put_image(vis_name, vis_img)
 
-    def forward(self, batched_inputs: Tuple[Dict[str, Tensor]]):
+    def forward(self, batched_inputs: Tuple[Dict[str, Tensor]], compute_loss: bool = False):
         """
         Args:
             batched_inputs: a list, batched outputs of :class:`DatasetMapper` .
@@ -284,7 +284,7 @@ class YOLOF(nn.Module):
         pred_logits = [permute_to_N_HWA_K(pred_logits, self.num_classes)]
         pred_anchor_deltas = [permute_to_N_HWA_K(pred_anchor_deltas, 4)]
 
-        if self.training:
+        if self.training or compute_loss:
             assert not torch.jit.is_scripting(), "Not supported"
             assert (
                 "instances" in batched_inputs[0]
@@ -310,6 +310,9 @@ class YOLOF(nn.Module):
                         images.image_sizes,
                     )
                     self.visualize_training(batched_inputs, results)
+            # TODO:
+            if compute_loss:
+                return None, None, losses
             return losses
 
         results = self.inference(
