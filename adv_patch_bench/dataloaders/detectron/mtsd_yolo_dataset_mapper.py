@@ -131,7 +131,6 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
                 get_mtsd_transforms(
                     anno,
                     image,
-                    self._column_name,
                     self._syn_objs,
                     self._syn_obj_masks,
                     self._relight_params,
