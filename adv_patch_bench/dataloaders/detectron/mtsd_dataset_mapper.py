@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import os
 from typing import Any
 
@@ -10,6 +11,7 @@ import detectron2
 import numpy as np
 import torch
 import torchvision
+from detectron2.config import global_cfg
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.structures import BoxMode
@@ -19,6 +21,8 @@ from adv_patch_bench.dataloaders.detectron import reap_dataset_mapper
 from adv_patch_bench.transforms import lighting_tf, util
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR
+
+logger = logging.getLogger(__name__)
 
 
 class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
@@ -46,8 +50,8 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         hw_ratio_dict = metadata["hw_ratio"]
         shape_dict = metadata["shape"]
 
-        self._syn_objs = {}
-        self._syn_obj_masks = {}
+        self._syn_objs: dict[int, torch.Tensor] = {}
+        self._syn_obj_masks: dict[int, torch.Tensor] = {}
         self._relight_params = {
             "method": config_base["reap_relight_method"],
             "percentile": config_base["reap_relight_percentile"],
@@ -170,7 +174,6 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 get_mtsd_transforms(
                     anno,
                     image,
-                    column_name,
                     self._syn_objs,
                     self._syn_obj_masks,
                     self._relight_params,
@@ -214,15 +217,35 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
 
 
 def get_mtsd_transforms(
-    anno, image, column_name, syn_objs, syn_obj_masks, relight_params
-):
+    anno: dict[str, Any],
+    image: torch.Tensor | np.ndarray,
+    syn_objs: dict[int, torch.Tensor],
+    syn_obj_masks: dict[int, torch.Tensor],
+    relight_params: dict[str, Any],
+) -> None:
+    """Generate transform params for MTSD dataset.
+
+    Args:
+        anno: Annotation dict.
+        image: Input image.
+        syn_objs: Dict of synthetic objects.
+        syn_obj_masks: Dict of synthetic object masks.
+        relight_params: Relighting parameters.
+    """
     if isinstance(image, np.ndarray):
         image = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
-    anno[column_name] = None
+    column_name = f'{relight_params["method"]}_coeffs'
+    anno[column_name] = torch.tensor([[1, 0]], dtype=torch.float32)
     xmin, ymin, xmax, ymax = [int(max(0, b)) for b in anno["bbox"]]
     if xmax <= xmin or ymax <= ymin:
         anno["keypoints"] = np.zeros((4, 3), dtype=np.float32)
-        return None
+        anno["category_id"] = global_cfg.other_catId
+        logger.warning(
+            "Invalid bbox: xmin, ymin, xmax, ymax = %s\nSetting category_id to "
+            "background class and skipping.",
+            str(anno["bbox"]),
+        )
+        return
 
     anno["keypoints"] = np.array(
         [
@@ -236,7 +259,7 @@ def get_mtsd_transforms(
 
     obj_class = anno["category_id"]
     if obj_class not in syn_objs:
-        return None
+        return
 
     # Compute relighting params from cropped object
     # We don't know true keypoints for MTSD objects so the mask is
