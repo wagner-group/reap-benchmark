@@ -70,7 +70,7 @@ class RP2YoloAttack(rp2_base.RP2BaseAttack):
             predicted objectness logits.
         """
         # losses contain total_loss, iou_loss, conf_loss, cls_loss, l1_loss
-        results, _, _ = self._core_model(inputs, compute_loss=True)
+        results, _, _ = self._core_model(inputs)
 
         pred_boxes = [result["instances"].pred_boxes for result in results]
         class_logits = [result["instances"].cls_logits for result in results]
