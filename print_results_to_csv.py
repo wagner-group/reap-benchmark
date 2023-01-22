@@ -16,7 +16,13 @@ _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 _NUM_IOU_THRES = 10
 BASE_PATH = "./results/"
 # CONF_THRES = 0.634  # FIXME
-CONF_THRES = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
+# CONF_THRES_1 = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
+CONF_THRES_2 = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
+SYN_CONF_THRES_2 = []
+CONF_THRES_3 = [0.871,0.878,0.991,0.619,0.929,0.770,0.976,0.688,0.943,0.715,0.964,0.0]
+SYN_CONF_THRES_3 = [0.907,0.990,0.994,0.358,0.975,0.948,0.998,0.980,0.984,0.988,0.972,0.0]
+CONF_THRES_4 = [0.896,0.944,0.957,0.901,0.796,0.870,0.743,0.687,0.929,0.991,0.981,0.0]
+SYN_CONF_THRES_4 = [0.874,0.959,0.961,0.369,0.636,0.993,0.993,0.995,0.893,0.999,0.955,0.0]
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -110,6 +116,18 @@ def main(args):
     if attack_exp_path.is_dir():
         exp_paths.extend(list(attack_exp_path.iterdir()))
 
+    model_id = int(clean_exp_name.split("model")[1])
+    is_syn = "synthetic" in clean_exp_name
+    conf_id = f'{model_id}-{is_syn}'
+    conf_thres = {
+        "2-False": CONF_THRES_2,
+        "2-True": SYN_CONF_THRES_2,
+        "3-False": CONF_THRES_3,
+        "3-True": SYN_CONF_THRES_3,
+        "4-False": CONF_THRES_4,
+        "4-True": SYN_CONF_THRES_4,
+    }[conf_id]
+
     df_rows = {}
     gt_scores = [{}, {}]
     results_all_classes = {}
@@ -157,6 +175,7 @@ def main(args):
                 # obj_class_name = result_path.split("/")[-3]
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
+                eval_hash = "dummy"
                 # atk_hash = hashes[1].split("atk")[1]
                 # if len(hashes) < 3:
                 #     split_hash = "null"
@@ -215,7 +234,7 @@ def main(args):
                     continue
                 scores_dict[sid] = scores
 
-                tp = np.sum(scores[iou_idx] >= CONF_THRES[obj_class])
+                tp = np.sum(scores[iou_idx] >= conf_thres[obj_class])
                 class_name = LABEL_LIST[_DATASET][obj_class]
                 tpr = tp / num_gts
                 metrics[f"FNR-{class_name}"] = 1 - tpr
@@ -239,7 +258,7 @@ def main(args):
                         scores,
                         matches,
                         num_gts,
-                        conf_thres=CONF_THRES[obj_class],
+                        conf_thres=conf_thres[obj_class],
                     )
                     # FIXME: precision can't be weighted average
                     print_df_rows[sid]["Precision"] = outputs["precision"] * 100
@@ -304,8 +323,8 @@ def main(args):
             continue
 
         clean_scores = gt_scores[0][clean_sid]
-        clean_detected = clean_scores[iou_idx] >= CONF_THRES[k]
-        adv_detected = adv_scores[iou_idx] >= CONF_THRES[k]
+        clean_detected = clean_scores[iou_idx] >= conf_thres[k]
+        adv_detected = adv_scores[iou_idx] >= conf_thres[k]
         total = clean_scores.shape[1]
 
         num_succeed = np.sum(~adv_detected & clean_detected)
@@ -352,7 +371,7 @@ def main(args):
     df = df.sort_index(axis=1)
     # df.to_csv(attack_exp_path / "results.csv")
 
-    print(attack_exp_name, clean_exp_name, CONF_THRES)
+    print(attack_exp_name, clean_exp_name, conf_thres)
     print("All-class ASR")
     for sid, result in results_all_classes.items():
 
