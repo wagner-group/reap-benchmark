@@ -14,6 +14,7 @@ from detectron2.modeling.postprocessing import detector_postprocess
 from detectron2.structures import Boxes, ImageList, Instances
 from detectron2.utils import comm
 from detectron2.utils.events import get_event_storage
+from detectron2.utils.visualizer import Visualizer
 from fvcore.nn import giou_loss, sigmoid_focal_loss_jit
 from torch import Tensor, nn
 from torchvision.ops.boxes import box_iou
@@ -161,6 +162,7 @@ class YOLOF(nn.Module):
         self.register_buffer(
             "pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1)
         )
+        self.attack_mode: bool = False
 
     @classmethod
     def from_config(cls, cfg):
@@ -217,7 +219,6 @@ class YOLOF(nn.Module):
             batched_inputs (list): a list that contains input to the model.
             results (List[Instances]): a list of #images elements.
         """
-        from detectron2.utils.visualizer import Visualizer
 
         assert len(batched_inputs) == len(
             results
@@ -250,7 +251,7 @@ class YOLOF(nn.Module):
         )
         storage.put_image(vis_name, vis_img)
 
-    def forward(self, batched_inputs: Tuple[Dict[str, Tensor]], compute_loss: bool = False):
+    def forward(self, batched_inputs: Tuple[Dict[str, Tensor]]):
         """
         Args:
             batched_inputs: a list, batched outputs of :class:`DatasetMapper` .
@@ -284,7 +285,7 @@ class YOLOF(nn.Module):
         pred_logits = [permute_to_N_HWA_K(pred_logits, self.num_classes)]
         pred_anchor_deltas = [permute_to_N_HWA_K(pred_anchor_deltas, 4)]
 
-        if self.training or compute_loss:
+        if self.training or self.attack_mode:
             assert not torch.jit.is_scripting(), "Not supported"
             assert (
                 "instances" in batched_inputs[0]
@@ -311,7 +312,7 @@ class YOLOF(nn.Module):
                     )
                     self.visualize_training(batched_inputs, results)
             # TODO:
-            if compute_loss:
+            if self.attack_mode:
                 return None, None, losses
             return losses
 

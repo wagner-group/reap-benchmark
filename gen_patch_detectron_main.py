@@ -31,7 +31,6 @@ if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
     subprocess.check_output = _hacky_subprocess_fix
 
 # pylint: disable=wrong-import-position
-import detectron2
 import torch
 import torchvision
 from detectron2.data import MetadataCatalog
@@ -40,6 +39,7 @@ from torch.backends import cudnn
 import adv_patch_bench.dataloaders.detectron.util as data_util
 import adv_patch_bench.utils.argparse as args_util
 from adv_patch_bench.attacks import attack_util, base_attack
+from adv_patch_bench.models.custom_build import build_model
 from adv_patch_bench.transforms import render_image
 from adv_patch_bench.utils.types import (
     DetectronSample,
@@ -174,7 +174,7 @@ def main() -> None:
     ]
 
     # Set up model from config
-    model = detectron2.engine.DefaultPredictor(cfg).model
+    model = build_model(cfg)
 
     # Load data to use as background
     dataloader, _ = data_util.get_dataloader(config_base, sampler="shuffle")

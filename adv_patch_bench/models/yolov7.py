@@ -11,7 +11,6 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
-import torch.distributed as dist
 import torchvision
 from alfred.dl.metrics.iou_loss import ciou
 from detectron2.modeling.backbone import build_backbone
@@ -71,6 +70,7 @@ class YOLOV7(nn.Module):
         self.iter = 0
         self.use_l1 = False
         anchors = cfg.MODEL.YOLO.ANCHORS
+        self.attack_mode = False
 
         logger.info(
             "YOLOv7 params: num_classes=%s, max_boxes_num=%s, in_features=%s, "
@@ -261,10 +261,10 @@ class YOLOV7(nn.Module):
         self.iter += 1
         return images, labels, images.image_sizes
 
-    def forward(self, batched_inputs, compute_loss: bool = False):
+    def forward(self, batched_inputs):
         """Forward pass."""
         images, labels, image_ori_sizes = self.preprocess_image(
-            batched_inputs, self.training or compute_loss
+            batched_inputs, self.training or self.attack_mode
         )
         img_size = images.tensor.shape[-2:]
 
@@ -280,7 +280,7 @@ class YOLOV7(nn.Module):
             loss_evaluator(out, labels, img_size)
             for out, loss_evaluator in zip(outs, self.loss_evaluators)
         ]
-        if self.training or compute_loss:
+        if self.training or self.attack_mode:
             losses = [pred[1] for pred in predictions]
             if self.loss_type == "v7":
                 keys = [
@@ -338,7 +338,7 @@ class YOLOV7(nn.Module):
             instances = detector_postprocess(results_per_image, height, width)
             processed_results.append({"instances": instances})
 
-        if compute_loss:
+        if self.attack_mode:
             return processed_results, predictions, losses_dict
         return processed_results
 
