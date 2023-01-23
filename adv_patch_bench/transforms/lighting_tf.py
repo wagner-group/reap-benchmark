@@ -156,6 +156,8 @@ class RelightTransform(nn.Module):
             func = _color_transfer
         elif "percentile" in self._method or "polynomial" in self._method:
             func = _polynomial_match
+        elif self._method is None or self._method == "none":
+            func = _no_relight
         else:
             raise NotImplementedError("Invalid lighting transform method!")
         return func(
@@ -164,6 +166,16 @@ class RelightTransform(nn.Module):
             channels=self._channels,
             color_space_transforms=self._color_tfs,
         )
+
+
+def _no_relight(
+    inputs: BatchImageTensor,
+    ct_coeffs: torch.Tensor,
+    channels: list[int] | None = None,
+    color_space_transforms: tuple[_ColorTF, _ColorTF] | None = None,
+) -> BatchImageTensor:
+    _ = ct_coeffs, channels, color_space_transforms  # Unused
+    return inputs
 
 
 def _color_transfer(
@@ -429,6 +441,7 @@ def _simple_percentile(
 
     Args:
         real_pixels: 1D tensor of pixel values from real images.
+        mode: Specific color space and channels to use.
         percentile: Percentile of pixels considered as min and max of scaling
             range. Only used when method is "percentile". Defaults to 10.0.
     """
