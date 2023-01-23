@@ -18,13 +18,15 @@ BASE_PATH = "./results/"
 # CONF_THRES = 0.634  # FIXME
 # CONF_THRES_1 = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
 CONF_THRES_2 = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
-SYN_CONF_THRES_2 = []
+SYN_CONF_THRES_2 = [0.996,0.99,0.091,0.968,0.565,0.985,0.937,0.808,0.848,0.981,0.973,0.0]
 CONF_THRES_3 = [0.871,0.878,0.991,0.619,0.929,0.770,0.976,0.688,0.943,0.715,0.964,0.0]
 SYN_CONF_THRES_3 = [0.907,0.990,0.994,0.358,0.975,0.948,0.998,0.980,0.984,0.988,0.972,0.0]
 CONF_THRES_4 = [0.896,0.944,0.957,0.901,0.796,0.870,0.743,0.687,0.929,0.991,0.981,0.0]
 SYN_CONF_THRES_4 = [0.874,0.959,0.961,0.369,0.636,0.993,0.993,0.995,0.893,0.999,0.955,0.0]
 CONF_THRES_5 = [0.594,0.519,0.631,0.573,0.512,0.638,0.182,0.422,0.419,0.727,0.699,0.0]
-SYN_CONF_THRES_5 = []
+SYN_CONF_THRES_5 = [0.844,0.791,0.234,0.741,0.193,0.864,0.733,0.826,0.724,0.867,0.857,0.0]
+CONF_THRES_6 = []
+SYN_CONF_THRES_6 = []
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -130,6 +132,8 @@ def main(args):
         "4-True": SYN_CONF_THRES_4,
         "5-False": CONF_THRES_5,
         "5-True": SYN_CONF_THRES_5,
+        "5-False": CONF_THRES_6,
+        "6-True": SYN_CONF_THRES_6,
     }[conf_id]
 
     df_rows = {}
@@ -179,7 +183,7 @@ def main(args):
                 # obj_class_name = result_path.split("/")[-3]
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
-                eval_hash = "dummy"
+                # eval_hash = "dummy"
                 # atk_hash = hashes[1].split("atk")[1]
                 # if len(hashes) < 3:
                 #     split_hash = "null"

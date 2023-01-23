@@ -316,8 +316,11 @@ def _dump_results(results: Dict[str, Any]) -> None:
             metadata["conf_thres"][config_base["obj_class"]] = conf_thres
         else:
             assert len(conf_thres) == NUM_CLASSES[dataset]
-            for i, conf in enumerate(conf_thres):
-                metadata["conf_thres"][i] = conf
+            obj_class = config_base["obj_class"]
+            if obj_class == -1:
+                metadata["conf_thres"] = conf_thres
+            else:
+                metadata["conf_thres"][obj_class] = conf_thres[obj_class]
 
         if dataset not in base_metadata:
             base_metadata[dataset] = {}
