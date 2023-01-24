@@ -175,7 +175,7 @@ def _no_relight(
     color_space_transforms: tuple[_ColorTF, _ColorTF] | None = None,
 ) -> BatchImageTensor:
     _ = ct_coeffs, channels, color_space_transforms  # Unused
-    return inputs
+    return inputs.clone()
 
 
 def _color_transfer(
