@@ -153,10 +153,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    RELIGHT_METHOD = "percentile"  # "polynomial", "color_transfer", "percentile"
-    POLY_DEGREE = 1
-    DROP_TOPK = 0.2
-
     config: dict[str, dict[str, Any]] = args_util.reap_args_parser(
         is_detectron=True, is_gen_patch=True, is_train=False
     )
@@ -166,6 +162,10 @@ if __name__ == "__main__":
     seed: int = config_base["seed"]
     cudnn.benchmark = False
     cudnn.deterministic = True
+
+    RELIGHT_METHOD = config_base["reap_relight_method"]
+    POLY_DEGREE = config_base["reap_relight_polynomial_degree"]
+    DROP_TOPK = config_base["reap_relight_percentile"]
 
     # Set logging config
     logging.basicConfig(

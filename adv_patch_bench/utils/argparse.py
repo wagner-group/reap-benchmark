@@ -9,9 +9,11 @@ import pickle
 from typing import Any, Dict, List, Optional, Union
 
 import detectron2
+import numpy as np
 import yaml
 from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
+
 from hparams import (
     DATASET_METADATA,
     DEFAULT_SYN_OBJ_DIR,
@@ -635,7 +637,10 @@ def _update_conf_thres(
             )
         with metadata_dir.open("rb") as file:
             base_metadata = pickle.load(file)
-        config_base["conf_thres"] = base_metadata[dataset]["conf_thres"]
+        conf_thres = base_metadata[dataset]["conf_thres"]
+        if isinstance(conf_thres, np.ndarray):
+            conf_thres = conf_thres.tolist()
+        config_base["conf_thres"] = conf_thres
 
 
 def _update_dataset_name(

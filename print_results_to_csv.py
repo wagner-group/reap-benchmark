@@ -26,7 +26,7 @@ SYN_CONF_THRES_4 = [0.874,0.959,0.961,0.369,0.636,0.993,0.993,0.995,0.893,0.999,
 CONF_THRES_5 = [0.594,0.519,0.631,0.573,0.512,0.638,0.182,0.422,0.419,0.727,0.699,0.0]
 SYN_CONF_THRES_5 = [0.844,0.791,0.234,0.741,0.193,0.864,0.733,0.826,0.724,0.867,0.857,0.0]
 CONF_THRES_6 = [0.405,0.382,0.692,0.327,0.266,0.503,0.245,0.499,0.365,0.606,0.509,0.0]
-SYN_CONF_THRES_6 = [0.776,0.673,0.738,0.465,0.148,0.742,0.488,0.647,0.603,0.817,0.817,None]
+SYN_CONF_THRES_6 = [0.776,0.673,0.738,0.465,0.148,0.742,0.488,0.647,0.603,0.817,0.817,0.0]
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -82,7 +82,11 @@ def _compute_ap_recall(
 
     score_idx = None
     if conf_thres is not None:
-        score_idx = np.where(scores >= conf_thres)[0][-1]
+        score_idx = np.where(scores >= conf_thres)[0]
+        if len(score_idx) > 0:
+            score_idx = score_idx[-1]
+        else:
+            score_idx = 0
 
     return {
         "precision": pr[score_idx],
@@ -183,9 +187,10 @@ def main(args):
                 # obj_class_name = result_path.split("/")[-3]
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
-                eval_hash = "dummy"
-                # if eval_hash == "5a55d4ee":
-                #     eval_hash = "876d7113"
+                # FIXME
+                # eval_hash = "dummy"
+                if eval_hash == "cd78fbc2":
+                    eval_hash = "1e47efdb"
                 # atk_hash = hashes[1].split("atk")[1]
                 # if len(hashes) < 3:
                 #     split_hash = "null"
@@ -200,7 +205,9 @@ def main(args):
                 obj_class = results["obj_class"]
                 if obj_class < 0:
                     continue
+                # FIXME
                 synthetic = int(results["synthetic"])
+                # synthetic = False
                 attack_type = results["attack_type"]
                 is_attack = int(results["attack_type"] != "none")
                 scores_dict = gt_scores[is_attack]
@@ -227,7 +234,9 @@ def main(args):
                         continue
                     cls_scores = metrics["gtScores"]
                     tf_mode = results.get("reap_geo_method", "perspective")
+                    # FIXME
                     rl_mode = results["reap_relight_method"]
+                    # rl_mode = "none"
                     base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"
 
