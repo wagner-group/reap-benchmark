@@ -221,7 +221,13 @@ def train(cfg, config, model, attack):
     ):
         logger.info("Loading cached adv_patch from %s", cache_file_name)
         with open(cache_file_name, "rb") as file:
-            adv_patch_cache = pickle.load(file)
+            try:
+                adv_patch_cache = pickle.load(file)
+            except pickle.UnpicklingError:
+                logger.warning(
+                    "Failed to load adv_patch_cache. Initializing "
+                    "adv_patch_cache from scratch."
+                )
 
     sampler = _get_sampler(cfg)
     if cfg.MODEL.META_ARCHITECTURE == "YOLOF":
