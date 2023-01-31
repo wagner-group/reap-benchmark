@@ -276,6 +276,7 @@ class RenderImage:
             return images
 
         if self.img_mode == "BGR":
+            # Flip channels from RGB to BGR if img_mode is BGR
             images = images.flip(1)
         images *= 255
         return images

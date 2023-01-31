@@ -147,7 +147,9 @@ class RelightTransform(nn.Module):
         """Forward pass.
 
         Args:
-            inputs: Input images. Shape: [batch_size, num_channels, H, W].
+            inputs: Batched input images in RGB format.
+                Shape: [batch_size, num_channels, H, W].
+            relight_coeffs: Lighting coefficients for each image in the batch.
 
         Returns:
             Relighted images.

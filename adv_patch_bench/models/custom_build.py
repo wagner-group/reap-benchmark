@@ -2,6 +2,7 @@
 
 import torch
 from detectron2.checkpoint import DetectionCheckpointer
+from detectron2.config import instantiate
 from detectron2.modeling import META_ARCH_REGISTRY
 from detectron2.utils.logger import _log_api_usage
 from detectron2.utils.registry import Registry
@@ -14,6 +15,11 @@ Registry for meta-architectures, i.e. the whole model.
 The registered object will be called with `obj(cfg)`
 and expected to return a `nn.Module` object.
 """
+
+
+def _build_detrex_model(cfg):
+    model = instantiate(cfg.model)
+    return model
 
 
 def build_model(cfg):
@@ -39,6 +45,8 @@ def build_model(cfg):
     # Search our custom registry first
     if meta_arch in CUSTOM_META_ARCH_REGISTRY:
         model = CUSTOM_META_ARCH_REGISTRY.get(meta_arch)(cfg)
+    elif "detrex" in meta_arch:
+        model = _build_detrex_model(cfg)
     else:
         model = META_ARCH_REGISTRY.get(meta_arch)(cfg)
     model.to(torch.device(cfg.MODEL.DEVICE))

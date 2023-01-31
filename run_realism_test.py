@@ -169,7 +169,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
             print("File not found: ", filepath)
             continue
 
-        # read image
+        # Read image in RGB format (no need to reorder channels)
         image = skimage.io.imread(filepath)
         torch_image = torch.from_numpy(image).float().permute(2, 0, 1)
         torch_image.unsqueeze_(0)

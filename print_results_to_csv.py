@@ -188,9 +188,9 @@ def main(args):
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
                 # FIXME
-                # eval_hash = "dummy"
-                if eval_hash == "cd78fbc2":
-                    eval_hash = "1e47efdb"
+                eval_hash = "dummy"
+                # if eval_hash == "cd78fbc2":
+                #     eval_hash = "1e47efdb"
                 # atk_hash = hashes[1].split("atk")[1]
                 # if len(hashes) < 3:
                 #     split_hash = "null"
@@ -236,7 +236,9 @@ def main(args):
                     tf_mode = results.get("reap_geo_method", "perspective")
                     # FIXME
                     rl_mode = results["reap_relight_method"]
-                    # rl_mode = "none"
+                    rl_mode = "polynomial_hsv-sv"
+                    # rl_mode = "polynomial_lab-l"
+                    # rl_mode = "color_transfer_hsv-sv"
                     base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"
 

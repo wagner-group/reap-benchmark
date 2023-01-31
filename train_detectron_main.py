@@ -48,7 +48,6 @@ from detectron2.evaluation import (
     inference_on_dataset,
     print_csv_format,
 )
-from detectron2.solver import build_lr_scheduler
 from detectron2.utils import comm
 from detectron2.utils.events import EventStorage
 from torch.nn.parallel import DistributedDataParallel
@@ -61,7 +60,7 @@ from adv_patch_bench.dataloaders.detectron import (
     mtsd_yolo_dataset_mapper,
 )
 from adv_patch_bench.models.custom_build import build_model
-from adv_patch_bench.models.optimizer import build_optimizer
+from adv_patch_bench.models.optimizer import build_lr_scheduler, build_optimizer
 from adv_patch_bench.transforms.render_image import RenderImage
 from adv_patch_bench.transforms.render_object import RenderObject
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
@@ -179,6 +178,7 @@ def train(cfg, config, model, attack):
         start_iter = checkpointer.resume_or_load(weight_path, resume=True).get(
             "iteration", -1
         )
+        scheduler.last_epoch = start_iter
     else:
         # If not resume, load from specified weight and start from itearation 0
         checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=False)

@@ -1,5 +1,7 @@
 """Define argument and config parsing."""
 
+from __future__ import annotations
+
 import argparse
 import ast
 import logging
@@ -11,8 +13,10 @@ from typing import Any, Dict, List, Optional, Union
 import detectron2
 import numpy as np
 import yaml
+from detectron2.config import CfgNode, LazyConfig
 from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
+from omegaconf import OmegaConf
 
 from hparams import (
     DATASET_METADATA,
@@ -36,6 +40,18 @@ _TRANSFORM_PARAMS: List[str] = [
     "syn_3d_dist",
 ]
 logger = logging.getLogger(__name__)
+
+
+def _cfgnode_to_dict(cfg_node: CfgNode, cfg_dict: dict[str, Any] | None = None):
+    if cfg_dict is None:
+        cfg_dict = {}
+    for k, v in cfg_node.items():
+        if isinstance(v, CfgNode):
+            cfg_dict[k] = {}
+            _cfgnode_to_dict(v, cfg_dict=cfg_dict[k])
+        else:
+            cfg_dict[k] = v
+    return cfg_dict
 
 
 def reap_args_parser(
@@ -985,21 +1001,32 @@ def setup_detectron_cfg(
             config_base["save_dir"], "adv_patch.pkl"
         )
 
-    if "yolof" in config_base["model_name"]:
-        # TODO(enhancement): Combine get_cfg with a wrapper.
-        from yolof.config import get_cfg
-
-        cfg = get_cfg()
-    elif "yolov7" in config_base["model_name"]:
-        # We import here to avoid backbone being registered twice
-        from yolov7.config import add_yolo_config
-
-        cfg = detectron2.config.get_cfg()
-        add_yolo_config(cfg)
+    if "detrex" in config_base["model_name"]:
+        d2_cfg = detectron2.config.get_cfg()
+        # detrex uses python config instead of yaml
+        cfg = LazyConfig.load(config_base["config_file"])
+        cfg = LazyConfig.apply_overrides(cfg, config_base["opts"])
+        d2_cfg = _cfgnode_to_dict(d2_cfg)
+        cfg = OmegaConf.merge(d2_cfg, cfg)
+        cfg.MODEL.META_ARCHITECTURE = "detrex"
+        # detrex sets input format differently (default is "RGB")
+        cfg.INPUT.FORMAT = cfg.model.input_format
     else:
-        cfg = detectron2.config.get_cfg()
-    cfg.merge_from_file(config_base["config_file"])
-    cfg.merge_from_list(config_base["opts"])
+        if "yolof" in config_base["model_name"]:
+            # TODO(enhancement): Combine get_cfg with a wrapper.
+            from yolof.config import get_cfg
+
+            cfg = get_cfg()
+        elif "yolov7" in config_base["model_name"]:
+            # We import here to avoid backbone being registered twice
+            from yolov7.config import add_yolo_config
+
+            cfg = detectron2.config.get_cfg()
+            add_yolo_config(cfg)
+        else:
+            cfg = detectron2.config.get_cfg()
+        cfg.merge_from_file(config_base["config_file"])
+        cfg.merge_from_list(config_base["opts"])
 
     # Copy dataset from args
     cfg.DATASETS.TEST = (f"{dataset}_{split}",)
@@ -1034,12 +1061,15 @@ def setup_detectron_cfg(
     # Replace SynBN with BN when running on one GPU
     _find_and_set_bn(cfg)
 
-    if "YOLO" in cfg.MODEL:
-        cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
     if "YOLOF" in cfg.MODEL:
         cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = NUM_CLASSES[dataset]
+    elif "YOLO" in cfg.MODEL:
+        cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+    elif "detrex" in config_base["model_name"]:
+        cfg.model.num_classes = NUM_CLASSES[dataset]
 
-    cfg.freeze()
+    if isinstance(cfg, CfgNode):
+        cfg.freeze()
     # Set cfg as global variable so we can avoid passing cfg around
     detectron2.config.set_global_cfg(cfg)
     config_base.pop("config_file")  # Remove to avoid logging
