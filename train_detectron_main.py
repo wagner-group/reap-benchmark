@@ -50,7 +50,6 @@ from detectron2.evaluation import (
 )
 from detectron2.utils import comm
 from detectron2.utils.events import EventStorage
-from torch.nn.parallel import DistributedDataParallel
 from yolof.checkpoint import YOLOFCheckpointer
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
@@ -377,12 +376,6 @@ def main(config):
         model=model,
         verbose=config["base"]["verbose"],
     )
-
-    distributed = comm.get_world_size() > 1
-    if distributed:
-        model = DistributedDataParallel(
-            model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
-        )
 
     train(cfg, config, model, attack)
     logger.info("Start final testing...")

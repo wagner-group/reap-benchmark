@@ -1050,7 +1050,6 @@ def setup_detectron_cfg(
     cfg.INPUT.MIN_SIZE_TEST = cfg.INPUT.MAX_SIZE_TEST
 
     # Model config
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = NUM_CLASSES[dataset]
     cfg.OUTPUT_DIR = config_base["save_dir"]
     cfg.SEED = config_base["seed"]
     weight_path = config_base["weights"]
@@ -1061,12 +1060,14 @@ def setup_detectron_cfg(
     # Replace SynBN with BN when running on one GPU
     _find_and_set_bn(cfg)
 
+    num_classes = NUM_CLASSES[dataset]
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
     if "YOLOF" in cfg.MODEL:
-        cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = NUM_CLASSES[dataset]
+        cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = num_classes
     elif "YOLO" in cfg.MODEL:
-        cfg.MODEL.YOLO.CLASSES = NUM_CLASSES[dataset]
+        cfg.MODEL.YOLO.CLASSES = num_classes
     elif "detrex" in config_base["model_name"]:
-        cfg.model.num_classes = NUM_CLASSES[dataset]
+        cfg.model.num_classes = num_classes
 
     if isinstance(cfg, CfgNode):
         cfg.freeze()
