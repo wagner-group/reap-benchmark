@@ -10,12 +10,16 @@ from detrex.modeling.neck import ChannelMapper
 from detrex.layers import PositionEmbeddingSine
 
 from projects.dino.modeling import (
-    DINO,
-    DINOTransformerEncoder,
-    DINOTransformerDecoder,
-    DINOTransformer,
+    # DINO,
+    # DINOTransformerEncoder,
+    # DINOTransformerDecoder,
+    # DINOTransformer,
     DINOCriterion,
 )
+
+from adv_patch_bench.models.dino.dino import DINO
+from adv_patch_bench.models.dino.dino_transformer import DINOTransformerEncoder, DINOTransformerDecoder, DINOTransformer
+
 
 model = L(DINO)(
     backbone=L(ResNet)(
