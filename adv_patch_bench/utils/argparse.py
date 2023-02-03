@@ -1081,6 +1081,7 @@ def setup_detectron_cfg(
     elif "yolof" in config_base["model_name"]:
         default_setup(cfg, argparse.Namespace(**config_base))
     else:
+        # FIXME:
         default_setup(cfg, argparse.Namespace(**config_base))
 
     return cfg

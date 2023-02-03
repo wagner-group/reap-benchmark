@@ -13,24 +13,6 @@ import warnings
 from collections import OrderedDict
 from typing import Any
 
-from packaging import version
-
-# Calling subprocess.check_output() with python version 3.8.10 or lower will
-# raise NotADirectoryError. When torch calls this to call hipconfig, it does
-# not catch this exception but only FileNotFoundError or PermissionError.
-# This hack makes sure that correct exception is raised.
-if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
-    import subprocess
-
-    def _hacky_subprocess_fix(*args, **kwargs):
-        raise FileNotFoundError(
-            "Hacky exception. If this interferes with your workflow, consider "
-            "using python >= 3.8.10 or simply try to comment this out."
-        )
-
-    subprocess.check_output = _hacky_subprocess_fix
-
-# pylint: disable=wrong-import-position
 import torch
 import torchvision
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
