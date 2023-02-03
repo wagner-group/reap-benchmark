@@ -236,9 +236,9 @@ def main(args):
                     tf_mode = results.get("reap_geo_method", "perspective")
                     # FIXME
                     rl_mode = results["reap_relight_method"]
-                    rl_mode = "polynomial_hsv-sv"
+                    # rl_mode = "polynomial_hsv-sv"
                     # rl_mode = "polynomial_lab-l"
-                    # rl_mode = "color_transfer_hsv-sv"
+                    rl_mode = "color_transfer_hsv-sv"
                     base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"
 
