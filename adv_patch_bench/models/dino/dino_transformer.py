@@ -39,7 +39,6 @@ class DINOTransformerEncoder(TransformerLayerSequence):
         post_norm: bool = False,
         num_feature_levels: int = 4,
     ):
-        print("init DINOTransformerEncoder")
         super(DINOTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
                 attn=MultiScaleDeformableAttention(
@@ -112,7 +111,6 @@ class DINOTransformerDecoder(TransformerLayerSequence):
         num_feature_levels: int = 4,
         look_forward_twice=True,
     ):
-        print("init DINOTransformerDecoder")
         super(DINOTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
                 attn=[
@@ -261,7 +259,6 @@ class DINOTransformer(nn.Module):
         two_stage_num_proposals=900,
         learnt_init_query=True,
     ):
-        print("init DINOTransformer")
         super(DINOTransformer, self).__init__()
         self.encoder = encoder
         self.decoder = decoder

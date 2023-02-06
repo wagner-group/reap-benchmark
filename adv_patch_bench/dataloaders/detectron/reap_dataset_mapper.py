@@ -12,14 +12,17 @@ import logging
 import detectron2
 import numpy as np
 import torch
+from detectron2.config import LazyCall as L
+from detectron2.config import instantiate
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.structures import BoxMode
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.types import SizePx
-
 from hparams import RELIGHT_METHODS
+
+logger = logging.getLogger(__name__)
 
 
 def _build_transform_gen(cfg: detectron2.config.CfgNode, is_train: bool):
@@ -43,9 +46,15 @@ def _build_transform_gen(cfg: detectron2.config.CfgNode, is_train: bool):
             len(min_size) == 2
         ), f"more than 2 ({len(min_size)}) min_size(s) are provided for ranges"
 
-    logger = logging.getLogger(__name__)
-    tfm_gens = []
-    tfm_gens.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
+    # This convoluted logic fixes detrex issue with distributed training.
+    # Not sure why this is the case.
+    tfm_gen = L(T.ResizeShortestEdge)(
+        short_edge_length=min_size, max_size=max_size, sample_style=sample_style
+    )
+    tfm_gens = [instantiate(tfm_gen)]
+
+    # tfm_gens = []
+    # tfm_gens.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     # Remove horizontal flipping
     # if is_train:
     #     tfm_gens.append(T.RandomFlip())

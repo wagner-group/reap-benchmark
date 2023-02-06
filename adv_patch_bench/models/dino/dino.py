@@ -76,7 +76,6 @@ class DINO(nn.Module):
         input_format: Optional[str] = "RGB",
         vis_period: int = 0,
     ):
-        print("init DINO")
         super().__init__()
         # define backbone and position embedding module
         self.backbone = backbone

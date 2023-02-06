@@ -45,6 +45,8 @@ pip install 'git+https://github.com/facebookresearch/detectron2.git'
 # silence some warning from YOLOv7.
 git clone https://github.com/thomasbrandon/mish-cuda
 cd mish-cuda
+# Uncomment this if see "fatal error: CUDAApplyUtils.cuh: No such file or directory"
+# mv external/CUDAApplyUtils.cuh csrc/
 python setup.py build install
 
 git clone https://github.com/chensnathan/YOLOF.git

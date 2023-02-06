@@ -77,7 +77,11 @@ def _get_sampler(cfg):
     )
     # This line is the fix
     repeat_factors = repeat_factors.long()
-    sampler = RepeatFactorTrainingSampler(repeat_factors)
+    try:
+        sampler = RepeatFactorTrainingSampler(repeat_factors)
+    except RuntimeError:
+        # Handle different CUDA/pytorch version
+        sampler = RepeatFactorTrainingSampler(repeat_factors.float())
     return sampler
 
 

@@ -11,7 +11,7 @@ from fvcore.common.param_scheduler import MultiStepParamScheduler
 # This model will be instantiate in the main file. pylint: disable=unused-import
 from .models.dino_swin_tiny_224 import model
 
-dataloader = get_config("common/data/coco_detr.py").dataloader
+# dataloader = get_config("common/data/coco_detr.py").dataloader
 optimizer = get_config("common/optim.py").AdamW
 # lr_multiplier = get_config("common/coco_schedule.py").lr_multiplier_12ep
 train = get_config("common/train.py").train
@@ -99,7 +99,8 @@ lr_multiplier = L(WarmupParamScheduler)(
 
 DATALOADER = {
     "NUM_WORKERS": 24,
-    "SAMPLER_TRAIN": "RepeatFactorTrainingSampler",  # EDIT: default: 'TrainingSampler'
+    # "SAMPLER_TRAIN": "RepeatFactorTrainingSampler",  # EDIT: default: 'TrainingSampler'
+    "SAMPLER_TRAIN": "TrainingSampler",
     "REPEAT_THRESHOLD": 1.0,  # EDIT: default: 0
 }
 
