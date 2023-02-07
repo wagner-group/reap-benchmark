@@ -81,7 +81,7 @@ class RenderImage:
         if robj_kwargs is None:
             robj_kwargs = {}
 
-        # Expect int image [0-255] and resize if size does not match img_size
+        # Expect int image [0-255] of the same size
         images: list[ImageTensor] = []
         self.tf_params: dict[str, torch.Tensor | Any] = {}
         obj_to_img = []
@@ -96,7 +96,6 @@ class RenderImage:
 
         for i, sample in enumerate(samples):
             image: ImageTensor = sample["image"].float() / 255
-            # image = self._resize_image(image)
             image = image.flip(0) if img_mode == "BGR" else image
             file_name = sample["file_name"].split("/")[-1]
             images.append(image.to(device))
@@ -278,7 +277,9 @@ class RenderImage:
         if self.img_mode == "BGR":
             # Flip channels from RGB to BGR if img_mode is BGR
             images = images.flip(1)
-        images *= 255
+            images *= 255
+        else:
+            images = images * 255
         return images
 
     def save_images(
