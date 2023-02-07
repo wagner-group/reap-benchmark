@@ -15,28 +15,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import yaml
-from packaging import version
-
-# Calling subprocess.check_output() with python version 3.8.10 or lower will
-# raise NotADirectoryError. When torch calls this to call hipconfig, it does
-# not catch this exception but only FileNotFoundError or PermissionError.
-# This hack makes sure that correct exception is raised.
-if version.parse(sys.version.split()[0]) <= version.parse("3.8.10"):
-    import subprocess
-
-    def _hacky_subprocess_fix(*args, **kwargs):
-        raise FileNotFoundError(
-            "Hacky exception. If this interferes with your workflow, consider "
-            "using python >= 3.8.10 or simply try to comment this out."
-        )
-
-    subprocess.check_output = _hacky_subprocess_fix
-
-# pylint: disable=wrong-import-position
 import torch
+import yaml
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
+import adv_patch_bench.utils.docker_bug_fixes  # pylint: disable=unused-import
 from adv_patch_bench.evaluators import detectron_evaluator
 from adv_patch_bench.models.custom_build import build_model
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg

@@ -13,7 +13,6 @@ import warnings
 from collections import OrderedDict
 from typing import Any
 
-# pylint: disable=wrong-import-position,wrong-import-order
 import torch
 import torchvision
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
