@@ -27,30 +27,6 @@ class DPatchDinoAttack(dpatch_yolo.DPatchYoloAttack):
         super(rp2_yolo.RP2YoloAttack, self).__init__(
             attack_config, core_model, **kwargs
         )
-        # Default DINO criterion params:
-        # criterion=L(DINOCriterion)(
-        #     num_classes="${..num_classes}",
-        #     matcher=L(HungarianMatcher)(
-        #         cost_class=2.0,
-        #         cost_bbox=5.0,
-        #         cost_giou=2.0,
-        #         cost_class_type="focal_loss_cost",
-        #         alpha=0.25,
-        #         gamma=2.0,
-        #     ),
-        #     weight_dict={
-        #         "loss_class": 1,
-        #         "loss_bbox": 5.0,
-        #         "loss_giou": 2.0,
-        #         "loss_class_dn": 1,  # Not used during inference
-        #         "loss_bbox_dn": 5.0,   # Not used during inference
-        #         "loss_giou_dn": 2.0,   # Not used during inference
-        #     },
-        #     loss_class_type="focal_loss",
-        #     alpha=0.25,
-        #     gamma=2.0,
-        #     two_stage_binary_cls=False,
-        # ),
 
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training

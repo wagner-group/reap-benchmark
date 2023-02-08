@@ -1,18 +1,19 @@
-"""DPatch attack for Detectron2 models."""
+"""RP2 attack for YOLOF models."""
 
 from __future__ import annotations
 
 import copy
 from typing import Any
 
+import torch
+from detectron2 import structures
 from torch import nn
 
-from adv_patch_bench.attacks.dpatch import dpatch_yolo
-from adv_patch_bench.attacks.rp2 import rp2_yolo
+from adv_patch_bench.attacks.rp2 import rp2_base
 
 
-class DPatchYolofAttack(dpatch_yolo.DPatchYoloAttack):
-    """DPatch Attack for YOLOF models."""
+class RP2YolofAttack(rp2_base.RP2BaseAttack):
+    """RP2 Attack for YOLOF models."""
 
     def __init__(
         self, attack_config: dict[str, Any], core_model: nn.Module, **kwargs
@@ -23,11 +24,7 @@ class DPatchYolofAttack(dpatch_yolo.DPatchYoloAttack):
             attack_config: Dictionary of attack params.
             core_model: Traget model to attack.
         """
-        # We call RP2BaseAttack.__init__ instead of DPatchYoloAttack.__init__
-        # to avoid setting incompatible model-specific parameters.
-        super(rp2_yolo.RP2YoloAttack, self).__init__(
-            attack_config, core_model, **kwargs
-        )
+        super().__init__(attack_config, core_model, **kwargs)
         self._nms_thres_orig = copy.deepcopy(core_model.test_nms_thresh)
         self._conf_thres_orig = copy.deepcopy(core_model.test_score_thresh)
         # loss_evaluators[0] is YOLOHead
@@ -53,3 +50,36 @@ class DPatchYolofAttack(dpatch_yolo.DPatchYoloAttack):
         self._core_model.test_nms_thresh = self._nms_thres_orig
         self._core_model.test_score_thresh = self._conf_thres_orig
         self._core_model.pos_ignore_thresh = self._iou_thres_orig
+
+    def _get_targets(
+        self,
+        inputs: list[dict[str, Any]],
+        use_correct_only: bool = False,
+    ) -> tuple[structures.Boxes, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Select a set of targets to attack.
+
+        Args:
+            inputs: A list containing a single dataset_dict, transformed by
+                a DatasetMapper.
+            use_correct_only: Filter out predictions that are already incorrect.
+
+        Returns:
+            Matched gt target boxes, gt classes, predicted class logits, and
+            predicted objectness logits.
+        """
+        results = self._core_model(inputs)
+        pred_boxes = [result["instances"].pred_boxes for result in results]
+        class_logits = [result["instances"].cls_logits for result in results]
+        gt_boxes = [tgt["instances"].gt_boxes for tgt in inputs]
+        gt_classes = [tgt["instances"].gt_classes for tgt in inputs]
+
+        # DINO and YOLOF does not return objectness logits, so we set it to None
+        paired_outputs = self._pair_gt_proposals(
+            pred_boxes,
+            class_logits,
+            None,
+            gt_boxes,
+            gt_classes,
+            use_correct_only=use_correct_only,
+        )
+        return paired_outputs

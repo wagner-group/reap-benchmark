@@ -311,9 +311,6 @@ class YOLOF(nn.Module):
                         images.image_sizes,
                     )
                     self.visualize_training(batched_inputs, results)
-            # TODO:
-            if self.attack_mode:
-                return None, None, losses
             return losses
 
         results = self.inference(
@@ -330,8 +327,8 @@ class YOLOF(nn.Module):
         ):
             height = input_per_image.get("height", image_size[0])
             width = input_per_image.get("width", image_size[1])
-            r = detector_postprocess(results_per_image, height, width)
-            processed_results.append({"instances": r})
+            instances = detector_postprocess(results_per_image, height, width)
+            processed_results.append({"instances": instances})
         return processed_results
 
     def losses(
@@ -531,6 +528,7 @@ class YOLOF(nn.Module):
         """
         boxes_all = []
         scores_all = []
+        logits_all = []
         class_idxs_all = []
 
         # Iterate over every feature level
@@ -563,10 +561,11 @@ class YOLOF(nn.Module):
 
             boxes_all.append(predicted_boxes)
             scores_all.append(predicted_prob)
+            logits_all.append(box_cls_i[anchor_idxs])
             class_idxs_all.append(classes_idxs)
 
-        boxes_all, scores_all, class_idxs_all = [
-            cat(x) for x in [boxes_all, scores_all, class_idxs_all]
+        boxes_all, scores_all, logits_all, class_idxs_all = [
+            cat(x) for x in [boxes_all, scores_all, logits_all, class_idxs_all]
         ]
         keep = batched_nms(
             boxes_all, scores_all, class_idxs_all, self.test_nms_thresh
@@ -576,6 +575,7 @@ class YOLOF(nn.Module):
         result = Instances(image_size)
         result.pred_boxes = Boxes(boxes_all[keep])
         result.scores = scores_all[keep]
+        result.cls_logits = logits_all[keep]
         result.pred_classes = class_idxs_all[keep]
         return result
 
