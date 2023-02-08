@@ -12,6 +12,7 @@ import torchvision
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.attacks import base_attack, no_attack, patch_mask_util
 from adv_patch_bench.attacks.dpatch import (
+    dpatch_dino,
     dpatch_faster_rcnn,
     dpatch_yolo,
     dpatch_yolof,
@@ -32,6 +33,7 @@ _ATTACK_DICT = {
     "dpatch-frcnn": dpatch_faster_rcnn.DPatchFasterRCNNAttack,
     "dpatch-yolo": dpatch_yolo.DPatchYoloAttack,
     "dpatch-yolof": dpatch_yolof.DPatchYolofAttack,
+    "dpatch-dino": dpatch_dino.DPatchDinoAttack,
 }
 
 
@@ -44,6 +46,7 @@ def setup_attack(
     config_attack = config["attack"]
     attack_name: str = config_attack["common"]["attack_name"]
 
+    # Add new attacks here
     attack_fn_name: str
     if config["base"]["attack_type"] == "none" or attack_name == "none":
         attack_fn_name = "none"
@@ -53,6 +56,8 @@ def setup_attack(
         attack_fn_name = f"{attack_name}-yolof"
     elif "yolo" in config["base"]["model_name"]:
         attack_fn_name = f"{attack_name}-yolo"
+    elif "dino" in config["base"]["model_name"]:
+        attack_fn_name = f"{attack_name}-dino"
     else:
         raise ValueError(
             f"Attack {attack_name} not supported for model "

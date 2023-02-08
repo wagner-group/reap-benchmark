@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""DINO implementation from IDEA Research Group."""
+
 import copy
 import math
 from typing import List, Optional
@@ -30,7 +32,9 @@ from detrex.utils import inverse_sigmoid
 
 
 class DINO(nn.Module):
-    """Implement DAB-Deformable-DETR in `DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR
+    """Implement DAB-Deformable-DETR.
+
+    From `DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR
     <https://arxiv.org/abs/2203.03605>`_.
 
     Code is modified from the `official github repo
@@ -152,6 +156,9 @@ class DINO(nn.Module):
                 input_format is not None
             ), "input_format is required for visualization!"
 
+        # Will be set to True during attack
+        self.attack_mode: bool = False
+
     def forward(self, batched_inputs):
         """Forward function of `DINO` which excepts a list of dict as inputs.
 
@@ -207,35 +214,40 @@ class DINO(nn.Module):
                 self.position_embedding(multi_level_masks[-1])
             )
 
-        # denoising preprocessing
-        # prepare label query embedding
-        if self.training:
+        input_query_label, input_query_bbox, attn_mask, dn_meta = (
+            None,
+            None,
+            None,
+            None,
+        )
+
+        if self.training or self.attack_mode:
             gt_instances = [
                 x["instances"].to(self.device) for x in batched_inputs
             ]
             targets = self.prepare_targets(gt_instances)
-            (
-                input_query_label,
-                input_query_bbox,
-                attn_mask,
-                dn_meta,
-            ) = self.prepare_for_cdn(
-                targets,
-                dn_number=self.dn_number,
-                label_noise_ratio=self.label_noise_ratio,
-                box_noise_scale=self.box_noise_scale,
-                num_queries=self.num_queries,
-                num_classes=self.num_classes,
-                hidden_dim=self.embed_dim,
-                label_enc=self.label_enc,
-            )
-        else:
-            input_query_label, input_query_bbox, attn_mask, dn_meta = (
-                None,
-                None,
-                None,
-                None,
-            )
+
+            # denoising preprocessing
+            # prepare label query embedding
+            if self.training:
+                # NOTE: input_query_label, input_query_bbox, attn_mask, dn_meta
+                # seem to rely on targets so we should not use it during attack
+                # as it will result in a different behavior during inference.
+                (
+                    input_query_label,
+                    input_query_bbox,
+                    attn_mask,
+                    dn_meta,
+                ) = self.prepare_for_cdn(
+                    targets,
+                    dn_number=self.dn_number,
+                    label_noise_ratio=self.label_noise_ratio,
+                    box_noise_scale=self.box_noise_scale,
+                    num_queries=self.num_queries,
+                    num_classes=self.num_classes,
+                    hidden_dim=self.embed_dim,
+                    label_enc=self.label_enc,
+                )
         query_embeds = (input_query_label, input_query_bbox)
 
         # feed into transformer
@@ -303,9 +315,9 @@ class DINO(nn.Module):
             "pred_boxes": interm_coord,
         }
 
-        if self.training:
+        if self.training or self.attack_mode:
             # visualize training samples
-            if self.vis_period > 0:
+            if self.vis_period > 0 and not self.attack_mode:
                 storage = get_event_storage()
                 if storage.iter % self.vis_period == 0:
                     box_cls = output["pred_logits"]
@@ -322,19 +334,19 @@ class DINO(nn.Module):
                 if k in weight_dict:
                     loss_dict[k] *= weight_dict[k]
             return loss_dict
-        else:
-            box_cls = output["pred_logits"]
-            box_pred = output["pred_boxes"]
-            results = self.inference(box_cls, box_pred, images.image_sizes)
-            processed_results = []
-            for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
-            ):
-                height = input_per_image.get("height", image_size[0])
-                width = input_per_image.get("width", image_size[1])
-                r = detector_postprocess(results_per_image, height, width)
-                processed_results.append({"instances": r})
-            return processed_results
+
+        box_cls = output["pred_logits"]
+        box_pred = output["pred_boxes"]
+        results = self.inference(box_cls, box_pred, images.image_sizes)
+        processed_results = []
+        for results_per_image, input_per_image, image_size in zip(
+            results, batched_inputs, images.image_sizes
+        ):
+            height = input_per_image.get("height", image_size[0])
+            width = input_per_image.get("width", image_size[1])
+            r = detector_postprocess(results_per_image, height, width)
+            processed_results.append({"instances": r})
+        return processed_results
 
     def visualize_training(self, batched_inputs, results):
         from detectron2.utils.visualizer import Visualizer
