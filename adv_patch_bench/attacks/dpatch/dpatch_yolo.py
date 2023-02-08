@@ -19,14 +19,14 @@ class DPatchYoloAttack(rp2_yolo.RP2YoloAttack):
         adv_imgs: BatchImageTensor,
         adv_targets: list[Target],
     ) -> torch.Tensor:
-        """Compute DPatch loss for Faster R-CNN models.
+        """Compute DPatch loss for YOLO models.
 
         Args:
-            adv_img: Image to compute loss on.
-            adv_target: Target label to compute loss on.
+            adv_imgs: Batch of images to compute loss on.
+            adv_targets: Target labels to compute loss on.
 
         Returns:
-            Loss for attacker to minimize.
+            Loss for attacker to **minimize**.
         """
         inputs: list[dict[str, Any]] = adv_targets
         instances: list[structures.Instances] = []

@@ -344,8 +344,8 @@ class DINO(nn.Module):
         ):
             height = input_per_image.get("height", image_size[0])
             width = input_per_image.get("width", image_size[1])
-            r = detector_postprocess(results_per_image, height, width)
-            processed_results.append({"instances": r})
+            instances = detector_postprocess(results_per_image, height, width)
+            processed_results.append({"instances": instances})
         return processed_results
 
     def visualize_training(self, batched_inputs, results):
@@ -601,33 +601,41 @@ class DINO(nn.Module):
         assert len(box_cls) == len(image_sizes)
         results = []
 
-        # box_cls.shape: 1, 300, 80
+        # box_cls.shape: 1, 300, num_classes
         # box_pred.shape: 1, 300, 4
+        batch_size, _, num_classes = box_cls.shape
         prob = box_cls.sigmoid()
+        # Select topk scoring predictions. There are num_boxes * num_classes
+        # predictions (multiple predictions can come from the same box).
         topk_values, topk_indexes = torch.topk(
-            prob.view(box_cls.shape[0], -1),
+            prob.view(batch_size, -1),
             self.select_box_nums_for_evaluation,
             dim=1,
         )
         scores = topk_values
-        topk_boxes = torch.div(
-            topk_indexes, box_cls.shape[2], rounding_mode="floor"
-        )
-        labels = topk_indexes % box_cls.shape[2]
+        # Find box index
+        topk_boxes = torch.div(topk_indexes, num_classes, rounding_mode="floor")
+        labels = topk_indexes % num_classes
 
-        boxes = torch.gather(
-            box_pred, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4)
+        # Collect bboxes at the corresponding topk index
+        topk_boxes.unsqueeze_(-1)
+        boxes = torch.gather(box_pred, 1, topk_boxes.repeat(1, 1, 4))
+
+        # Collect bboxes at the corresponding topk index
+        cls_logits = torch.gather(
+            box_cls, 1, topk_boxes.repeat(1, 1, num_classes)
         )
 
         # For each box we assign the best class or the second best if the best on is `no_object`.
         # scores, labels = F.softmax(box_cls, dim=-1)[:, :, :-1].max(-1)
 
-        for i, (
+        for _, (
             scores_per_image,
             labels_per_image,
             box_pred_per_image,
+            cls_logits_per_image,
             image_size,
-        ) in enumerate(zip(scores, labels, boxes, image_sizes)):
+        ) in enumerate(zip(scores, labels, boxes, cls_logits, image_sizes)):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))
 
@@ -636,6 +644,8 @@ class DINO(nn.Module):
             )
             result.scores = scores_per_image
             result.pred_classes = labels_per_image
+            # EDIT: Add class logits to instances
+            result.cls_logits = cls_logits_per_image
             results.append(result)
         return results
 

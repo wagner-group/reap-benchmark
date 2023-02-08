@@ -146,7 +146,11 @@ class RP2BaseAttack(grad_attack.GradAttack):
             if len(tgt_log) > 0 and len(tgt_lb) > 0:
                 # Ignore the background class on tgt_log
                 target_loss = F.cross_entropy(tgt_log, tgt_lb, reduction="mean")
-            if len(obj_log) > 0 and self._obj_const != 0:
+            if (
+                obj_log is not None
+                and len(obj_log) > 0
+                and self._obj_const != 0
+            ):
                 obj_lb = torch.ones_like(obj_log)
                 obj_loss = F.binary_cross_entropy_with_logits(
                     obj_log, obj_lb, reduction="mean"
@@ -158,7 +162,7 @@ class RP2BaseAttack(grad_attack.GradAttack):
         self,
         proposal_boxes: list[structures.Boxes],
         class_logits: torch.Tensor | list[torch.Tensor],
-        objectness_logits: torch.Tensor | list[torch.Tensor],
+        objectness_logits: torch.Tensor | list[torch.Tensor] | None,
         gt_boxes: list[structures.Boxes],
         gt_classes: list[torch.Tensor],
         use_correct_only: bool = False,
@@ -179,16 +183,21 @@ class RP2BaseAttack(grad_attack.GradAttack):
             )
         paired_outputs = []
         for i, (paired_gt_classes, paired_idx) in enumerate(pairs):
+            obj_log = None
+            if objectness_logits is not None:
+                obj_log = objectness_logits[i][paired_idx]
             paired_outputs.append(
                 [
                     paired_gt_classes.to(self._device),
                     class_logits[i][paired_idx],
-                    objectness_logits[i][paired_idx],
+                    obj_log,
                 ]
             )
             num_pairs = len(paired_gt_classes)
             assert all(
-                num_pairs == len(output) for output in paired_outputs[-1]
+                num_pairs == len(output)
+                for output in paired_outputs[-1]
+                if output is not None
             ), f"Output shape mismatch: {[len(o) for o in paired_outputs[-1]]}!"
         return paired_outputs
 
