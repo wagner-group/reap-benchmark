@@ -17,7 +17,12 @@ from adv_patch_bench.attacks.dpatch import (
     dpatch_yolo,
     dpatch_yolof,
 )
-from adv_patch_bench.attacks.rp2 import rp2_dino, rp2_faster_rcnn, rp2_yolo
+from adv_patch_bench.attacks.rp2 import (
+    rp2_dino,
+    rp2_faster_rcnn,
+    rp2_yolo,
+    rp2_yolof,
+)
 from adv_patch_bench.utils.types import (
     BatchImageTensor,
     BatchMaskTensor,
@@ -30,6 +35,7 @@ _ATTACK_DICT = {
     "none": no_attack.NoAttackModule,
     "rp2-frcnn": rp2_faster_rcnn.RP2FasterRCNNAttack,
     "rp2-yolo": rp2_yolo.RP2YoloAttack,
+    "rp2-yolof": rp2_yolof.RP2YolofAttack,
     "rp2-dino": rp2_dino.RP2DinoAttack,
     "dpatch-frcnn": dpatch_faster_rcnn.DPatchFasterRCNNAttack,
     "dpatch-yolo": dpatch_yolo.DPatchYoloAttack,

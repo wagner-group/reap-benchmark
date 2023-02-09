@@ -39,7 +39,7 @@ class RP2YolofAttack(rp2_base.RP2BaseAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.attack_mode = True
+        self._core_model.attack_mode = False
         self._core_model.test_nms_thresh = self._nms_thres
         self._core_model.test_score_thresh = self._min_conf
         self._core_model.pos_ignore_thresh = self._iou_thres
