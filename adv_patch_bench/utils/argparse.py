@@ -1078,10 +1078,7 @@ def setup_detectron_cfg(
         from yolov7.utils.d2overrides import default_setup as y7_default_setup
 
         y7_default_setup(cfg, argparse.Namespace(**config_base))
-    elif "yolof" in config_base["model_name"]:
-        default_setup(cfg, argparse.Namespace(**config_base))
     else:
-        # FIXME:
         default_setup(cfg, argparse.Namespace(**config_base))
 
     return cfg

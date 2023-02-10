@@ -28,6 +28,8 @@ class DPatchYolofAttack(dpatch_yolo.DPatchYoloAttack):
         super(rp2_yolo.RP2YoloAttack, self).__init__(
             attack_config, core_model, **kwargs
         )
+        if hasattr(core_model, "module"):
+            core_model = core_model.module
         self._nms_thres_orig = copy.deepcopy(core_model.test_nms_thresh)
         self._conf_thres_orig = copy.deepcopy(core_model.test_score_thresh)
         # loss_evaluators[0] is YOLOHead
@@ -42,14 +44,22 @@ class DPatchYolofAttack(dpatch_yolo.DPatchYoloAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.attack_mode = True
-        self._core_model.test_nms_thresh = self._nms_thres
-        self._core_model.test_score_thresh = self._min_conf
-        self._core_model.pos_ignore_thresh = self._iou_thres
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+        else:
+            core_model = self._core_model
+        core_model.attack_mode = True
+        core_model.test_nms_thresh = self._nms_thres
+        core_model.test_score_thresh = self._min_conf
+        core_model.pos_ignore_thresh = self._iou_thres
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
-        self._core_model.attack_mode = False
-        self._core_model.test_nms_thresh = self._nms_thres_orig
-        self._core_model.test_score_thresh = self._conf_thres_orig
-        self._core_model.pos_ignore_thresh = self._iou_thres_orig
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+        else:
+            core_model = self._core_model
+        core_model.attack_mode = False
+        core_model.test_nms_thresh = self._nms_thres_orig
+        core_model.test_score_thresh = self._conf_thres_orig
+        core_model.pos_ignore_thresh = self._iou_thres_orig

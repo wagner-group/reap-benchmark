@@ -25,6 +25,8 @@ class RP2YoloAttack(rp2_base.RP2BaseAttack):
             core_model: Traget model to attack.
         """
         super().__init__(attack_config, core_model, **kwargs)
+        if hasattr(core_model, "module"):
+            core_model = core_model.module
         self._nms_thres_orig = copy.deepcopy(core_model.nms_threshold)
         self._conf_thres_orig = copy.deepcopy(core_model.conf_threshold)
         # loss_evaluators[0] is YOLOHead
@@ -41,17 +43,25 @@ class RP2YoloAttack(rp2_base.RP2BaseAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.attack_mode = True
-        self._core_model.nms_threshold = self._nms_thres
-        self._core_model.conf_threshold = self._min_conf
-        self._core_model.loss_evaluators[0].iou_threshold = self._iou_thres
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+        else:
+            core_model = self._core_model
+        core_model.attack_mode = True
+        core_model.nms_threshold = self._nms_thres
+        core_model.conf_threshold = self._min_conf
+        core_model.loss_evaluators[0].iou_threshold = self._iou_thres
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
-        self._core_model.attack_mode = False
-        self._core_model.nms_threshold = self._nms_thres_orig
-        self._core_model.conf_threshold = self._conf_thres_orig
-        self._core_model.loss_evaluators[0].iou_threshold = self._iou_thres_orig
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+        else:
+            core_model = self._core_model
+        core_model.attack_mode = False
+        core_model.nms_threshold = self._nms_thres_orig
+        core_model.conf_threshold = self._conf_thres_orig
+        core_model.loss_evaluators[0].iou_threshold = self._iou_thres_orig
 
     def _get_targets(
         self,

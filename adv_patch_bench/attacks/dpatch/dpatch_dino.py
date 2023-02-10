@@ -31,8 +31,14 @@ class DPatchDinoAttack(dpatch_yolo.DPatchYoloAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.attack_mode = True
+        if hasattr(self._core_model, "module"):
+            self._core_model.module.attack_mode = True
+        else:
+            self._core_model.attack_mode = True
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
-        self._core_model.attack_mode = False
+        if hasattr(self._core_model, "module"):
+            self._core_model.module.attack_mode = False
+        else:
+            self._core_model.attack_mode = False

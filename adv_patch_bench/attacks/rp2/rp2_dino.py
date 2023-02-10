@@ -52,8 +52,6 @@ class RP2DinoAttack(rp2_yolof.RP2YolofAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.attack_mode = False
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
-        self._core_model.attack_mode = False
