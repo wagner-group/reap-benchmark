@@ -27,6 +27,8 @@ CONF_THRES_5 = [0.594,0.519,0.631,0.573,0.512,0.638,0.182,0.422,0.419,0.727,0.69
 SYN_CONF_THRES_5 = [0.844,0.791,0.234,0.741,0.193,0.864,0.733,0.826,0.724,0.867,0.857,0.0]
 CONF_THRES_6 = [0.405,0.382,0.692,0.327,0.266,0.503,0.245,0.499,0.365,0.606,0.509,0.0]
 SYN_CONF_THRES_6 = [0.776,0.673,0.738,0.465,0.148,0.742,0.488,0.647,0.603,0.817,0.817,0.0]
+CONF_THRES_7 = [0.485,0.293,0.394,0.323,0.331,0.481,0.299,0.267,0.148,0.398,0.451,0.0]  # TODO
+SYN_CONF_THRES_7 = [0.776,0.673,0.738,0.465,0.148,0.742,0.488,0.647,0.603,0.817,0.817,0.0]
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -138,6 +140,8 @@ def main(args):
         "5-True": SYN_CONF_THRES_5,
         "6-False": CONF_THRES_6,
         "6-True": SYN_CONF_THRES_6,
+        "7-False": CONF_THRES_7,
+        "7-True": SYN_CONF_THRES_7,
     }[conf_id]
 
     df_rows = {}
@@ -188,7 +192,8 @@ def main(args):
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
                 # FIXME
-                eval_hash = "dummy"
+                eval_hash = results["weights"].split("/")[-1]
+                # eval_hash = "dummy"
                 # if eval_hash == "cd78fbc2":
                 #     eval_hash = "1e47efdb"
                 # atk_hash = hashes[1].split("atk")[1]
@@ -238,7 +243,7 @@ def main(args):
                     rl_mode = results["reap_relight_method"]
                     # rl_mode = "polynomial_hsv-sv"
                     # rl_mode = "polynomial_lab-l"
-                    rl_mode = "color_transfer_hsv-sv"
+                    # rl_mode = "color_transfer_hsv-sv"
                     base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"
 
