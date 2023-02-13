@@ -276,6 +276,8 @@ def _modify_syn_target_one(
     Returns:
         Modified target labels.
     """
+    device = final_obj_mask.device
+
     # get top left and bottom right points
     bbox = img_util.mask_to_box(final_obj_mask > 0)
     bbox = [b.cpu().item() for b in bbox]
@@ -286,11 +288,12 @@ def _modify_syn_target_one(
     # Create Boxes object in XYXY_ABS format
     y_min, x_min, h_obj, w_obj = bbox
     new_bbox = [x_min, y_min, x_min + w_obj, y_min + h_obj]
-    tensor_bbox = torch.tensor([new_bbox])
+    tensor_bbox = torch.tensor([new_bbox], device=device)
     # Create new instance with only synthetic oject
     new_instances = structures.Instances(target["instances"].image_size)
     new_instances.gt_boxes = structures.Boxes(tensor_bbox)
     new_instances.gt_classes = torch.tensor([obj_class])
+    new_instances = new_instances.to(device)
 
     # Assign new instance
     new_target["instances"] = new_instances
