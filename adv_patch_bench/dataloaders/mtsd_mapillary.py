@@ -3,8 +3,8 @@
 import os
 
 import torch
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
+from torchvision import datasets, transforms
+
 from adv_patch_bench.dataloaders import eval_sampler
 
 
