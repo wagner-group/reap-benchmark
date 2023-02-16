@@ -36,7 +36,7 @@ from adv_patch_bench.utils.metric import (
 warnings.filterwarnings("ignore")
 
 
-def get_args_parser():
+def _get_args_parser():
     parser = argparse.ArgumentParser(
         description="Train/test traffic sign classifier.", add_help=False
     )
@@ -399,7 +399,7 @@ def validate(val_loader, model, criterion, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "Classification", parents=[get_args_parser()]
+        "Train/test traffic sign classifier.", parents=[_get_args_parser()]
     )
     args = parser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)

@@ -70,5 +70,5 @@ MTSD_MAPILLARY = {
         "std": [0.229, 0.224, 0.225],
     },
     "loader": load_mtsd_mapillary,
-    "input_dim": (3, 128, 128),
+    "input_dim": (3, 224, 224),
 }

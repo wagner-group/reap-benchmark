@@ -19,9 +19,9 @@ def _load_annotation(label_path, image_key):
     return anno
 
 
-def main(data_dir, mtsd_label_to_shape_index, dataset_name, pad=0.0):
+def main(data_dir, new_label_dict, dataset_name, pad=0.0):
     """Create classification dataset from MTSD."""
-    bg_idx = max(list(mtsd_label_to_shape_index.values())) + 1
+    bg_idx = max(list(new_label_dict.values())) + 1
     images, labels, names = [], [], []
 
     for split in ["train", "val"]:
@@ -51,7 +51,7 @@ def main(data_dir, mtsd_label_to_shape_index, dataset_name, pad=0.0):
                 if obj["properties"]["ambiguous"]:
                     continue
                 class_name = obj["label"]
-                shape_index = mtsd_label_to_shape_index.get(class_name, bg_idx)
+                shape_index = new_label_dict.get(class_name, bg_idx)
                 x1 = obj["bbox"]["xmin"]
                 y1 = obj["bbox"]["ymin"]
                 x2 = obj["bbox"]["xmax"]
@@ -79,7 +79,19 @@ def main(data_dir, mtsd_label_to_shape_index, dataset_name, pad=0.0):
             # if len(images) > 100:
             #     break
 
-    print("Label distribution: ", np.unique(labels, return_counts=True))
+    label_counts = np.unique(labels, return_counts=True)
+    print("Label distribution: ", label_counts)
+
+    sorted_idx = np.argsort(label_counts[1])[::-1]
+    kept_classes = label_counts[0][sorted_idx][:MAX_NUM_CLASSES]
+    # Set all labels not in kept_classes to background
+    for i, label in enumerate(labels):
+        if label not in kept_classes:
+            labels[i] = bg_idx
+    print(
+        f"Label distribution after keeping only top {MAX_NUM_CLASSES} classes:",
+        np.unique(labels, return_counts=True),
+    )
 
     # Train and val split
     num_samples = len(images)
@@ -91,9 +103,9 @@ def main(data_dir, mtsd_label_to_shape_index, dataset_name, pad=0.0):
     for split in ["train", "val"]:
         save_dir = join(data_dir, dataset_name, split)
         for i in range(bg_idx + 1):
-            os.makedirs(join(save_dir, f"{i:02d}"), exist_ok=True)
+            os.makedirs(join(save_dir, f"{i:03d}"), exist_ok=True)
         for i in tqdm(indices[split]):
-            images[i].save(join(save_dir, f"{labels[i]:02d}", names[i]))
+            images[i].save(join(save_dir, f"{labels[i]:03d}", names[i]))
 
 
 if __name__ == "__main__":
@@ -106,8 +118,9 @@ if __name__ == "__main__":
     # Set parameters for dataset
     SEED = 0
     CROPPED_SIZE = 224
-    DATASET_NAME = "cropped_signs_with_colors"
     PAD_SIZE = 0.0
+    MAX_NUM_CLASSES = 100
+    DATASET_NAME = f"cropped_signs_mtsd-{MAX_NUM_CLASSES}"
 
     np.random.seed(SEED)
     random.seed(SEED)
@@ -130,10 +143,10 @@ if __name__ == "__main__":
             "pentagon-915.0",
             "octagon-915.0",
         ]
-        new_label_dict = {}
+        NEW_LABEL_DICT = {}
         for _, row in data.iterrows():
             if row["target"] in selected_labels:
-                new_label_dict[row["sign"]] = selected_labels.index(
+                NEW_LABEL_DICT[row["sign"]] = selected_labels.index(
                     row["target"]
                 )
 
@@ -174,7 +187,7 @@ if __name__ == "__main__":
             "octagon-915.0": 14,  # (1) red
         }
         selected_labels = list(class_idx.keys())
-        new_label_dict = {}
+        NEW_LABEL_DICT = {}
         for _, row in data.iterrows():
             if row["target"] in class_idx:
                 idx = class_idx[row["target"]]
@@ -182,9 +195,9 @@ if __name__ == "__main__":
                 # print(row['sign'], row['target'])
                 if len(color_list) > 0:
                     idx += color_list.index(row["color"])
-                new_label_dict[row["sign"]] = idx
+                NEW_LABEL_DICT[row["sign"]] = idx
 
-    elif DATASET_NAME == "cropped_signs_mtsd":
+    elif "cropped_signs_mtsd" in DATASET_NAME:
         # Use MTSD labels that fall into the set of known shapes/sizes
         selected_shapes = {
             "circle-750.0",
@@ -199,14 +212,15 @@ if __name__ == "__main__":
             "pentagon-915.0",
             "octagon-915.0",
         }
-        new_label_dict = {}
+        NEW_LABEL_DICT = {}
         counter = 0
         for _, row in data.iterrows():
             if row["target"] not in selected_shapes:
                 continue
-            new_label_dict[row["sign"]] = counter
+            NEW_LABEL_DICT[row["sign"]] = counter
             counter += 1
     else:
         raise NotImplementedError("Dataset name not implemented.")
 
-    main(DATA_DIR, new_label_dict, DATASET_NAME, pad=PAD_SIZE)
+    print("Number of classes:", len(NEW_LABEL_DICT))
+    main(DATA_DIR, NEW_LABEL_DICT, DATASET_NAME, pad=PAD_SIZE)
