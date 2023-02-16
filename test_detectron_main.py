@@ -279,13 +279,19 @@ def _dump_results(results: Dict[str, Any]) -> None:
         metadata_dir = (
             pathlib.Path(config_base["weights"]).parent / "metadata.pkl"
         )
-        base_metadata, metadata = {}, {}
+        # base_metadata is indexed by weights -> dataset -> params
+        weights = pathlib.Path(config_base["weights"]).name
+        base_metadata = {weights: {dataset: {}}}
         if metadata_dir.is_file():
             logger.info("Existing metadata found at %s.", str(metadata_dir))
             with metadata_dir.open("rb") as file:
                 base_metadata = pickle.load(file)
-            metadata = base_metadata.get(dataset, {})
 
+        if dataset in base_metadata:
+            # Handles backward compatibility
+            metadata = base_metadata[dataset]
+        else:
+            metadata = base_metadata.get(weights, {}).get(dataset, {})
         if "conf_thres" not in metadata:
             logger.info(
                 "conf_thres does not exist in metadata. Creating an empty "
@@ -305,9 +311,13 @@ def _dump_results(results: Dict[str, Any]) -> None:
             else:
                 metadata["conf_thres"][obj_class] = conf_thres[obj_class]
 
-        if dataset not in base_metadata:
-            base_metadata[dataset] = {}
-        base_metadata[dataset]["conf_thres"] = metadata["conf_thres"]
+        # Initialize base_metadata
+        if weights not in base_metadata:
+            base_metadata[weights] = {}
+        if dataset not in base_metadata[weights]:
+            base_metadata[weights][dataset] = {}
+        # Set new conf_thres in base_metadata
+        base_metadata[weights][dataset]["conf_thres"] = metadata["conf_thres"]
         with metadata_dir.open("wb") as file:
             pickle.dump(base_metadata, file)
         logger.info("Metadata is saved at %s.", str(metadata_dir))
@@ -364,8 +374,7 @@ def main() -> None:
             np.where(metrics["all_iou_thres"] == config_base["iou_thres"])[0]
         )
         total_num_patches = metrics["total_num_patches"]
-        syn_scores = metrics["syn_scores"]
-        syn_matches = metrics["syn_matches"]
+        syn_scores, syn_matches = metrics["syn_scores"], metrics["syn_matches"]
 
         if config_base["compute_conf_thres"]:
             # Compute conf_thres for synthetic data using desired FNR

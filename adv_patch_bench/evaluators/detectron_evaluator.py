@@ -26,12 +26,7 @@ import adv_patch_bench.utils.detectron.custom_coco_evaluator as cocoeval
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.attacks import attack_util, base_attack
 from adv_patch_bench.dataloaders import reap_util
-from adv_patch_bench.transforms import (
-    reap_object,
-    render_image,
-    render_object,
-    syn_object,
-)
+from adv_patch_bench.transforms import render_image
 from adv_patch_bench.utils.types import (
     ImageTensor,
     ImageTensorDet,
@@ -120,17 +115,15 @@ class DetectronEvaluator:
         self._obj_size_mm: SizeMM = SizePx(
             config_base.get("obj_size_mm", (0.0, 0.0))
         )
-        self._robj_fn: render_object.RenderObject
-        self._robj_kwargs: dict[str, Any]
         robj_kwargs = {
             "obj_size_px": self._obj_size_px,
             "interp": interp,
         }
         keyword = "syn" if self._synthetic else "reap"
-        self._robj_fn = (
-            syn_object.SynObject if self._synthetic else reap_object.ReapObject
-        )
-        self._robj_kwargs = {
+        # self._robj_fn: render_object.RenderObject = (
+        #     syn_object.SynObject if self._synthetic else reap_object.ReapObject
+        # )
+        self._robj_kwargs: dict[str, Any] = {
             **robj_kwargs,
             **{k: v for k, v in config_base.items() if keyword in k},
         }
