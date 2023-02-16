@@ -641,9 +641,8 @@ def _update_conf_thres(
         and config_base["weights"] is not None
         and not is_train
     ):
-        metadata_dir = (
-            pathlib.Path(config_base["weights"]).parent / "metadata.pkl"
-        )
+        weights_path = pathlib.Path(config_base["weights"])
+        metadata_dir = weights_path.parent / "metadata.pkl"
         if not metadata_dir.is_file():
             raise FileNotFoundError(
                 "Metadata is not found in the default location "
@@ -653,7 +652,11 @@ def _update_conf_thres(
             )
         with metadata_dir.open("rb") as file:
             base_metadata = pickle.load(file)
-        conf_thres = base_metadata[dataset]["conf_thres"]
+        if dataset in base_metadata:
+            # For backward compatibility
+            conf_thres = base_metadata[dataset]["conf_thres"]
+        else:
+            conf_thres = base_metadata[weights_path.name][dataset]["conf_thres"]
         if isinstance(conf_thres, np.ndarray):
             conf_thres = conf_thres.tolist()
         config_base["conf_thres"] = conf_thres
