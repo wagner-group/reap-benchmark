@@ -3,8 +3,8 @@
 import os
 
 import torch
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
+from torchvision import datasets, transforms
+
 from adv_patch_bench.dataloaders import eval_sampler
 
 
@@ -70,5 +70,5 @@ MTSD_MAPILLARY = {
         "std": [0.229, 0.224, 0.225],
     },
     "loader": load_mtsd_mapillary,
-    "input_dim": (3, 128, 128),
+    "input_dim": (3, 224, 224),
 }

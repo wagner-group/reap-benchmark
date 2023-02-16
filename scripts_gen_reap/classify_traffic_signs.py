@@ -586,8 +586,9 @@ def main():
     label_to_classify = 95  # Class id of traffic signs on Vistas
     conf_thres = 0.0
     use_ts_data = False
-    data_dir = "/data/shared/mapillary_vistas/training/"
+    data_dir = "~/data/mapillary_vistas/training/"
     # data_dir = '/data/shared/mtsd_v2_fully_annotated/'
+    data_dir = os.path.expanduser(data_dir)
 
     device = "cuda"
     # seed = 2021
