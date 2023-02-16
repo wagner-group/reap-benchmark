@@ -8,15 +8,15 @@ BASE_DIR="./scripts_gen_reap/"
 # python $BASE_DIR/prep_mtsd_for_classification.py 
 
 # Train traffic sign classifier on MTSD
-NUM_CLASSES=TODO  # 12 for no_color
-ARCH="convnext_small.in12k"
-CUDA_VISIBLE_DEVICES=0 python $BASE_DIR/main_classifier.py \
+NUM_CLASSES=100  # 12 for no_color
+ARCH="convnext_small_in22k"
+CUDA_VISIBLE_DEVICES=1 python train_classifier_main.py \
     --seed 0 --workers 8 --dataset "mtsd" \
-    --data "$HOME/data/mtsd_v2_fully_annotated/cropped_signs_v6/" \
+    --data "$HOME/data/mtsd_v2_fully_annotated/cropped_signs_mtsd-100/" \
     --arch $ARCH --full-precision --pretrained --epochs 100 \
-    --batch-size 256 --lr 0.01 --wd 1e-4 \
+    --batch-size 4 --lr 0.01 --wd 1e-4 \
     --output-dir "./results/mtsd_full/" \
-    --num-classes $NUM_CLASSES
+    --num-classes $NUM_CLASSES --balance-sampler
 
 # Use the trained classifier to (pseudo) label the cropped traffic signs from
 # Mapillary Vistas

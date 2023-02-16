@@ -2,6 +2,7 @@
 
 import os
 
+import numpy as np
 import torch
 from torchvision import datasets, transforms
 
@@ -19,7 +20,20 @@ def get_loader_sampler(root, transform, args, split):
     )
 
     sampler = None
-    if args.distributed:
+    if args.balance_sampler and split == "train":
+        print("=> Using WeightedRandomSampler to balance classes...")
+        assert (
+            not args.distributed
+        ), "balance_sampler not supported in distributed mode!"
+        # Count samples per class
+        labels = [s[1] for s in dataset.samples]
+        counts = np.unique(labels, return_counts=True)[1]
+        class_weights = np.sum(counts) / counts
+        sample_weights = [class_weights[label] for label in labels]
+        sampler = torch.utils.data.WeightedRandomSampler(
+            sample_weights, len(labels), replacement=True
+        )
+    elif args.distributed:
         if split == "train":
             sampler = torch.utils.data.distributed.DistributedSampler(dataset)
         else:

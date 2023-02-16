@@ -130,6 +130,14 @@ def _get_args_parser():
         type=float,
         help="Beta parameter for TRADES (default: 6)",
     )
+    parser.add_argument(
+        "--balance-sampler",
+        action="store_true",
+        help=(
+            "If True, will use class weighted sampler during training to "
+            "balance the dataset. Not supported in distributed training."
+        ),
+    )
     return parser
 
 
