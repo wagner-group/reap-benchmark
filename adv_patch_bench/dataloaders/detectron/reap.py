@@ -9,7 +9,7 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 
 from adv_patch_bench.dataloaders.detectron import mapillary
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import LABEL_LIST, DATASET_METADATA
+from hparams import DATASET_METADATA, LABEL_LIST
 
 _NUM_KEYPOINTS = 4
 

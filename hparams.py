@@ -29,7 +29,7 @@ PATH_DUPLICATE_FILES = "./scripts_gen_reap/similar_files_df.csv"
 DEFAULT_PATH_BG_FILE_NAMES = "./bg_txt_files/"
 DEFAULT_PATH_DEBUG_PATCH = f"{DEFAULT_SYN_OBJ_DIR}/debug.png"
 
-# TODO: move to args in the future
+# DEPRECATED: move to args in the future
 SAVE_DIR_YOLO = "./runs/val/"
 
 # Allowed interpolation methods
@@ -102,14 +102,122 @@ for shape, colors in TS_COLOR_DICT.items():
 # Make sure that ordering is correct
 TS_COLOR_LABEL_LIST = list(TS_COLOR_LABEL_DICT.keys())
 TS_NO_COLOR_LABEL_LIST = list(TS_COLOR_DICT.keys())
+
+# Metadata for the MTSD-100/REAP-100 dataset
+MTSD100_TO_SHAPE = {
+    "complementary--chevron-left--g1": "rect-s",
+    "complementary--chevron-left--g2": "rect-s",
+    "complementary--chevron-left--g5": "rect-s",
+    "complementary--chevron-right--g1": "rect-s",
+    "information--parking--g3": "circle",
+    "information--pedestrians-crossing--g1": "square",
+    "regulatory--bicycles-only--g1": "circle",
+    "regulatory--go-straight--g1": "circle",
+    "regulatory--go-straight-or-turn-left--g1": "circle",
+    "regulatory--go-straight-or-turn-right--g1": "circle",
+    "regulatory--height-limit--g1": "circle",
+    "regulatory--keep-left--g1": "circle",
+    "regulatory--keep-right--g1": "circle",
+    "regulatory--maximum-speed-limit-100--g1": "circle",
+    "regulatory--maximum-speed-limit-20--g1": "circle",
+    "regulatory--maximum-speed-limit-25--g2": "rect-l",
+    "regulatory--maximum-speed-limit-30--g1": "circle",
+    "regulatory--maximum-speed-limit-35--g2": "rect-l",
+    "regulatory--maximum-speed-limit-40--g1": "circle",
+    "regulatory--maximum-speed-limit-50--g1": "circle",
+    "regulatory--maximum-speed-limit-55--g2": "rect-l",
+    "regulatory--maximum-speed-limit-60--g1": "circle",
+    "regulatory--maximum-speed-limit-70--g1": "circle",
+    "regulatory--maximum-speed-limit-80--g1": "circle",
+    "regulatory--maximum-speed-limit-90--g1": "circle",
+    "regulatory--no-entry--g1": "circle",
+    "regulatory--no-heavy-goods-vehicles--g1": "circle",
+    "regulatory--no-heavy-goods-vehicles--g2": "circle",
+    "regulatory--no-heavy-goods-vehicles--g4": "circle",
+    "regulatory--no-left-turn--g1": "circle",
+    "regulatory--no-overtaking--g1": "circle",
+    "regulatory--no-overtaking--g2": "circle",
+    "regulatory--no-overtaking--g5": "circle",
+    "regulatory--no-parking--g1": "circle",
+    "regulatory--no-parking--g2": "circle",
+    "regulatory--no-parking--g5": "circle",
+    "regulatory--no-pedestrians--g2": "circle",
+    "regulatory--no-right-turn--g1": "circle",
+    "regulatory--no-stopping--g15": "circle",
+    "regulatory--no-stopping--g2": "circle",
+    "regulatory--no-stopping--g5": "circle",
+    "regulatory--no-u-turn--g1": "circle",
+    "regulatory--one-way-left--g2": "rect-m",
+    "regulatory--pass-on-either-side--g1": "circle",
+    "regulatory--pedestrians-only--g1": "circle",
+    "regulatory--priority-road--g4": "diamond-s",
+    "regulatory--road-closed-to-vehicles--g3": "circle",
+    "regulatory--roundabout--g1": "circle",
+    "regulatory--shared-path-pedestrians-and-bicycles--g1": "circle",
+    "regulatory--stop--g1": "octagon",
+    "regulatory--turn-left--g1": "circle",
+    "regulatory--turn-left--g2": "rect-m",
+    "regulatory--turn-right--g1": "circle",
+    "regulatory--turn-right-ahead--g1": "circle",
+    "regulatory--weight-limit--g1": "circle",
+    "regulatory--yield--g1": "up-triangle",
+    "warning--children--g1": "triangle",
+    "warning--children--g2": "diamond-l",
+    "warning--crossroads--g1": "triangle",
+    "warning--crossroads--g3": "diamond-l",
+    "warning--curve-left--g1": "triangle",
+    "warning--curve-left--g2": "diamond-l",
+    "warning--curve-right--g1": "triangle",
+    "warning--curve-right--g2": "diamond-l",
+    "warning--double-curve-first-right--g1": "triangle",
+    "warning--height-restriction--g2": "diamond-l",
+    "warning--junction-with-a-side-road-acute-left--g1": "diamond-l",
+    "warning--junction-with-a-side-road-perpendicular-left--g1": "triangle",
+    "warning--junction-with-a-side-road-perpendicular-left--g3": "diamond-l",
+    "warning--junction-with-a-side-road-perpendicular-right--g1": "triangle",
+    "warning--junction-with-a-side-road-perpendicular-right--g3": "diamond-l",
+    "warning--kangaloo-crossing--g1": "diamond-l",
+    "warning--narrow-bridge--g1": "diamond-l",
+    "warning--other-danger--g1": "triangle",
+    "warning--pedestrians-crossing--g1": "triangle",
+    "warning--pedestrians-crossing--g4": "diamond-l",
+    "warning--pedestrians-crossing--g5": "triangle",
+    "warning--railroad-crossing-without-barriers--g3": "triangle",
+    "warning--railroad-crossing-without-barriers--g4": "diamond-l",
+    "warning--road-bump--g1": "triangle",
+    "warning--road-bump--g2": "diamond-l",
+    "warning--road-narrows-left--g2": "diamond-l",
+    "warning--roadworks--g1": "triangle",
+    "warning--roundabout--g1": "triangle",
+    "warning--school-zone--g2": "pentagon",
+    "warning--slippery-road-surface--g1": "triangle",
+    "warning--slippery-road-surface--g2": "diamond-l",
+    "warning--stop-ahead--g9": "diamond-l",
+    "warning--texts--g1": "diamond-l",
+    "warning--texts--g2": "diamond-l",
+    "warning--texts--g3": "diamond-l",
+    "warning--traffic-merges-right--g1": "diamond-l",
+    "warning--traffic-merges-right--g2": "triangle",
+    "warning--traffic-signals--g1": "triangle",
+    "warning--traffic-signals--g3": "diamond-l",
+    "warning--trucks-crossing--g1": "diamond-l",
+    "warning--turn-right--g1": "diamond-l",
+    "warning--winding-road-first-left--g1": "diamond-l",
+    "warning--winding-road-first-right--g1": "diamond-l",
+}
+MTSD100_LABELS = list(MTSD100_TO_SHAPE.keys()) + ["other"]
+
 LABEL_LIST = {
     "mtsd_color": TS_COLOR_LABEL_LIST,
     "mapillary_color": TS_COLOR_LABEL_LIST,
     "mtsd_no_color": TS_NO_COLOR_LABEL_LIST,
     "mapillary_no_color": TS_NO_COLOR_LABEL_LIST,
+    "mtsd_100": MTSD100_LABELS,
 }
 LABEL_LIST["reap"] = LABEL_LIST["mapillary_no_color"]
 LABEL_LIST["synthetic"] = LABEL_LIST["mapillary_no_color"]
+LABEL_LIST["reap_100"] = LABEL_LIST["mtsd_100"]
+LABEL_LIST["synthetic_100"] = LABEL_LIST["mtsd_100"]
 
 # Get list of shape (no size, no color)
 TS_SHAPE_LIST = list(
@@ -125,14 +233,17 @@ NUM_CLASSES = {
     "mtsd_color": len(TS_COLOR_LABEL_LIST),
     "mapillary_no_color": len(TS_NO_COLOR_LABEL_LIST),
     "mapillary_color": len(TS_COLOR_LABEL_LIST),
+    "mtsd_100": len(MTSD100_LABELS),
 }
 NUM_CLASSES["reap"] = NUM_CLASSES["mapillary_no_color"]
 NUM_CLASSES["synthetic"] = NUM_CLASSES["mapillary_no_color"]
+NUM_CLASSES["reap_100"] = NUM_CLASSES["mtsd_100"]
+NUM_CLASSES["synthetic_100"] = NUM_CLASSES["mtsd_100"]
 
 # =========================================================================== #
 
 # Configure dimension
-_MPL_NO_COLOR_SIZE_MM = {
+_MPL_NO_COLOR_CLS_TO_SIZE_MM = {
     "circle": (750.0, 750.0),
     "triangle": (789.0, 900.0),
     "up-triangle": (1072.3, 1220.0),
@@ -145,12 +256,12 @@ _MPL_NO_COLOR_SIZE_MM = {
     "pentagon": (915.0, 915.0),
     "octagon": (915.0, 915.0),
 }
-_MPL_NO_COLOR_SIZE_MM = dict(enumerate(_MPL_NO_COLOR_SIZE_MM.values()))
+_MPL_NO_COLOR_SIZE_MM = dict(enumerate(_MPL_NO_COLOR_CLS_TO_SIZE_MM.values()))
 
 # Geometric shape of objects
 # This is straightforward for our traffic sign classes, but to extend to other
 # dataset in general, we need a mapping from class names to shapes.
-_MPL_NO_COLOR_SHAPE = {
+_MPL_NO_COLOR_CLS_TO_SHAPE = {
     "circle": "circle",
     "triangle": "triangle",
     "up-triangle": "triangle_inverted",
@@ -163,11 +274,12 @@ _MPL_NO_COLOR_SHAPE = {
     "pentagon": "pentagon",
     "octagon": "octagon",
 }
-_MPL_NO_COLOR_SHAPE = dict(enumerate(_MPL_NO_COLOR_SHAPE.values()))
+_MPL_NO_COLOR_SHAPE = dict(enumerate(_MPL_NO_COLOR_CLS_TO_SHAPE.values()))
 
 # Height-width ratio
 _MPL_NO_COLOR_RATIO = {
-    i: size[0] / size[1] for i, size in enumerate(_MPL_NO_COLOR_SIZE_MM.values())
+    i: size[0] / size[1]
+    for i, size in enumerate(_MPL_NO_COLOR_SIZE_MM.values())
 }
 
 DATASET_METADATA: Dict[str, Dict[str, Any]] = {
@@ -182,9 +294,30 @@ DATASET_METADATA["reap"] = DATASET_METADATA["mapillary_no_color"]
 DATASET_METADATA["synthetic"] = DATASET_METADATA["mapillary_no_color"]
 DATASET_METADATA["mtsd_no_color"] = DATASET_METADATA["mapillary_no_color"]
 
+_MTSD100_SIZE_MM = {
+    i: _MPL_NO_COLOR_CLS_TO_SIZE_MM[v]
+    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items())
+}
+_MTSD100_SIZE_RATIO = {
+    i: size[0] / size[1] for i, size in enumerate(_MTSD100_SIZE_MM.values())
+}
+_MTSD100_SHAPE = {
+    i: _MPL_NO_COLOR_CLS_TO_SHAPE[v]
+    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items())
+}
+DATASET_METADATA["mtsd_100"] = {
+    "size_mm": _MTSD100_SIZE_MM,
+    "hw_ratio": _MTSD100_SIZE_RATIO,
+    "shape": _MTSD100_SHAPE,
+    "class_name": dict(enumerate(MTSD100_LABELS)),
+}
+DATASET_METADATA["mapillary_100"] = DATASET_METADATA["mtsd_100"]
+DATASET_METADATA["reap_100"] = DATASET_METADATA["mtsd_100"]
+DATASET_METADATA["synthetic_100"] = DATASET_METADATA["mtsd_100"]
+
 # =========================================================================== #
 
-# TODO: DEPRECATED
+# DEPRECATED: Kept for reference
 
 # MTSD_VAL_LABEL_COUNTS_DICT = {
 #     "circle": 2999,

@@ -14,9 +14,9 @@ from tqdm import tqdm
 
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
+    DATASET_METADATA,
     DEFAULT_PATH_MTSD_LABEL,
     LABEL_LIST,
-    DATASET_METADATA,
     OLD_TO_NEW_LABELS,
     PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
