@@ -45,7 +45,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
             config_base: Base config.
         """
         super().__init__(cfg, **kwargs)
-        metadata = DATASET_METADATA["mtsd_no_color"]
+        metadata = DATASET_METADATA[config_base["dataset"]]
         class_names = metadata["class_name"]
         hw_ratio_dict = metadata["hw_ratio"]
         shape_dict = metadata["shape"]
@@ -74,8 +74,9 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 obj_width_px=config_base["obj_size_px"][1],
                 pad_to_square=False,
             )
+            syn_obj_name = metadata["syn_obj_name"][obj_class]
             syn_obj_path = os.path.join(
-                DEFAULT_SYN_OBJ_DIR, "synthetic", f"{class_name}.png"
+                DEFAULT_SYN_OBJ_DIR, "synthetic", f"{syn_obj_name}.png"
             )
             syn_obj = torchvision.io.read_image(
                 syn_obj_path, mode=torchvision.io.ImageReadMode.RGB

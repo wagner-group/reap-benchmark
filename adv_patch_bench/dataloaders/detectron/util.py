@@ -26,6 +26,7 @@ from adv_patch_bench.dataloaders.detectron import (
     reap,
     reap_dataset_mapper,
 )
+from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import DATASETS
 
@@ -177,7 +178,7 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
         config_base: Dictionary of eval config.
     """
     dataset: str = config_base["dataset"]
-    base_dataset: str = dataset.split("_")[0]
+    base_dataset: str = parse_dataset_name(dataset)[0]
     # Get data path
     base_data_path: str = os.path.expanduser(config_base["data_dir"])
 
@@ -206,42 +207,3 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
         )
     else:
         raise NotImplementedError(f"Dataset {base_dataset} is not supported!")
-
-
-def parse_dataset_name(dataset_name: str) -> list[str, bool, int]:
-    """Parse dataset name to get base dataset name and modifiers."""
-    base_dataset = dataset_name.split("-")[0]
-    dataset_modifiers: list[str] = []
-    if "-" in dataset_name:
-        dataset_modifiers = dataset_name.split("-")[1:]
-    # Whether sign color is used for labels. Defaults to False
-    use_color = "color" in dataset_modifiers
-    # Whether to use original MTSD labels instead of REAP annotations
-    use_orig_labels = "orig" in dataset_modifiers
-    # Whether to ignore background class (last class index) and not include it
-    # in dataset dict and targets
-    ignore_bg_class = "nobg" in dataset_modifiers
-    # Whether to skip images with no object of interest
-    skip_bg_only = "skipbg" in dataset_modifiers
-
-    # Get num classes like mtsd-100, reap-100, etc.
-    num_classes = None
-    if "100" in dataset_modifiers:
-        num_classes = 100
-
-    # Get split
-    split = None
-    for split_name in ("train", "val", "test", "combined"):
-        if split_name in dataset_modifiers:
-            split = split_name
-            break
-
-    return (
-        base_dataset,
-        use_color,
-        use_orig_labels,
-        ignore_bg_class,
-        skip_bg_only,
-        num_classes,
-        split,
-    )

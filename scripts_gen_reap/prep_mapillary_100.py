@@ -200,7 +200,7 @@ def main():
     anno.to_csv(BASE_REAP_ANNO_PATH, index=False)
 
     # Create dir for new modified dataset
-    label_path = os.path.join(DATA_DIR, f"mapillary_{DATASET_MODIFIER}")
+    label_path = os.path.join(DATA_DIR, f"labels_{DATASET_MODIFIER}")
     os.makedirs(label_path, exist_ok=True)
 
     for img_id, obj_idx in tqdm(filename_to_idx.items()):
@@ -241,7 +241,7 @@ if __name__ == "__main__":
 
     # Lazy arguments (data)
     BASE_REAP_ANNO_PATH = f"{BASE_PATH}/reap_annotations.csv"
-    SPLIT = "training"  # "training" or "validation"
+    SPLIT = "validation"  # TODO(user): "training" or "validation"
     DATA_DIR = os.path.expanduser(f"~/data/mapillary_vistas/{SPLIT}/")
     MIN_AREA = 1000  # Minimum area of traffic signs to consider in pixels
     MAX_NUM_IMGS = 1e9  # Set to small number for debugging

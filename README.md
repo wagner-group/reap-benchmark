@@ -98,8 +98,8 @@ ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/val val
 
 ```bash
 # Dataset should be extracted to ~/data/mapillary_vistas (use symlink if needed)
-CUDA_VISIBLE_DEVICES=0 python prep_mapillary.py --split train --resume PATH_TO_CLASSIFIER
-CUDA_VISIBLE_DEVICES=0 python prep_mapillary.py --split val --resume PATH_TO_CLASSIFIER
+python prep_mapillary.py --split train --resume PATH_TO_CLASSIFIER
+python prep_mapillary.py --split val --resume PATH_TO_CLASSIFIER
 
 # Combined train and val partition into "combined"
 BASE_DIR=~/data/mapillary_vistas

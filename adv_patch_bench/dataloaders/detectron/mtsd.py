@@ -12,7 +12,7 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from tqdm import tqdm
 
-from adv_patch_bench.dataloaders.detectron.util import parse_dataset_name
+from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DATASET_METADATA,
@@ -37,6 +37,7 @@ def _readlines(path: str) -> List:
 def get_mtsd_anno(base_path: str, dataset_name: str) -> Dict[str, Any]:
     """Get MTSD annotation and metadata needed for loading dataset."""
     class_names: list[str] = LABEL_LIST[dataset_name]
+    bg_idx = len(class_names) - 1
     label_path: pathlib.Path = pathlib.Path(base_path) / "annotations"
     similarity_df_csv_path: str = PATH_DUPLICATE_FILES
     duplicate_files_df: pd.DataFrame = pd.read_csv(similarity_df_csv_path)
@@ -56,9 +57,11 @@ def get_mtsd_anno(base_path: str, dataset_name: str) -> Dict[str, Any]:
             # Use original MTSD labels ("orig" mode)
             mtsd_label_to_class_index[row["sign"]] = idx
         elif "100" in dataset_name:
-            mtsd_label_to_class_index[row["sign"]] = class_names.index(
-                row["sign"]
-            )
+            try:
+                label_idx = class_names.index(row["sign"])
+            except ValueError:
+                label_idx = bg_idx
+            mtsd_label_to_class_index[row["sign"]] = label_idx
         elif new_target in class_names:
             if "no_color" in dataset_name:
                 # Use shape MTSD labels ("no_color" mode)

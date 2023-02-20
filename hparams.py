@@ -52,16 +52,16 @@ RELIGHT_METHODS = [
 
 # Available dataset and class labels
 DATASETS = (
-    "mtsd_orig",
-    "mtsd_no_color",
-    "mtsd_color",
-    "mapillary_no_color",
-    "mapillary_color",
+    "mtsd-orig",
+    "mtsd-no_color",
+    "mtsd-color",
+    "mapillary-no_color",
+    "mapillary-color",
     "reap",
     "synthetic",
-    "mtsd_100",
-    "reap_100",
-    "synthetic_100",
+    "mtsd-100",
+    "reap-100",
+    "synthetic-100",
 )
 
 # Traffic sign classes with colors
@@ -212,17 +212,17 @@ MTSD100_TO_SHAPE = {
 MTSD100_LABELS = list(MTSD100_TO_SHAPE.keys())
 
 LABEL_LIST = {
-    "mtsd_color": TS_COLOR_LABEL_LIST,
-    "mapillary_color": TS_COLOR_LABEL_LIST,
-    "mtsd_no_color": TS_NO_COLOR_LABEL_LIST,
-    "mapillary_no_color": TS_NO_COLOR_LABEL_LIST,
-    "mtsd_100": MTSD100_LABELS,
+    "mtsd-color": TS_COLOR_LABEL_LIST,
+    "mapillary-color": TS_COLOR_LABEL_LIST,
+    "mtsd-no_color": TS_NO_COLOR_LABEL_LIST,
+    "mapillary-no_color": TS_NO_COLOR_LABEL_LIST,
+    "mtsd-100": MTSD100_LABELS,
 }
-LABEL_LIST["reap"] = LABEL_LIST["mapillary_no_color"]
-LABEL_LIST["synthetic"] = LABEL_LIST["mapillary_no_color"]
-LABEL_LIST["reap_100"] = LABEL_LIST["mtsd_100"]
-LABEL_LIST["synthetic_100"] = LABEL_LIST["mtsd_100"]
-LABEL_LIST["mapillary_100"] = LABEL_LIST["mtsd_100"]
+LABEL_LIST["reap"] = LABEL_LIST["mapillary-no_color"]
+LABEL_LIST["synthetic"] = LABEL_LIST["mapillary-no_color"]
+LABEL_LIST["reap-100"] = LABEL_LIST["mtsd-100"]
+LABEL_LIST["synthetic-100"] = LABEL_LIST["mtsd-100"]
+LABEL_LIST["mapillary-100"] = LABEL_LIST["mtsd-100"]
 
 # Get list of shape (no size, no color)
 TS_SHAPE_LIST = list(
@@ -233,17 +233,17 @@ TS_SHAPE_LIST = list(
 
 # Number of classes in each dataset
 NUM_CLASSES = {
-    "mtsd_orig": 401,
-    "mtsd_no_color": len(TS_NO_COLOR_LABEL_LIST),
-    "mtsd_color": len(TS_COLOR_LABEL_LIST),
-    "mapillary_no_color": len(TS_NO_COLOR_LABEL_LIST),
-    "mapillary_color": len(TS_COLOR_LABEL_LIST),
-    "mtsd_100": len(MTSD100_LABELS),
+    "mtsd-orig": 401,
+    "mtsd-no_color": len(TS_NO_COLOR_LABEL_LIST),
+    "mtsd-color": len(TS_COLOR_LABEL_LIST),
+    "mapillary-no_color": len(TS_NO_COLOR_LABEL_LIST),
+    "mapillary-color": len(TS_COLOR_LABEL_LIST),
+    "mtsd-100": len(MTSD100_LABELS),
 }
-NUM_CLASSES["reap"] = NUM_CLASSES["mapillary_no_color"]
-NUM_CLASSES["synthetic"] = NUM_CLASSES["mapillary_no_color"]
-NUM_CLASSES["reap_100"] = NUM_CLASSES["mtsd_100"]
-NUM_CLASSES["synthetic_100"] = NUM_CLASSES["mtsd_100"]
+NUM_CLASSES["reap"] = NUM_CLASSES["mapillary-no_color"]
+NUM_CLASSES["synthetic"] = NUM_CLASSES["mapillary-no_color"]
+NUM_CLASSES["reap-100"] = NUM_CLASSES["mtsd-100"]
+NUM_CLASSES["synthetic-100"] = NUM_CLASSES["mtsd-100"]
 
 # =========================================================================== #
 
@@ -288,38 +288,44 @@ _MPL_NO_COLOR_RATIO = {
 }
 
 DATASET_METADATA: Dict[str, Dict[str, Any]] = {
-    "mapillary_no_color": {
+    "mapillary-no_color": {
         "size_mm": _MPL_NO_COLOR_SIZE_MM,
         "hw_ratio": _MPL_NO_COLOR_RATIO,
         "shape": _MPL_NO_COLOR_SHAPE,
         "class_name": dict(enumerate(TS_NO_COLOR_LABEL_LIST)),
     }
 }
-DATASET_METADATA["reap"] = DATASET_METADATA["mapillary_no_color"]
-DATASET_METADATA["synthetic"] = DATASET_METADATA["mapillary_no_color"]
-DATASET_METADATA["mtsd_no_color"] = DATASET_METADATA["mapillary_no_color"]
+DATASET_METADATA["mapillary-no_color"]["syn_obj_name"] = DATASET_METADATA[
+    "mapillary-no_color"
+]["class_name"]
+DATASET_METADATA["reap"] = DATASET_METADATA["mapillary-no_color"]
+DATASET_METADATA["synthetic"] = DATASET_METADATA["mapillary-no_color"]
+DATASET_METADATA["mtsd-no_color"] = DATASET_METADATA["mapillary-no_color"]
 
 # Get metadata for 100-class MTSD/REAP/Synthetic
 _MTSD100_SIZE_MM = {
     i: _MPL_NO_COLOR_CLS_TO_SIZE_MM[v]
-    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items()) if k != "other"
+    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items())
+    if k != "other"
 }
 _MTSD100_SIZE_RATIO = {
     i: size[0] / size[1] for i, size in enumerate(_MTSD100_SIZE_MM.values())
 }
 _MTSD100_SHAPE = {
     i: _MPL_NO_COLOR_CLS_TO_SHAPE[v]
-    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items()) if k != "other"
+    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items())
+    if k != "other"
 }
-DATASET_METADATA["mtsd_100"] = {
+DATASET_METADATA["mtsd-100"] = {
     "size_mm": _MTSD100_SIZE_MM,
     "hw_ratio": _MTSD100_SIZE_RATIO,
     "shape": _MTSD100_SHAPE,
     "class_name": dict(enumerate(MTSD100_LABELS)),
+    "syn_obj_name": dict(enumerate(MTSD100_TO_SHAPE.values())),
 }
-DATASET_METADATA["mapillary_100"] = DATASET_METADATA["mtsd_100"]
-DATASET_METADATA["reap_100"] = DATASET_METADATA["mtsd_100"]
-DATASET_METADATA["synthetic_100"] = DATASET_METADATA["mtsd_100"]
+DATASET_METADATA["mapillary-100"] = DATASET_METADATA["mtsd-100"]
+DATASET_METADATA["reap-100"] = DATASET_METADATA["mtsd-100"]
+DATASET_METADATA["synthetic-100"] = DATASET_METADATA["mtsd-100"]
 
 # =========================================================================== #
 

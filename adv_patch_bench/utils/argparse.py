@@ -18,7 +18,6 @@ from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
 from omegaconf import OmegaConf
 
-from adv_patch_bench.dataloaders.detectron.util import parse_dataset_name
 from hparams import (
     DATASET_METADATA,
     DEFAULT_SYN_OBJ_DIR,
@@ -598,7 +597,7 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
         )
 
     # Verify dataset
-    if dataset.split("_")[0] not in allowed_datasets:
+    if dataset.split("-")[0] not in allowed_datasets:
         raise ValueError(
             f"dataset must be in {allowed_datasets}, but it is {dataset}!"
         )
@@ -1082,6 +1081,45 @@ def setup_detectron_cfg(
         default_setup(cfg, argparse.Namespace(**config_base))
 
     return cfg
+
+
+def parse_dataset_name(dataset_name: str) -> list[str, bool, int]:
+    """Parse dataset name to get base dataset name and modifiers."""
+    base_dataset = dataset_name.split("-")[0]
+    dataset_modifiers: list[str] = []
+    if "-" in dataset_name:
+        dataset_modifiers = dataset_name.split("-")[1:]
+    # Whether sign color is used for labels. Defaults to False
+    use_color = "color" in dataset_modifiers
+    # Whether to use original MTSD labels instead of REAP annotations
+    use_orig_labels = "orig" in dataset_modifiers
+    # Whether to ignore background class (last class index) and not include it
+    # in dataset dict and targets
+    ignore_bg_class = "nobg" in dataset_modifiers
+    # Whether to skip images with no object of interest
+    skip_bg_only = "skipbg" in dataset_modifiers
+
+    # Get num classes like mtsd-100, reap-100, etc.
+    num_classes = None
+    if "100" in dataset_modifiers:
+        num_classes = 100
+
+    # Get split
+    split = None
+    for split_name in ("train", "val", "test", "combined"):
+        if split_name in dataset_modifiers:
+            split = split_name
+            break
+
+    return (
+        base_dataset,
+        use_color,
+        use_orig_labels,
+        ignore_bg_class,
+        skip_bg_only,
+        num_classes,
+        split,
+    )
 
 
 def setup_yolo_test_args(config, other_sign_class):

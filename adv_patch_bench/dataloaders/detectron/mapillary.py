@@ -13,7 +13,7 @@ from detectron2.structures import BoxMode
 from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.dataloaders.detectron.util import parse_dataset_name
+from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample, SizePx
 from hparams import DATASET_METADATA, LABEL_LIST, RELIGHT_METHODS
 
