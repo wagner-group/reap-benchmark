@@ -17,6 +17,7 @@ import torch.cuda.amp as amp
 import torch.nn as nn
 from torchvision.utils import save_image
 
+import adv_patch_bench.utils.docker_bug_fixes  # pylint: disable=unused-import
 from adv_patch_bench.dataloaders.classification_loader import load_dataset
 from adv_patch_bench.models import build_classifier
 from adv_patch_bench.utils.distributed import (

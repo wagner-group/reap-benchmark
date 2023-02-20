@@ -29,8 +29,8 @@ CONF_THRES_6 = [0.405,0.382,0.692,0.327,0.266,0.503,0.245,0.499,0.365,0.606,0.50
 SYN_CONF_THRES_6 = [0.776,0.673,0.738,0.465,0.148,0.742,0.488,0.647,0.603,0.817,0.817,0.0]
 CONF_THRES_7 = [0.485,0.293,0.394,0.323,0.331,0.481,0.299,0.267,0.148,0.398,0.451,0.0]
 SYN_CONF_THRES_7 = [0.423,0.036,0.152,0.147,0.052,0.436,0.367,0.221,0.173,0.264,0.786,0.0]
-CONF_THRES_8 = [0.485,0.293,0.394,0.323,0.331,0.481,0.299,0.267,0.148,0.398,0.451,0.0]  # TODO
-SYN_CONF_THRES_8 = []
+# CONF_THRES_8 = [0.485,0.293,0.394,0.323,0.331,0.481,0.299,0.267,0.148,0.398,0.451,0.0]  # TODO
+# SYN_CONF_THRES_8 = []
 iou_idx = 0  # 0.5
 
 _TRANSFORM_PARAMS: List[str] = [
@@ -144,9 +144,7 @@ def main(args):
         "6-True": SYN_CONF_THRES_6,
         "7-False": CONF_THRES_7,
         "7-True": SYN_CONF_THRES_7,
-        "8-False": CONF_THRES_8,
-        "8-True": SYN_CONF_THRES_8,
-    }[conf_id]
+    }.get(conf_id)
 
     df_rows = {}
     gt_scores = [{}, {}]
@@ -183,11 +181,22 @@ def main(args):
             for result_path in result_paths:
 
                 result_path = str(result_path)
-                with open(result_path, "rb") as f:
-                    results = pickle.load(f)
+                with open(result_path, "rb") as file:
+                    results = pickle.load(file)
 
                 if "obj_class" not in results:
                     continue
+
+                if conf_thres is None:
+                    # Get conf_thres from metadata
+                    weights = results["weights"].split("/")[-1]
+                    metadata_path = "/".join(results["weights"].split("/")[:-1])
+                    dataset = "syn" if is_syn else "reap"
+                    with open(metadata_path + "/metadata.pkl", "rb") as file:
+                        metadata = pickle.load(file)
+                    import pdb
+                    pdb.set_trace()
+                    conf_thres = metadata[weights][dataset]["conf_thres"]
 
                 # Add timestamp
                 # time = result_path.split("_")[-1].split(".pkl")[0]
