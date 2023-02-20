@@ -59,6 +59,9 @@ DATASETS = (
     "mapillary_color",
     "reap",
     "synthetic",
+    "mtsd_100",
+    "reap_100",
+    "synthetic_100",
 )
 
 # Traffic sign classes with colors
@@ -204,8 +207,9 @@ MTSD100_TO_SHAPE = {
     "warning--turn-right--g1": "diamond-l",
     "warning--winding-road-first-left--g1": "diamond-l",
     "warning--winding-road-first-right--g1": "diamond-l",
+    "other": "other",
 }
-MTSD100_LABELS = list(MTSD100_TO_SHAPE.keys()) + ["other"]
+MTSD100_LABELS = list(MTSD100_TO_SHAPE.keys())
 
 LABEL_LIST = {
     "mtsd_color": TS_COLOR_LABEL_LIST,
@@ -218,6 +222,7 @@ LABEL_LIST["reap"] = LABEL_LIST["mapillary_no_color"]
 LABEL_LIST["synthetic"] = LABEL_LIST["mapillary_no_color"]
 LABEL_LIST["reap_100"] = LABEL_LIST["mtsd_100"]
 LABEL_LIST["synthetic_100"] = LABEL_LIST["mtsd_100"]
+LABEL_LIST["mapillary_100"] = LABEL_LIST["mtsd_100"]
 
 # Get list of shape (no size, no color)
 TS_SHAPE_LIST = list(
@@ -294,16 +299,17 @@ DATASET_METADATA["reap"] = DATASET_METADATA["mapillary_no_color"]
 DATASET_METADATA["synthetic"] = DATASET_METADATA["mapillary_no_color"]
 DATASET_METADATA["mtsd_no_color"] = DATASET_METADATA["mapillary_no_color"]
 
+# Get metadata for 100-class MTSD/REAP/Synthetic
 _MTSD100_SIZE_MM = {
     i: _MPL_NO_COLOR_CLS_TO_SIZE_MM[v]
-    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items())
+    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items()) if k != "other"
 }
 _MTSD100_SIZE_RATIO = {
     i: size[0] / size[1] for i, size in enumerate(_MTSD100_SIZE_MM.values())
 }
 _MTSD100_SHAPE = {
     i: _MPL_NO_COLOR_CLS_TO_SHAPE[v]
-    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items())
+    for i, (k, v) in enumerate(MTSD100_TO_SHAPE.items()) if k != "other"
 }
 DATASET_METADATA["mtsd_100"] = {
     "size_mm": _MTSD100_SIZE_MM,

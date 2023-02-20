@@ -13,6 +13,7 @@ from detectron2.structures import BoxMode
 from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
+from adv_patch_bench.dataloaders.detectron.util import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample, SizePx
 from hparams import DATASET_METADATA, LABEL_LIST, RELIGHT_METHODS
 
@@ -208,8 +209,7 @@ def get_mapillary_dict(
 
 def register_mapillary(
     base_path: str = "~/data/",
-    use_color: bool = False,
-    ignore_bg_class: bool = False,
+    dataset_name: str = "mapillary",
     anno_df: pd.DataFrame | None = None,
     img_size: SizePx | None = None,
 ) -> None:
@@ -217,9 +217,8 @@ def register_mapillary(
 
     Args:
         base_path: Base path to dataset. Defaults to "~/data/".
-        use_color: Whether color is used as part of labels. Defaults to False.
-        ignore_bg_class: Whether to ignore background class (last class index).
-            Defaults to False.
+        dataset_name: Full name of the dataset with modifiers (e.g.,
+            mapillary-color-train). Defaults to "mapillary".
         anno_df: Annotation DataFrame. If specified, only samples present in
             anno_df will be sampled.
         img_size: Desired image size (height, width). Note that images are not
@@ -227,18 +226,25 @@ def register_mapillary(
             DatasetMapper is not called properly, bbox and keypoints may be
             wrong. Defaults to None.
     """
-    color: str = "color" if use_color else "no_color"
-    dataset: str = f"mapillary_{color}"
-    data_path = os.path.join(base_path, "mapillary_vistas", color)
+    _, use_color, _, ignore_bg_class, _, _, split = parse_dataset_name(
+        dataset_name
+    )
+    if split is not None:
+        dataset_name = "-".join(dataset_name.split("-")[:-1])
 
-    class_names: List[str] = LABEL_LIST[dataset]
+    # TODO: Need new dataset name for 100
+    data_path = os.path.join(
+        base_path, "mapillary_vistas", "color" if use_color else "no_color"
+    )
+
+    class_names: List[str] = LABEL_LIST[dataset_name]
     bg_class: int = len(class_names) - 1
     thing_classes: List[str] = class_names
     if ignore_bg_class:
         thing_classes = thing_classes[:-1]
 
     for split in _ALLOWED_SPLITS:
-        dataset_with_split: str = f"mapillary_{color}_{split}"
+        dataset_with_split: str = f"{dataset_name}_{split}"
         DatasetCatalog.register(
             dataset_with_split,
             lambda s=split: get_mapillary_dict(
@@ -256,6 +262,6 @@ def register_mapillary(
             keypoint_flip_map=[
                 (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
             ],
-            obj_dim_dict=DATASET_METADATA[f"mapillary_{color}"],
+            obj_dim_dict=DATASET_METADATA[dataset_name],
             bg_class=bg_class,
         )

@@ -39,7 +39,7 @@ def get_reap_dict(
 
 def register_reap(
     base_path: str = "~/data/",
-    synthetic: bool = False,
+    dataset_name: str = "reap",
     anno_df: pd.DataFrame | None = None,
     img_size: SizePx | None = None,
 ) -> None:
@@ -47,7 +47,7 @@ def register_reap(
 
     Args:
         base_path: Base path to dataset. Defaults to "./data/".
-        synthetic: Whether to use synthetic version. Defaults to False.
+        dataset_name: Full dataset name. Defaults to "reap".
         anno_df: Annotation DataFrame. If specified, only samples present in
             anno_df will be sampled.
         img_size: Desired image size (height, width). Note that images are not
@@ -55,7 +55,6 @@ def register_reap(
             DatasetMapper is not called properly, bbox and keypoints may be
             wrong. Defaults to None.
     """
-    dataset_name: str = "synthetic" if synthetic else "reap"
     class_names: list[str] = LABEL_LIST[dataset_name]
     # Get index of background or "other" class
     bg_class: int = len(class_names) - 1
@@ -75,6 +74,6 @@ def register_reap(
         thing_classes=class_names,
         keypoint_names=[f"p{i}" for i in range(_NUM_KEYPOINTS)],
         keypoint_flip_map=[(f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)],
-        obj_dim_dict=DATASET_METADATA["reap"],
+        obj_dim_dict=DATASET_METADATA[dataset_name],
         bg_class=bg_class,
     )

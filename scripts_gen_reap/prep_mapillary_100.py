@@ -3,15 +3,14 @@
 import argparse
 import json
 import os
-from os import listdir
-from os.path import isfile, join
 
 import numpy as np
 import torch
-import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
+from torch.backends import cudnn
+from torchvision.transforms import InterpolationMode
 from tqdm.auto import tqdm
 
 from adv_patch_bench.dataloaders.reap_util import load_annotation_df
@@ -25,17 +24,25 @@ def classify(
     device: str = "cuda",
 ):
     """Classify objects to get pseudo-labels."""
-    img_path = join(DATA_DIR, "images")
+    img_path = os.path.join(DATA_DIR, "images")
 
-    filenames = [f for f in listdir(img_path) if isfile(join(img_path, f))]
+    filenames = [
+        filename
+        for filename in os.listdir(img_path)
+        if os.path.isfile(os.path.join(img_path, filename))
+    ]
     np.random.shuffle(filenames)
 
-    objs, resized_patches, ids = [], [], []
+    ids, bboxes, predicted_labels = [], [], []
+    filename_to_idx = {}
+    obj_idx = 0
+    begin = 0
+
     for filename in tqdm(filenames):
         # Read each image file and crop the traffic signs
         img_id = filename.split(".")[0]
         segment = panoptic_per_image_id[img_id]["segments_info"]
-        img_pil = Image.open(join(img_path, filename))
+        img_pil = Image.open(os.path.join(img_path, filename))
         img = np.array(img_pil)
         img_height, img_width, _ = img.shape
 
@@ -43,6 +50,8 @@ def classify(
         img_padded, pad_size = pad_image(
             img, pad_mode="edge", return_pad_size=True
         )
+        filename_to_idx[img_id] = []
+        resized_patches = []
 
         # Crop the specified object
         for cropped_obj in segment:
@@ -67,11 +76,15 @@ def classify(
             # avoid cutting into the sign
             size = max(width, height)
             xpad, ypad = int((size - width) / 2), int((size - height) / 2)
-            xmin += pad_size - xpad
-            ymin += pad_size - ypad
+            xmin = max(xmin + pad_size - xpad, 0)
+            ymin = max(ymin + pad_size - ypad, 0)
             xmax, ymax = xmin + size, ymin + size
             cropped_patch = img_padded[ymin:ymax, xmin:xmax]
-            objs.append(cropped_patch)
+            if any(s == 0 for s in cropped_patch.shape):
+                print("WARNING: Cropped patch has zero dimension!")
+                continue
+            filename_to_idx[img_id].append(obj_idx)
+            obj_idx += 1
             ids.append(
                 {
                     "img_id": img_id,
@@ -84,30 +97,38 @@ def classify(
                 TF.resize(
                     cropped_patch,
                     (CLF_IMG_SIZE, CLF_IMG_SIZE),
-                    interpolation=Image.BICUBIC,
+                    interpolation=InterpolationMode.BICUBIC,
                 )
             )
+            bboxes.append(
+                [xmin, ymin, xmin + width, ymin + height, img_width, img_height]
+            )
+            # DEBUG: Visualize cropped signs
+            # from torchvision.utils import save_image
+            # import pdb
+            # pdb.set_trace()
+            # save_image(resized_patches[-1].float() / 255, "tmp.png")
 
-        if len(objs) > MAX_NUM_IMGS:
-            break
+        if not resized_patches:
+            continue
 
-    # Classify all patches
-    resized_patches = torch.cat(resized_patches, dim=0)
-    num_patches = len(objs)
-    num_batches = int(np.ceil(num_patches / CLF_BATCH_SIZE))
-    predicted_labels = torch.zeros(len(objs))
-    with torch.no_grad():
-        for i in tqdm(range(num_batches)):
-            begin, end = i * CLF_BATCH_SIZE, (i + 1) * CLF_BATCH_SIZE
-            logits = model(resized_patches[begin:end].to(device))
+        # Classify reseized patches
+        resized_patches = torch.cat(resized_patches, dim=0)
+        with torch.no_grad():
+            logits = model(resized_patches.to(device))
             outputs = logits.argmax(1)
             confidence = F.softmax(logits, dim=1)
             # If confidene is below threshold, set label to background
             outputs[confidence.max(1)[0] < CONF_THRES] = CLF_NUM_CLASSES - 1
-            predicted_labels[begin:end] = outputs
+            predicted_labels.append(outputs.cpu())
+        begin += len(resized_patches)
 
+        if begin > MAX_NUM_IMGS:
+            break
+
+    predicted_labels = torch.cat(predicted_labels, dim=0)
     assert len(predicted_labels) == len(ids)
-    return predicted_labels, ids
+    return predicted_labels, ids, filename_to_idx, bboxes
 
 
 def main():
@@ -120,9 +141,6 @@ def main():
 
     # Load trained model
     model, _, _ = build_classifier(args)
-
-    # with open('/data/shared/mapillary_vistas/config_v2.0.json') as config_file:
-    #     config = json.load(config_file)
 
     # Read in panoptic file
     panoptic_json_path = f"{DATA_DIR}/v2.0/panoptic/panoptic_2020.json"
@@ -140,39 +158,91 @@ def main():
         panoptic_category_per_id[category["id"]] = category
 
     # Get predicted labels from model
-    predicted_labels, ids = classify(
+    predicted_labels, ids, filename_to_idx, bboxes = classify(
         model, panoptic_per_image_id, device=device
     )
 
     # Merge predicted labels with current REAP annotations
     anno = load_annotation_df(BASE_REAP_ANNO_PATH, keep_others=True)
-    new_col = f"{DATASET_NAME}_label"
+    new_col = f"{DATASET_MODIFIER}_label"
     anno[new_col] = "other"
 
+    num_wrong = 0
     for anno_id, label in zip(ids, predicted_labels):
         img_id, obj_id = anno_id["img_id"], anno_id["obj_id"]
-        anno.loc[
-            (anno["object_id"] == obj_id)
-            & (anno["filename"] == img_id + ".jpg"),
-            new_col,
-        ] = LABEL_LIST[DATASET_NAME][int(label)]
+        new_label = LABEL_LIST[f"mapillary_{DATASET_MODIFIER}"][int(label)]
+        if DATASET_MODIFIER == "100":
+            new_shape = MTSD100_TO_SHAPE[new_label]
+        else:
+            raise NotImplementedError(
+                f"Invalid DATASET_MODIFIER: {DATASET_MODIFIER}!"
+            )
+
+        cond = (anno["object_id"] == obj_id) & (
+            anno["filename"] == img_id + ".jpg"
+        )
+
+        # If new predicted shape is different from the original shape which is
+        # more trustworthy, then set the new label to background
+        if anno.loc[cond, "final_shape"].empty:
+            continue
+        if new_shape != anno.loc[cond, "final_shape"].item():
+            num_wrong += 1
+            print(
+                f"=> {num_wrong} total wrong predictions ({new_shape} "
+                f"[{new_label}] vs {anno.loc[cond, 'final_shape'].item()})!"
+            )
+            new_label = "other"
+
+        anno.loc[cond, new_col] = new_label
 
     # Save new annotations
     anno.to_csv(BASE_REAP_ANNO_PATH, index=False)
+
+    # Create dir for new modified dataset
+    label_path = os.path.join(DATA_DIR, f"mapillary_{DATASET_MODIFIER}")
+    os.makedirs(label_path, exist_ok=True)
+
+    for img_id, obj_idx in tqdm(filename_to_idx.items()):
+        # Skip image with no valid objects
+        if len(obj_idx) == 0:
+            continue
+
+        obj_target = ""
+        for idx in obj_idx:
+            # Write label in Detectron2 format
+            class_label = int(predicted_labels[idx].item())
+            obj_id = ids[idx]["obj_id"]
+            assert img_id == ids[idx]["img_id"], (
+                "Image ID mismatch! Sanity check failed!"
+            )
+            xmin, ymin, xmax, ymax, img_width, img_height = bboxes[idx]
+            obj_target += (
+                f"{class_label:d},{xmin},{ymin},{xmax},{ymax},{img_width},"
+                f"{img_height},{obj_id}\n"
+            )
+
+        if obj_target:
+            save_label_path = os.path.join(label_path, img_id + ".txt")
+            with open(save_label_path, "w", encoding="utf-8") as file:
+                file.write(obj_target)
 
 
 if __name__ == "__main__":
     BASE_PATH = os.path.expanduser("~/reap-benchmark/")
 
-    # Lazy arguments
+    # Lazy arguments (classifier)
     MODEL_PATH = f"{BASE_PATH}/results/classifier_mtsd-100/checkpoint_best.pt"
     ARCH = "convnext_small_in22k"
-    DATASET_NAME = "reap_100"
+    DATASET_MODIFIER = "100"
     CLF_NUM_CLASSES = 100
     CLF_IMG_SIZE = 224
-    CLF_BATCH_SIZE = 500
+    CLF_BATCH_SIZE = 32
+
+    # Lazy arguments (data)
     BASE_REAP_ANNO_PATH = f"{BASE_PATH}/reap_annotations.csv"
-    DATA_DIR = os.path.expanduser("~/data/mapillary_vistas/training/")
+    SPLIT = "training"  # "training" or "validation"
+    DATA_DIR = os.path.expanduser(f"~/data/mapillary_vistas/{SPLIT}/")
     MIN_AREA = 1000  # Minimum area of traffic signs to consider in pixels
     MAX_NUM_IMGS = 1e9  # Set to small number for debugging
     LABEL_TO_CLF = 95  # Class id of traffic signs on Vistas
@@ -181,6 +251,7 @@ if __name__ == "__main__":
 
     # Hacky way of loading hyperparameters and metadata
     LABEL_LIST: dict[str, list[str]] = {}
+    MTSD100_TO_SHAPE: dict[str, str] = {}
     with open(f"{BASE_PATH}/hparams.py", "r", encoding="utf-8") as metadata:
         source = metadata.read()
     exec(source)  # pylint: disable=exec-used

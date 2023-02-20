@@ -18,6 +18,7 @@ from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
 from omegaconf import OmegaConf
 
+from adv_patch_bench.dataloaders.detectron.util import parse_dataset_name
 from hparams import (
     DATASET_METADATA,
     DEFAULT_SYN_OBJ_DIR,
@@ -675,32 +676,28 @@ def _update_dataset_name(
     """
     config_base: Dict[str, Any] = config["base"]
     dataset: str = config_base["dataset"]
-    tokens: List[str] = dataset.split("-")
-    if dataset in ("reap", "synthetic"):
+    # <BASE_DATASET>-<MODIFIER>-<SPLIT>: e.g., mtsd-no_color-train
+    _, use_color, _, _, _, _, split = parse_dataset_name(dataset)
+    dataset_no_split = dataset
+    if split is not None:
+        dataset_no_split = "-".join(dataset.split("-")[:-1])
+
+    if any(name in dataset for name in ("reap", "synthetic")):
         config_base["use_color"] = False
-        config_base["synthetic"] = dataset == "synthetic"
+        config_base["synthetic"] = "synthetic" in dataset
         # REAP benchmark only uses annotated signs. Synthetic data use both.
         config_base["annotated_signs_only"] = not config_base["synthetic"]
         split = "combined"
     else:
-        assert 1 <= len(tokens) <= 3, f"Invalid dataset: {dataset}!"
-        dataset = tokens[0]
-        split = "val" if is_train else "test"
-        color = "no_color"
-        for token in tokens[1:]:
-            if "color" in token:
-                color = token
-            else:
-                split = token
-        if dataset in ("mapillary", "mtsd"):
-            dataset = f"{dataset}_{color}"
+        if split not in ("train", "val", "test", "combined"):
+            split = "train" if is_train else "test"
         config_base["synthetic"] = False
-        config_base["use_color"] = "color" == color
-    config_base["dataset"] = dataset
+        config_base["use_color"] = use_color
+    config_base["dataset"] = dataset_no_split
     config_base["dataset_split"] = split
 
     if config_base["train_dataset"] is None:
-        config_base["train_dataset"] = f"{dataset}_train"
+        config_base["train_dataset"] = f"{dataset_no_split}_train"
 
 
 def _update_split_file(

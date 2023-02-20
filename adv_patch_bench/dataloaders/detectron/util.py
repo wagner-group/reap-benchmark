@@ -134,7 +134,7 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
         Dataset as list of dictionaries.
     """
     dataset: str = config_base["dataset"]
-    base_dataset: str = dataset.split("_")[0]
+    base_dataset: str = dataset.split("-")[0]
     split: str = config_base["dataset_split"]
     base_path: str = os.path.expanduser(config_base["data_dir"])
     # This assumes that dataset has been registered before
@@ -156,9 +156,7 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
     mtsd_anno = {}
     if "mtsd" in dataset:
         # Load additional metadata for MTSD
-        mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(
-            base_path, config_base["use_color"], "orig" in dataset, class_names
-        )
+        mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(base_path, dataset)
 
     data_dict: List[DetectronSample] = _LOAD_DATASET[base_dataset](
         split=split,
@@ -182,7 +180,6 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
     base_dataset: str = dataset.split("_")[0]
     # Get data path
     base_data_path: str = os.path.expanduser(config_base["data_dir"])
-    use_color: bool = config_base["use_color"]
 
     # Load annotation if specified
     anno_df: Optional[pd.DataFrame] = None
@@ -190,28 +187,61 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
         anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
 
     log.info("Registering %s dataset...", base_dataset)
-    if base_dataset in ("reap", "synthetic"):
+    if any(name in base_dataset for name in ("reap", "synthetic")):
         # Our synthetic benchmark is also based on samples in REAP
         reap.register_reap(
             base_path=base_data_path,
-            synthetic=base_dataset == "synthetic",
+            dataset_name=dataset,
             anno_df=anno_df,
             img_size=config_base["img_size"],
         )
     elif base_dataset == "mtsd":
-        mtsd.register_mtsd(
-            base_path=base_data_path,
-            use_color=use_color,
-            use_mtsd_original_labels="orig" in dataset,
-            ignore_bg_class=False,
-        )
+        mtsd.register_mtsd(base_path=base_data_path, dataset_name=dataset)
     elif base_dataset == "mapillary":
         mapillary.register_mapillary(
             base_path=base_data_path,
-            use_color=use_color,
-            ignore_bg_class=False,
+            dataset_name=dataset,
             anno_df=anno_df,
             img_size=config_base["img_size"],
         )
     else:
         raise NotImplementedError(f"Dataset {base_dataset} is not supported!")
+
+
+def parse_dataset_name(dataset_name: str) -> list[str, bool, int]:
+    """Parse dataset name to get base dataset name and modifiers."""
+    base_dataset = dataset_name.split("-")[0]
+    dataset_modifiers: list[str] = []
+    if "-" in dataset_name:
+        dataset_modifiers = dataset_name.split("-")[1:]
+    # Whether sign color is used for labels. Defaults to False
+    use_color = "color" in dataset_modifiers
+    # Whether to use original MTSD labels instead of REAP annotations
+    use_orig_labels = "orig" in dataset_modifiers
+    # Whether to ignore background class (last class index) and not include it
+    # in dataset dict and targets
+    ignore_bg_class = "nobg" in dataset_modifiers
+    # Whether to skip images with no object of interest
+    skip_bg_only = "skipbg" in dataset_modifiers
+
+    # Get num classes like mtsd-100, reap-100, etc.
+    num_classes = None
+    if "100" in dataset_modifiers:
+        num_classes = 100
+
+    # Get split
+    split = None
+    for split_name in ("train", "val", "test", "combined"):
+        if split_name in dataset_modifiers:
+            split = split_name
+            break
+
+    return (
+        base_dataset,
+        use_color,
+        use_orig_labels,
+        ignore_bg_class,
+        skip_bg_only,
+        num_classes,
+        split,
+    )

@@ -1,6 +1,7 @@
+"""Script to prepare Mapillary dataset for training traffic sign detector."""
+
 import argparse
 import json
-import pdb
 import shutil
 from os import listdir, makedirs
 from os.path import expanduser, isfile, join
@@ -8,10 +9,10 @@ from os.path import expanduser, isfile, join
 import numpy as np
 import pandas as pd
 import torch
-import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
+from torch.backends import cudnn
 from tqdm.auto import tqdm
 
 from adv_patch_bench.models import build_classifier
