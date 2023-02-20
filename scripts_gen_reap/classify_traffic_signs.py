@@ -1,6 +1,7 @@
+"""Original script for classifying Mapillary traffic signs by shapes."""
+
 import json
 import os
-import pprint
 from os import listdir
 from os.path import isfile, join
 
@@ -8,17 +9,13 @@ import cv2 as cv
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import scipy
-import seaborn as sns
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 import torchvision.models as models
 import torchvision.transforms.functional as TF
-from matplotlib import cm
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 from skimage.exposure import match_histograms
 from torch.serialization import save
@@ -188,280 +185,260 @@ def show_img_patch(
     np.random.shuffle(filenames)
 
     patches, resized_patches, masks, ids = [], [], [], []
-    with tqdm(total=max_num_imgs) as pbar:
-        for filename in filenames:
-            img_id = filename.split(".")[0]
-            segment = panoptic_per_image_id[img_id]["segments_info"]
-            panoptic = np.array(Image.open(join(label_path, f"{img_id}.png")))
-            img_pil = Image.open(join(img_path, filename))
-            img = np.array(img_pil)
-            img_height, img_width, _ = img.shape
+    for filename in tqdm(filenames):
+        img_id = filename.split(".")[0]
+        segment = panoptic_per_image_id[img_id]["segments_info"]
+        panoptic = np.array(Image.open(join(label_path, f"{img_id}.png")))
+        img_pil = Image.open(join(img_path, filename))
+        img = np.array(img_pil)
+        img_height, img_width, _ = img.shape
 
-            # Pad image to avoid cutting varying shapes due to boundary
-            img_padded, pad_size = pad_image(
-                img, pad_mode="edge", return_pad_size=True
+        # Pad image to avoid cutting varying shapes due to boundary
+        img_padded, pad_size = pad_image(
+            img, pad_mode="edge", return_pad_size=True
+        )
+
+        # Crop the specified object
+        for obj in segment:
+
+            # Check if bounding box is cut off at the image boundary
+            xmin, ymin, width, height = obj["bbox"]
+            is_oob = (
+                (xmin == 0)
+                or (ymin == 0)
+                or ((xmin + width) >= img_width)
+                or ((ymin + height) >= img_height)
             )
 
-            # Crop the specified object
-            for obj in segment:
+            if obj["category_id"] != label or obj["area"] < min_area or is_oob:
+                continue
 
-                # Check if bounding box is cut off at the image boundary
-                xmin, ymin, width, height = obj["bbox"]
-                is_oob = (
-                    (xmin == 0)
-                    or (ymin == 0)
-                    or ((xmin + width) >= img_width)
-                    or ((ymin + height) >= img_height)
-                )
+            # Make sure that bounding box is square and add some padding to
+            # avoid cutting into the sign
+            size = max(width, height)
+            xpad, ypad = int((size - width) / 2), int((size - height) / 2)
+            extra_obj_pad = int(pad * size)
+            size += 2 * extra_obj_pad
+            xmin += pad_size - xpad - extra_obj_pad
+            ymin += pad_size - ypad - extra_obj_pad
+            xmax, ymax = xmin + size, ymin + size
+            patch = img_padded[ymin:ymax, xmin:xmax]
 
-                if (
-                    obj["category_id"] != label
-                    or obj["area"] < min_area
-                    or is_oob
-                ):
-                    continue
+            # Collect mask
+            bool_mask = (panoptic[:, :, 0] == obj["id"]).astype(np.uint8)
+            mask = np.stack(
+                [
+                    bool_mask,
+                ]
+                * 4,
+                axis=-1,
+            )
+            mask *= np.array([0, 255, 0, 127], dtype=np.uint8)
 
-                # Make sure that bounding box is square and add some padding to
-                # avoid cutting into the sign
-                size = max(width, height)
-                xpad, ypad = int((size - width) / 2), int((size - height) / 2)
-                extra_obj_pad = int(pad * size)
-                size += 2 * extra_obj_pad
-                xmin += pad_size - xpad - extra_obj_pad
-                ymin += pad_size - ypad - extra_obj_pad
-                xmax, ymax = xmin + size, ymin + size
-                patch = img_padded[ymin:ymax, xmin:xmax]
+            # # Run corner detection on mask
+            # # blockSize: It is the size of neighbourhood considered for corner detection
+            # block_size = int(size * 0.1)
+            # # ksize: Aperture parameter of the Sobel derivative used
+            # ksize = 3
+            # corners = cv.cornerHarris(bool_mask, block_size, ksize, 0.04)
+            # d_corners = cv.dilate(corners, None)
+            # mask[corners > 0.5 * d_corners.max()] = [255, 0, 0, 255]
 
-                # Collect mask
-                bool_mask = (panoptic[:, :, 0] == obj["id"]).astype(np.uint8)
-                mask = np.stack(
+            # DEBUG
+            # # print(corners.max())
+            # print(corners.reshape(-1)[np.argsort(corners.reshape(-1))[::-1][:10]])
+            # # print(np.sum(corners > 0.5 * corners.max()))
+            # print(count_blobs(corners > 0.5 * corners.max()))
+
+            contours, _ = cv.findContours(
+                bool_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE
+            )
+            # mask = draw_from_contours(mask, contours, color=[0, 0, 255, 255])
+
+            # Find convex hull to (1) combine multiple contours and/or
+            # (2) fix some occlusion
+            cat_contours = np.concatenate(contours, axis=0)
+            hull = cv.convexHull(cat_contours, returnPoints=True)
+            hull_color = (255, 255, 255, 255)
+            mask = cv.drawContours(mask, [hull], -1, hull_color, 1)
+            hull_mask = (mask == np.array(hull_color)).prod(-1)
+            # mask = (1 - hull_mask) * mask + hull_mask * hull_draw
+
+            # Fit polygon to remove some annotation errors and get vertices
+            vertices = detect_polygon(hull)
+            # mask = draw_from_contours(mask, vertices, color=[255, 255, 255, 255])
+            print(vertices)
+
+            # TODO: Check if matches with classifier prediction
+
+            # TODO: if circle, fit ellipse instead
+            hull_draw_points = np.stack(np.where(hull_mask), axis=1)[:, ::-1]
+            ellipse = cv.fitEllipse(hull_draw_points)
+            ellipse_color = (255, 0, 0, 255)
+            mask = cv.ellipse(mask, ellipse, ellipse_color)
+
+            # Get filled ellipse and compute ellipse error
+            ellipse_mask = cv.ellipse(
+                np.zeros_like(bool_mask, dtype=np.float32),
+                ellipse,
+                (1,),
+                thickness=-1,
+            )
+            ellipse_error = (
+                np.abs(ellipse_mask - bool_mask.astype(np.float32)).sum()
+                / bool_mask.sum()
+            )
+
+            # DEBUG: Transform
+            if len(vertices) == 4:
+                sign_height, sign_width = 100, 100
+                canonical = np.zeros((sign_height, sign_width, 3))
+                canonical_mask = np.zeros((sign_height, sign_width, 1))
+                adv_patch = np.random.rand(40, 40, 3)
+                # Histogram matching of the patch and the entire image
+                adv_patch_matched = match_histograms(adv_patch, img) / 255.0
+                canonical[20:60, 40:80, :] = adv_patch_matched
+                canonical_mask[20:60, 40:80, :] = 1
+                src = np.array(
                     [
-                        bool_mask,
-                    ]
-                    * 4,
-                    axis=-1,
+                        [0, 0],
+                        [0, sign_width - 1],
+                        [sign_height - 1, sign_width - 1],
+                        [sign_height - 1, 0],
+                    ],
+                    dtype=np.float32,
                 )
-                mask *= np.array([0, 255, 0, 127], dtype=np.uint8)
-
-                # # Run corner detection on mask
-                # # blockSize: It is the size of neighbourhood considered for corner detection
-                # block_size = int(size * 0.1)
-                # # ksize: Aperture parameter of the Sobel derivative used
-                # ksize = 3
-                # corners = cv.cornerHarris(bool_mask, block_size, ksize, 0.04)
-                # d_corners = cv.dilate(corners, None)
-                # mask[corners > 0.5 * d_corners.max()] = [255, 0, 0, 255]
-
-                # DEBUG
-                # # print(corners.max())
-                # print(corners.reshape(-1)[np.argsort(corners.reshape(-1))[::-1][:10]])
-                # # print(np.sum(corners > 0.5 * corners.max()))
-                # print(count_blobs(corners > 0.5 * corners.max()))
-
-                contours, _ = cv.findContours(
-                    bool_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE
+                target = vertices[:, 0, :]
+                M = cv.getPerspectiveTransform(src, target.astype(np.float32))
+                out = cv.warpPerspective(canonical, M, (img_width, img_height))
+                out_mask = cv.warpPerspective(
+                    canonical_mask, M, (img_width, img_height)
                 )
-                # mask = draw_from_contours(mask, contours, color=[0, 0, 255, 255])
-
-                # Find convex hull to (1) combine multiple contours and/or
-                # (2) fix some occlusion
-                cat_contours = np.concatenate(contours, axis=0)
-                hull = cv.convexHull(cat_contours, returnPoints=True)
-                hull_color = (255, 255, 255, 255)
-                mask = cv.drawContours(mask, [hull], -1, hull_color, 1)
-                hull_mask = (mask == np.array(hull_color)).prod(-1)
-                # mask = (1 - hull_mask) * mask + hull_mask * hull_draw
-
-                # Fit polygon to remove some annotation errors and get vertices
-                vertices = detect_polygon(hull)
-                # mask = draw_from_contours(mask, vertices, color=[255, 255, 255, 255])
-                print(vertices)
-
-                # TODO: Check if matches with classifier prediction
-
-                # TODO: if circle, fit ellipse instead
-                hull_draw_points = np.stack(np.where(hull_mask), axis=1)[
-                    :, ::-1
+                out_mask = (out_mask > 0.5).astype(np.float32)[:, :, None]
+                new_img = (1 - out_mask) * img / 255.0 + out_mask * out
+                # Mark vertices
+                vert = draw_from_contours(
+                    np.zeros_like(new_img), vertices, color=[0, 255, 0]
+                )
+                vert = cv.dilate(vert, None) / 255.0
+                vert_mask = (vert.sum(-1) > 0).astype(np.float32)[:, :, None]
+                new_img = (1 - vert_mask) * new_img + vert_mask * vert
+                new_img = pad_image(new_img, pad_mode="constant")[
+                    ymin:ymax, xmin:xmax
                 ]
-                ellipse = cv.fitEllipse(hull_draw_points)
-                ellipse_color = (255, 0, 0, 255)
-                mask = cv.ellipse(mask, ellipse, ellipse_color)
+                # save_image(torch.from_numpy(new_img).permute(2, 0, 1), 'test_warp.png')
 
-                # Get filled ellipse and compute ellipse error
-                ellipse_mask = cv.ellipse(
-                    np.zeros_like(bool_mask, dtype=np.float32),
-                    ellipse,
-                    (1,),
-                    thickness=-1,
-                )
-                ellipse_error = (
-                    np.abs(ellipse_mask - bool_mask.astype(np.float32)).sum()
-                    / bool_mask.sum()
-                )
-
-                # DEBUG: Transform
-                if len(vertices) == 4:
-                    sign_height, sign_width = 100, 100
-                    canonical = np.zeros((sign_height, sign_width, 3))
-                    canonical_mask = np.zeros((sign_height, sign_width, 1))
-                    adv_patch = np.random.rand(40, 40, 3)
-                    # Histogram matching of the patch and the entire image
-                    adv_patch_matched = match_histograms(adv_patch, img) / 255.0
-                    canonical[20:60, 40:80, :] = adv_patch_matched
-                    canonical_mask[20:60, 40:80, :] = 1
-                    src = np.array(
-                        [
-                            [0, 0],
-                            [0, sign_width - 1],
-                            [sign_height - 1, sign_width - 1],
-                            [sign_height - 1, 0],
-                        ],
-                        dtype=np.float32,
-                    )
-                    target = vertices[:, 0, :]
-                    M = cv.getPerspectiveTransform(
-                        src, target.astype(np.float32)
-                    )
-                    out = cv.warpPerspective(
-                        canonical, M, (img_width, img_height)
-                    )
-                    out_mask = cv.warpPerspective(
-                        canonical_mask, M, (img_width, img_height)
-                    )
-                    out_mask = (out_mask > 0.5).astype(np.float32)[:, :, None]
-                    new_img = (1 - out_mask) * img / 255.0 + out_mask * out
-                    # Mark vertices
-                    vert = draw_from_contours(
-                        np.zeros_like(new_img), vertices, color=[0, 255, 0]
-                    )
-                    vert = cv.dilate(vert, None) / 255.0
-                    vert_mask = (vert.sum(-1) > 0).astype(np.float32)[
-                        :, :, None
-                    ]
-                    new_img = (1 - vert_mask) * new_img + vert_mask * vert
-                    new_img = pad_image(new_img, pad_mode="constant")[
-                        ymin:ymax, xmin:xmax
-                    ]
-                    # save_image(torch.from_numpy(new_img).permute(2, 0, 1), 'test_warp.png')
-
-                    # No histogram matching
-                    canonical[20:60, 40:80, :] = adv_patch
-                    out = cv.warpPerspective(
-                        canonical, M, (img_width, img_height)
-                    )
-                    new_img2 = (1 - out_mask) * img / 255.0 + out_mask * out
-                    new_img2 = (1 - vert_mask) * new_img2 + vert_mask * vert
-                    new_img2 = pad_image(new_img2, pad_mode="constant")[
-                        ymin:ymax, xmin:xmax
-                    ]
-                else:
-                    new_img = np.zeros_like(patch)
-                    new_img2 = np.zeros_like(patch)
-
-                # emask = pad_image(ellipse_mask, pad_mode='constant')
-                # save_image(torch.from_numpy(emask[ymin:ymax, xmin:xmax]), 'test.png')
-                # save_image(torch.from_numpy(mask_patch[:, :, :3] / 255.).permute(2, 0, 1), 'test_mask.png')
-                # save_image(torch.from_numpy(patch / 255.).permute(2, 0, 1), 'test_img.png')
-
-                # DEBUG:
-                if ellipse_error > 0.1:
-                    pass
-                    # vertices = get_corners(bool_mask)
-                    # shape = get_shape_from_vertices(vertices)[0]
-                    # print(shape)
-                    # if shape != 'other':
-                    #     get_box_vertices(vertices, shape)
-                else:
-                    print("found circle")
-                    box = get_box_from_ellipse(ellipse).astype(np.int64)
-                    mask = cv.drawContours(mask, [box], 0, ellipse_color, 1)
-
-                    # emask = np.zeros_like(mask)
-                    # # draw_from_contours(mask, box, color=[255, 255, 255, 255])
-                    # emask[(box[:, 1], box[:, 0])] = [230, 230, 250, 255]
-                    # # emask = cv.dilate(emask, None)
-                    # mask = (emask == 0) * mask + (emask > 0) * emask
-                    # mask_padded = pad_image(mask, pad_mode='constant')
-                    # mask_patch = mask_padded[ymin:ymax, xmin:xmax]
-                    # # mask_patch = mask_padded
-                    # save_image(torch.from_numpy(mask_patch[:, :, :3] / 255.).permute(2, 0, 1), 'test_ellipse.png')
-
-                    # TODO: Use edge detection instead of provided segmentation mask
-                    # from skimage import feature, color, img_as_ubyte
-                    # from skimage.transform import hough_ellipse
-                    # from skimage.draw import ellipse_perimeter
-                    # patch_gray = color.rgb2gray(patch)
-                    # edges = feature.canny(patch_gray, sigma=1)
-                    # tmp_edges = color.gray2rgb(img_as_ubyte(edges))
-                    # save_image([img_numpy_to_torch(patch), img_numpy_to_torch(tmp_edges)], 'test_edge.png')
-                    # result = hough_ellipse(
-                    #     edges,
-                    #     accuracy=20,
-                    #     threshold=50,
-                    #     min_size=int(max(width, height) * 0.8),     # Min of major axis
-                    #     max_size=int(min(width, height) * 1.2),     # Max of minor axis
-                    # )
-                    # print(len(result))
-                    # result.sort(order='accumulator')
-                    # result = result[::-1]
-                    # i = 0
-                    # while i < len(result):
-                    #     # Estimated parameters for the ellipse
-                    #     best = list(result[i])
-                    #     yc, xc, a, b = [int(round(x)) for x in best[1:5]]
-                    #     orientation = best[5]
-                    #     # Draw the ellipse on the original image
-                    #     cy, cx = ellipse_perimeter(yc, xc, a, b, orientation)
-                    #     try:
-                    #         patch[cy, cx] = (0, 0, 255)
-                    #     except IndexError:
-                    #         i += 1
-                    #         continue
-                    #     # Draw the edge (white) and the resulting ellipse (red)
-                    #     edges = color.gray2rgb(img_as_ubyte(edges))
-                    #     edges[cy, cx] = (250, 0, 0)
-                    #     save_image([img_numpy_to_torch(patch), img_numpy_to_torch(edges)], 'test_edge_new.png')
-
-                # Mask should always be padded with zeros
-                mask_padded = pad_image(mask, pad_mode="constant")
-                mask_patch = mask_padded[ymin:ymax, xmin:xmax]
-
-                final_img = [
-                    patch / 255.0,
-                    mask_patch[:, :, :3] / 255.0,
-                    new_img2,
-                    new_img,
+                # No histogram matching
+                canonical[20:60, 40:80, :] = adv_patch
+                out = cv.warpPerspective(canonical, M, (img_width, img_height))
+                new_img2 = (1 - out_mask) * img / 255.0 + out_mask * out
+                new_img2 = (1 - vert_mask) * new_img2 + vert_mask * vert
+                new_img2 = pad_image(new_img2, pad_mode="constant")[
+                    ymin:ymax, xmin:xmax
                 ]
-                final_img = torch.from_numpy(
-                    np.stack(final_img, axis=0)
-                ).permute(0, 3, 1, 2)
-                final_img = TF.resize(final_img, (128, 128))
-                save_image(final_img, "test.png")
+            else:
+                new_img = np.zeros_like(patch)
+                new_img2 = np.zeros_like(patch)
 
-                import pdb
+            # emask = pad_image(ellipse_mask, pad_mode='constant')
+            # save_image(torch.from_numpy(emask[ymin:ymax, xmin:xmax]), 'test.png')
+            # save_image(torch.from_numpy(mask_patch[:, :, :3] / 255.).permute(2, 0, 1), 'test_mask.png')
+            # save_image(torch.from_numpy(patch / 255.).permute(2, 0, 1), 'test_img.png')
 
-                pdb.set_trace()
+            # DEBUG:
+            if ellipse_error > 0.1:
+                pass
+                # vertices = get_corners(bool_mask)
+                # shape = get_shape_from_vertices(vertices)[0]
+                # print(shape)
+                # if shape != 'other':
+                #     get_box_vertices(vertices, shape)
+            else:
+                print("found circle")
+                box = get_box_from_ellipse(ellipse).astype(np.int64)
+                mask = cv.drawContours(mask, [box], 0, ellipse_color, 1)
 
-                patches.append(patch)
-                masks.append(mask_patch)
-                ids.append(
-                    {
-                        "img_id": img_id,
-                        "obj_id": obj["id"],
-                        "num_vertices": len(vertices),
-                        "ellipse_err": ellipse_error,
-                    }
+                # emask = np.zeros_like(mask)
+                # # draw_from_contours(mask, box, color=[255, 255, 255, 255])
+                # emask[(box[:, 1], box[:, 0])] = [230, 230, 250, 255]
+                # # emask = cv.dilate(emask, None)
+                # mask = (emask == 0) * mask + (emask > 0) * emask
+                # mask_padded = pad_image(mask, pad_mode='constant')
+                # mask_patch = mask_padded[ymin:ymax, xmin:xmax]
+                # # mask_patch = mask_padded
+                # save_image(torch.from_numpy(mask_patch[:, :, :3] / 255.).permute(2, 0, 1), 'test_ellipse.png')
+
+                # TODO: Use edge detection instead of provided segmentation mask
+                # from skimage import feature, color, img_as_ubyte
+                # from skimage.transform import hough_ellipse
+                # from skimage.draw import ellipse_perimeter
+                # patch_gray = color.rgb2gray(patch)
+                # edges = feature.canny(patch_gray, sigma=1)
+                # tmp_edges = color.gray2rgb(img_as_ubyte(edges))
+                # save_image([img_numpy_to_torch(patch), img_numpy_to_torch(tmp_edges)], 'test_edge.png')
+                # result = hough_ellipse(
+                #     edges,
+                #     accuracy=20,
+                #     threshold=50,
+                #     min_size=int(max(width, height) * 0.8),     # Min of major axis
+                #     max_size=int(min(width, height) * 1.2),     # Max of minor axis
+                # )
+                # print(len(result))
+                # result.sort(order='accumulator')
+                # result = result[::-1]
+                # i = 0
+                # while i < len(result):
+                #     # Estimated parameters for the ellipse
+                #     best = list(result[i])
+                #     yc, xc, a, b = [int(round(x)) for x in best[1:5]]
+                #     orientation = best[5]
+                #     # Draw the ellipse on the original image
+                #     cy, cx = ellipse_perimeter(yc, xc, a, b, orientation)
+                #     try:
+                #         patch[cy, cx] = (0, 0, 255)
+                #     except IndexError:
+                #         i += 1
+                #         continue
+                #     # Draw the edge (white) and the resulting ellipse (red)
+                #     edges = color.gray2rgb(img_as_ubyte(edges))
+                #     edges[cy, cx] = (250, 0, 0)
+                #     save_image([img_numpy_to_torch(patch), img_numpy_to_torch(edges)], 'test_edge_new.png')
+
+            # Mask should always be padded with zeros
+            mask_padded = pad_image(mask, pad_mode="constant")
+            mask_patch = mask_padded[ymin:ymax, xmin:xmax]
+
+            final_img = [
+                patch / 255.0,
+                mask_patch[:, :, :3] / 255.0,
+                new_img2,
+                new_img,
+            ]
+            final_img = torch.from_numpy(np.stack(final_img, axis=0)).permute(
+                0, 3, 1, 2
+            )
+            final_img = TF.resize(final_img, (128, 128))
+            save_image(final_img, "test.png")
+
+            patches.append(patch)
+            masks.append(mask_patch)
+            ids.append(
+                {
+                    "img_id": img_id,
+                    "obj_id": obj["id"],
+                    "num_vertices": len(vertices),
+                    "ellipse_err": ellipse_error,
+                }
+            )
+            resized_patches.append(
+                TF.resize(
+                    torch.from_numpy(patch).permute(2, 0, 1).unsqueeze(0),
+                    (64, 64),
                 )
-                resized_patches.append(
-                    TF.resize(
-                        torch.from_numpy(patch).permute(2, 0, 1).unsqueeze(0),
-                        (64, 64),
-                    )
-                )
-                pbar.update(1)
+            )
 
-            if len(patches) > max_num_imgs:
-                break
+        if len(patches) > max_num_imgs:
+            break
 
     # Classify all patches
     resized_patches = torch.cat(resized_patches, dim=0)
@@ -533,49 +510,48 @@ def test_traffic_signs(
             mtsd_label_to_shape_index[sign] = key
 
     patches, resized_patches, masks, ids = [], [], [], []
-    with tqdm(total=max_num_imgs) as pbar:
-        for filename in filenames:
-            img_id = filename.split(".")[0]
-            anno = load_annotation(label_path, img_id)
-            img = np.array(Image.open(join(img_path, filename)))
-            img_height, img_width, _ = img.shape
+    for filename in tqdm(filenames):
+        img_id = filename.split(".")[0]
+        anno = load_annotation(label_path, img_id)
+        img = np.array(Image.open(join(img_path, filename)))
+        img_height, img_width, _ = img.shape
 
-            # Pad image to avoid cutting varying shapes due to boundary
-            img_padded, pad_size = pad_image(
-                img, pad_mode="edge", return_pad_size=True
+        # Pad image to avoid cutting varying shapes due to boundary
+        img_padded, pad_size = pad_image(
+            img, pad_mode="edge", return_pad_size=True
+        )
+
+        for index, obj in enumerate(anno["objects"]):
+            class_name = obj["label"]
+            shape_index = mtsd_label_to_shape_index.get(
+                class_name, len(SELECTED_SHAPES)
             )
+            xmin = obj["bbox"]["xmin"]
+            ymin = obj["bbox"]["ymin"]
+            xmax = obj["bbox"]["xmax"]
+            ymax = obj["bbox"]["ymax"]
+            width, height = xmax - xmin, ymax - ymin
 
-            for index, obj in enumerate(anno["objects"]):
-                class_name = obj["label"]
-                shape_index = mtsd_label_to_shape_index.get(
-                    class_name, len(SELECTED_SHAPES)
-                )
-                xmin = obj["bbox"]["xmin"]
-                ymin = obj["bbox"]["ymin"]
-                xmax = obj["bbox"]["xmax"]
-                ymax = obj["bbox"]["ymax"]
-                width, height = xmax - xmin, ymax - ymin
+            # Check if bounding box is cut off at the image boundary
+            is_cut = (
+                (xmin == 0)
+                or (ymin == 0)
+                or ((xmin + width) >= img_width)
+                or ((ymin + height) >= img_height)
+            )
+            if obj["area"] < min_area or is_cut:
+                continue
 
-                # Check if bounding box is cut off at the image boundary
-                is_cut = (
-                    (xmin == 0)
-                    or (ymin == 0)
-                    or ((xmin + width) >= img_width)
-                    or ((ymin + height) >= img_height)
-                )
-                if obj["area"] < min_area or is_cut:
-                    continue
-
-                # Make sure that bounding box is square and add some padding to
-                # avoid cutting into the sign
-                size = max(width, height)
-                xpad, ypad = int((size - width) / 2), int((size - height) / 2)
-                extra_obj_pad = int(pad_ratio * size)
-                size += 2 * extra_obj_pad
-                xmin += pad_size - xpad
-                ymin += pad_size - ypad
-                xmax, ymax = xmin + size, ymin + size
-                patch = img_padded[ymin:ymax, xmin:xmax]
+            # Make sure that bounding box is square and add some padding to
+            # avoid cutting into the sign
+            size = max(width, height)
+            xpad, ypad = int((size - width) / 2), int((size - height) / 2)
+            extra_obj_pad = int(pad_ratio * size)
+            size += 2 * extra_obj_pad
+            xmin += pad_size - xpad
+            ymin += pad_size - ypad
+            xmax, ymax = xmin + size, ymin + size
+            patch = img_padded[ymin:ymax, xmin:xmax]
 
 
 def main():
@@ -591,9 +567,9 @@ def main():
     data_dir = os.path.expanduser(data_dir)
 
     device = "cuda"
-    # seed = 2021
-    # torch.manual_seed(seed)
-    # np.random.seed(seed)
+    seed = 2021
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     cudnn.benchmark = True
 
     # Create model
@@ -607,10 +583,9 @@ def main():
     base = models.resnet18(pretrained=False)
     base.fc = nn.Linear(512, 6)
 
-    model_path = "/home/nab_126/adv-patch-bench/model_weights/resnet18.pth"
-    if os.path.exists(model_path):
+    if os.path.exists(MODEL_PATH):
         print("Loading model weights...")
-        base.load_state_dict(torch.load(model_path))
+        base.load_state_dict(torch.load(MODEL_PATH))
     else:
         raise ValueError("Model weight not found!")
 
@@ -632,8 +607,9 @@ def main():
     else:
         # Read in panoptic file
         panoptic_json_path = f"{data_dir}/v2.0/panoptic/panoptic_2020.json"
-        with open(panoptic_json_path) as panoptic_file:
-            panoptic = json.load(panoptic_file)
+        # with open(panoptic_json_path, "r") as panoptic_file:
+        #     panoptic = json.load(panoptic_file)
+        panoptic = json.load(panoptic_json_path)
 
         # Convert annotation infos to image_id indexed dictionary
         panoptic_per_image_id = {}
@@ -658,4 +634,6 @@ def main():
 
 
 if __name__ == "__main__":
+
+    MODEL_PATH = "./results/classifier_mtsd-100/checkpoint_best.pt"
     main()

@@ -26,6 +26,7 @@ from adv_patch_bench.dataloaders.detectron import (
     reap,
     reap_dataset_mapper,
 )
+from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import DATASETS
 
@@ -134,7 +135,7 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
         Dataset as list of dictionaries.
     """
     dataset: str = config_base["dataset"]
-    base_dataset: str = dataset.split("_")[0]
+    base_dataset: str = dataset.split("-")[0]
     split: str = config_base["dataset_split"]
     base_path: str = os.path.expanduser(config_base["data_dir"])
     # This assumes that dataset has been registered before
@@ -156,9 +157,7 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
     mtsd_anno = {}
     if "mtsd" in dataset:
         # Load additional metadata for MTSD
-        mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(
-            base_path, config_base["use_color"], "orig" in dataset, class_names
-        )
+        mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(base_path, dataset)
 
     data_dict: List[DetectronSample] = _LOAD_DATASET[base_dataset](
         split=split,
@@ -179,10 +178,9 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
         config_base: Dictionary of eval config.
     """
     dataset: str = config_base["dataset"]
-    base_dataset: str = dataset.split("_")[0]
+    base_dataset: str = parse_dataset_name(dataset)[0]
     # Get data path
     base_data_path: str = os.path.expanduser(config_base["data_dir"])
-    use_color: bool = config_base["use_color"]
 
     # Load annotation if specified
     anno_df: Optional[pd.DataFrame] = None
@@ -190,26 +188,20 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
         anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
 
     log.info("Registering %s dataset...", base_dataset)
-    if base_dataset in ("reap", "synthetic"):
+    if any(name in base_dataset for name in ("reap", "synthetic")):
         # Our synthetic benchmark is also based on samples in REAP
         reap.register_reap(
             base_path=base_data_path,
-            synthetic=base_dataset == "synthetic",
+            dataset_name=dataset,
             anno_df=anno_df,
             img_size=config_base["img_size"],
         )
     elif base_dataset == "mtsd":
-        mtsd.register_mtsd(
-            base_path=base_data_path,
-            use_color=use_color,
-            use_mtsd_original_labels="orig" in dataset,
-            ignore_bg_class=False,
-        )
+        mtsd.register_mtsd(base_path=base_data_path, dataset_name=dataset)
     elif base_dataset == "mapillary":
         mapillary.register_mapillary(
             base_path=base_data_path,
-            use_color=use_color,
-            ignore_bg_class=False,
+            dataset_name=dataset,
             anno_df=anno_df,
             img_size=config_base["img_size"],
         )

@@ -98,8 +98,8 @@ ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/val val
 
 ```bash
 # Dataset should be extracted to ~/data/mapillary_vistas (use symlink if needed)
-CUDA_VISIBLE_DEVICES=0 python prep_mapillary.py --split train --resume PATH_TO_CLASSIFIER
-CUDA_VISIBLE_DEVICES=0 python prep_mapillary.py --split val --resume PATH_TO_CLASSIFIER
+python prep_mapillary.py --split train --resume PATH_TO_CLASSIFIER
+python prep_mapillary.py --split val --resume PATH_TO_CLASSIFIER
 
 # Combined train and val partition into "combined"
 BASE_DIR=~/data/mapillary_vistas
@@ -164,6 +164,15 @@ There are signs that may appear in an image but do not have an annotation. There
 
 All of these can be fixed by adding or modifying an entry in `reap_annotations.csv`, but case 2 also requires adding the missing segmentation label to Mapillary Vistas labels.
 
+## File Structure
+
+- `scripts`: Example scripts for running experiments.
+- `scripts_gen_reap`: Scripts for generating REAP dataset. Most are deprecated and only kept for reference.
+  - `collect_traffic_signs.py`: Crops and saves traffic signs from each dataset for classification tasks.
+  - `prep_mtsd_for_classification.py`: Prepare MTSD dataset training a classifier to get pseudo-labels on Mapillary Vistas.
+  - `prep_mapillary.py`: Prepare Mapillary Vistas dataset for the original REAP benchmark (color, no_color versions).
+  - `prep_mapillary_100.py`: Prepare 100-class Mapillary Vistas dataset (REAP-100) based on the original color/no_color version.
+
 ## License
 
 Our benchmark is based on the Mapillary Vistas dataset which uses Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) license.
@@ -172,4 +181,4 @@ Please see the `LICENSE` file or this [link](https://creativecommons.org/license
 
 ## Contact
 
-If you have any question or suggestion, please feel free to open an issue on this repository or directly contact Chawin Sitawarin (chawins@berkeley.edu) or Nabeel Hingun (nabeel126@berkeley.edu).
+If you have any question or suggestion, please feel free to open an issue on this repository or directly contact Chawin Sitawarin (chawins AT berkeley DOT edu) or Nabeel Hingun (nabeel126 AT berkeley DOT edu).
