@@ -98,7 +98,7 @@ def _collect_attack_rimgs(
 def _generate_adv_patch(
     model: torch.nn.Module,
     rimg: render_image.RenderImage,
-    patch_size_mm: tuple[int, float, float] = (1, 200.0, 200.0),
+    patch_size: str | None = None,
     obj_size_mm: SizeMM = SizeMM((900.0, 900.0)),
     obj_size_px: SizePx = SizePx((64, 64)),
     save_images: bool = False,
@@ -113,7 +113,7 @@ def _generate_adv_patch(
     device = model.device
     _, patch_mask = attack_util.prep_adv_patch(
         attack_type="per-sign",
-        patch_size_mm=patch_size_mm,
+        patch_size=patch_size,
         obj_size_px=obj_size_px,
         obj_size_mm=obj_size_mm,
     )
@@ -206,7 +206,7 @@ def main() -> None:
     adv_patch, patch_mask = _generate_adv_patch(
         model=model,
         rimg=attack_rimg,
-        patch_size_mm=config_base["patch_size_mm"],
+        patch_size=config_base["patch_size"],
         obj_size_mm=config_base["obj_size_mm"],
         obj_size_px=config_base["obj_size_px"],
         save_images=config_base["save_images"],

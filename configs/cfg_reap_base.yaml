@@ -19,7 +19,7 @@ base:
   # Custom experiment name (null for auto-generated)
   name: null
   obj_class: 0  # Class of object to eval/attack
-  patch_size_inch: '10x10'  # e.g., '2_10x20'
+  patch_size: '1_10x10_bottom'  # e.g., '2_10x20'
   num_eval: null  # Number of samples to use for eval; Set to null to use all.
   # Path to txt file containing file names to use either for generating patch or
   # for testing.
