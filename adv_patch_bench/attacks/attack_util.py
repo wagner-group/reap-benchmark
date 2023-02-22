@@ -87,10 +87,9 @@ def setup_attack(
 def prep_adv_patch(
     attack_type: str = "none",
     adv_patch_path: str | None = None,
-    patch_size_mm: tuple[int, float, float] | None = None,
+    patch_size: str | None = None,
     obj_size_px: SizePx | None = None,
     obj_size_mm: SizeMM | None = None,
-    patch_height: str | float | None = "bottom",
 ) -> tuple[BatchImageTensor | None, BatchMaskTensor | None]:
     """Load and prepare adversarial patch along with its mask.
 
@@ -99,8 +98,8 @@ def prep_adv_patch(
             "debug", "random", "load". Defaults to "none".
         adv_patch_path (Optional[str], optional): Path to pickle file containing
             adversarial patch and its mask. Defaults to None.
-        patch_size_mm: Tuple (num_patch, height, width). Height and width are
-            in millimeters, and num_patch must be int.
+        patch_size: Patch size as str in the following format:
+            "<NUM_PATCHES>_<HEIGHT>x<WIDTH>_<LOCATION>".
         obj_size_px: Size of object to place patch on in pixels.
         obj_size_mm: Size of object to place patch on in millimeters.
 
@@ -121,7 +120,7 @@ def prep_adv_patch(
         with open(adv_patch_path, "rb") as file:
             adv_patch, patch_mask = pickle.load(file)
     else:
-        if patch_size_mm is None or obj_size_px is None or obj_size_mm is None:
+        if patch_size is None or obj_size_px is None or obj_size_mm is None:
             raise ValueError(
                 "patch_size_mm, obj_size_px, obj_size_mm must be specified when "
                 'attack_type is not "none" or "load".'
@@ -129,10 +128,9 @@ def prep_adv_patch(
 
         # Generate new patch mask from given sizes
         patch_mask = patch_mask_util.gen_patch_mask(
-            patch_size_mm,
+            patch_size,
             obj_size_px,
             obj_size_mm,
-            patch_height=patch_height,
         )
 
         if attack_type == "debug":
@@ -170,9 +168,8 @@ def prep_adv_patch_all_classes(
     dataset: str = "mtsd_no_color",
     attack_type: str = "none",
     adv_patch_paths: list[str] | None = None,
-    patch_size_mm: tuple[int, float, float] | None = None,
+    patch_size: str | None = None,
     obj_width_px: int = 64,
-    patch_height: str | float | None = "bottom",
 ) -> tuple[list[BatchImageTensor | None], list[BatchMaskTensor | None]]:
     """Prepare adversarial patches and masks for all classes."""
     metadata = detectron2.data.MetadataCatalog.get(dataset)
@@ -191,10 +188,9 @@ def prep_adv_patch_all_classes(
         adv_patch, patch_mask = prep_adv_patch(
             attack_type=attack_type,
             adv_patch_path=adv_patch_path,
-            patch_size_mm=patch_size_mm,
+            patch_size=patch_size,
             obj_size_px=obj_size_px,
             obj_size_mm=size_mm_dict[i],
-            patch_height=patch_height,
         )
         adv_patches.append(adv_patch)
         patch_masks.append(patch_mask)

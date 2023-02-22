@@ -140,9 +140,7 @@ class DetectronEvaluator:
                 verbose=self._verbose,
             )
         self._adv_patch_path: str = config_base["adv_patch_path"]
-        self._patch_size_mm: SizePatch = SizePatch(
-            config_base.get("patch_size_mm", (0, 0.0, 0.0))
-        )
+        self._patch_size = config_base.get("patch_size")
 
         # Visualization params
         self._num_vis: int = config_base.get("num_vis", 0)
@@ -222,7 +220,7 @@ class DetectronEvaluator:
         adv_patch, patch_mask = attack_util.prep_adv_patch(
             attack_type=self._attack_type,
             adv_patch_path=self._adv_patch_path,
-            patch_size_mm=self._patch_size_mm,
+            patch_size=self._patch_size,
             obj_size_px=self._obj_size_px,
             obj_size_mm=self._obj_size_mm,
         )

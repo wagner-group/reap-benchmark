@@ -187,9 +187,8 @@ def train(cfg, config, model, attack):
     adv_patches, patch_masks = attack_util.prep_adv_patch_all_classes(
         dataset=train_dataset,
         attack_type=config_base["attack_type"],
-        patch_size_mm=config_base["patch_size_mm"],
+        patch_size=config_base["patch_size_mm"],
         obj_width_px=config_base["obj_size_px"][1],
-        patch_height="middle",
     )
     for i, (adv_patch, patch_mask) in enumerate(zip(adv_patches, patch_masks)):
         if adv_patch is not None:

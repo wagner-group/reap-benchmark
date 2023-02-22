@@ -8,7 +8,7 @@ import logging
 import os
 import pathlib
 import pickle
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import detectron2
 import numpy as np
@@ -559,7 +559,6 @@ def reap_args_parser(
     _update_split_file(config, is_gen_patch)
     _update_syn_obj_path(config)
     _update_syn_obj_size(config)
-    _update_patch_size(config)
     _update_attack_transforms(config)
     _update_save_dir(config, is_detectron=is_detectron, is_train=is_train)
     _update_result_dir(config)
@@ -937,34 +936,6 @@ def _update_save_dir(
         save_dir = os.path.join(config_base["base_dir"], exp_name)
     os.makedirs(save_dir, exist_ok=True)
     config_base["save_dir"] = save_dir
-
-
-def _inch_to_mm(length_in_inch: Union[int, float]) -> float:
-    return 25.4 * length_in_inch
-
-
-def _update_patch_size(config: Dict[str, Dict[str, Any]]) -> None:
-    config_base = config["base"]
-    patch_size_inch: str = config_base["patch_size_inch"]
-
-    # patch_size has format <NUM_PATCH>_<HEIGHT>x<WIDTH>
-    num_patches: int
-    if len(patch_size_inch.split("_")) == 2:
-        num_patches = int(patch_size_inch.split("_")[0])
-    else:
-        num_patches = 1
-    if num_patches not in (1, 2):
-        raise NotImplementedError(
-            f"Only num_patches of 1 or 2 for now, but {num_patches} is given "
-            f"({patch_size_inch})!"
-        )
-
-    patch_size = patch_size_inch.split("_")[-1].split("x")
-    if not all(s.isnumeric() for s in patch_size):
-        raise ValueError(f"Invalid patch size: {patch_size_inch}!")
-    patch_size_inch = [int(s) for s in patch_size]
-    patch_size_mm = [_inch_to_mm(s) for s in patch_size_inch]
-    config_base["patch_size_mm"] = (num_patches,) + tuple(patch_size_mm)
 
 
 def _update_attack_transforms(config: Dict[str, Dict[str, Any]]) -> None:
