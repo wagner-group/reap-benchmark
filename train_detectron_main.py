@@ -187,7 +187,7 @@ def train(cfg, config, model, attack):
     adv_patches, patch_masks = attack_util.prep_adv_patch_all_classes(
         dataset=train_dataset,
         attack_type=config_base["attack_type"],
-        patch_size=config_base["patch_size_mm"],
+        patch_size=config_base["patch_size"],
         obj_width_px=config_base["obj_size_px"][1],
     )
     for i, (adv_patch, patch_mask) in enumerate(zip(adv_patches, patch_masks)):
@@ -235,6 +235,12 @@ def train(cfg, config, model, attack):
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
+
+            data_clean = []
+            if config_base["use_mixed_batch"]:
+                assert len(data) > 1, "Mixed batch requires at least 2 samples!"
+                data_clean = data[: len(data) // 2]
+                data = data[len(data) // 2 :]
 
             if use_attack:
                 # Create image wrapper that handles tranforms
@@ -290,6 +296,7 @@ def train(cfg, config, model, attack):
                     for i, dataset_dict in enumerate(data):
                         dataset_dict["image"] = img_render[i]
 
+            data = [*data_clean, *data]
             loss_dict = model(data)
             losses = sum(loss_dict.values())
             assert torch.isfinite(
