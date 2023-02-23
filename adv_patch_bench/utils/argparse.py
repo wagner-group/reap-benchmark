@@ -278,7 +278,7 @@ def reap_args_parser(
         help="Path to adv patch and mask to load.",
     )
     parser.add_argument(
-        "--patch-size-inch",
+        "--patch-size",
         type=str,
         default="10x10",
         help=(
@@ -845,7 +845,7 @@ def _update_save_dir(
     token_list.append(config_base["attack_type"])
 
     if config_base["attack_type"] != "none":
-        token_list.append(config_base["patch_size_inch"])
+        token_list.append(config_base["patch_size"])
 
     if config_base["attack_type"] in ("load", "per-sign"):
 
