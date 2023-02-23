@@ -194,8 +194,6 @@ def main(args):
                     dataset = "syn" if is_syn else "reap"
                     with open(metadata_path + "/metadata.pkl", "rb") as file:
                         metadata = pickle.load(file)
-                    import pdb
-                    pdb.set_trace()
                     conf_thres = metadata[weights][dataset]["conf_thres"]
 
                 # Add timestamp
