@@ -6,7 +6,6 @@ import os
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
 from torch.backends import cudnn
@@ -113,13 +112,13 @@ def classify(
             continue
 
         # Classify reseized patches
-        resized_patches = torch.cat(resized_patches, dim=0)
+        resized_patches = torch.cat(resized_patches, dim=0) / 255
         with torch.no_grad():
             logits = model(resized_patches.to(device))
-            outputs = logits.argmax(1)
-            confidence = F.softmax(logits, dim=1)
+            outputs = torch.argsort(logits, dim=-1, descending=True)
+            confidence = torch.softmax(logits, dim=-1)
             # If confidene is below threshold, set label to background
-            outputs[confidence.max(1)[0] < CONF_THRES] = CLF_NUM_CLASSES - 1
+            outputs[confidence < CONF_THRES] = CLF_NUM_CLASSES - 1
             predicted_labels.append(outputs.cpu())
         begin += len(resized_patches)
 
@@ -165,14 +164,15 @@ def main():
     # Merge predicted labels with current REAP annotations
     anno = load_annotation_df(BASE_REAP_ANNO_PATH, keep_others=True)
     new_col = f"{DATASET_MODIFIER}_label"
+    label_list = LABEL_LIST[f"mapillary-{DATASET_MODIFIER}"]
     anno[new_col] = "other"
 
-    num_wrong = 0
-    for anno_id, label in zip(ids, predicted_labels):
+    num_wrong, num_non_other, num_corrected = 0, 0, 0
+    for i, (anno_id, label) in enumerate(zip(ids, predicted_labels)):
         img_id, obj_id = anno_id["img_id"], anno_id["obj_id"]
-        new_label = LABEL_LIST[f"mapillary_{DATASET_MODIFIER}"][int(label)]
+        new_class = label_list[int(label[0])]
         if DATASET_MODIFIER == "100":
-            new_shape = MTSD100_TO_SHAPE[new_label]
+            new_shape = MTSD100_TO_SHAPE[new_class]
         else:
             raise NotImplementedError(
                 f"Invalid DATASET_MODIFIER: {DATASET_MODIFIER}!"
@@ -186,15 +186,37 @@ def main():
         # more trustworthy, then set the new label to background
         if anno.loc[cond, "final_shape"].empty:
             continue
-        if new_shape != anno.loc[cond, "final_shape"].item():
+        orig_shape = anno.loc[cond, "final_shape"].item()
+        if new_shape != orig_shape:
             num_wrong += 1
             print(
                 f"=> {num_wrong} total wrong predictions ({new_shape} "
-                f"[{new_label}] vs {anno.loc[cond, 'final_shape'].item()})!"
+                f"[{new_class}] vs {anno.loc[cond, 'final_shape'].item()})!"
             )
-            new_label = "other"
+            # Try to correct the prediction by picking the prediction with the
+            # highest confidence that also matches the original shape
+            new_class = "other"
+            predicted_labels[i, 0] = len(label_list) - 1
+            for alt_label in label[1:]:
+                print(alt_label, len(label_list))
+                alt_class = label_list[alt_label]
+                alt_shape = MTSD100_TO_SHAPE[alt_class]
+                if alt_shape == orig_shape:
+                    new_class = alt_class
+                    predicted_labels[i, 0] = alt_label
+                    num_corrected += 1
+                    print(
+                        f"   => Corrected to {new_class}! "
+                        f"({num_corrected} corrected in total)"
+                    )
+                    break
 
-        anno.loc[cond, new_col] = new_label
+        num_non_other += new_class != "other"
+        anno.loc[cond, new_col] = new_class
+
+    print("=> Total number of non-background predictions:", num_non_other)
+    print("=> Total number of corrected predictions:", num_corrected)
+    predicted_labels = predicted_labels[:, 0]
 
     # Save new annotations
     anno.to_csv(BASE_REAP_ANNO_PATH, index=False)
@@ -241,10 +263,10 @@ if __name__ == "__main__":
 
     # Lazy arguments (data)
     BASE_REAP_ANNO_PATH = f"{BASE_PATH}/reap_annotations.csv"
-    SPLIT = "validation"  # TODO(user): "training" or "validation"
+    SPLIT = "training"  # TODO(user): "training" or "validation"
     DATA_DIR = os.path.expanduser(f"~/data/mapillary_vistas/{SPLIT}/")
     MIN_AREA = 1000  # Minimum area of traffic signs to consider in pixels
-    MAX_NUM_IMGS = 1e9  # Set to small number for debugging
+    MAX_NUM_IMGS = 1e2  # Set to small number for debugging
     LABEL_TO_CLF = 95  # Class id of traffic signs on Vistas
     # If confidence score is below this threshold, set label to background
     CONF_THRES = 0.0

@@ -145,7 +145,7 @@ def _get_args_parser():
 best_acc1 = 0
 
 
-def main(args):
+def main():
     init_distributed_mode(args)
 
     global best_acc1
@@ -190,12 +190,11 @@ def main(args):
                 optimizer,
                 scaler,
                 epoch,
-                args,
             )
-            val_stats = validate(val_loader, model, criterion, args)
+            val_stats = validate(val_loader, model, criterion)
             acc1, clean_acc1 = val_stats["acc1"], val_stats["acc1"]
             if args.adv_train != "none":
-                val_stats = validate(val_loader, model, criterion, args)
+                val_stats = validate(val_loader, model, criterion)
                 acc1 = val_stats["acc1"]
 
             is_best = acc1 > best_acc1 and clean_acc1 >= acc1
@@ -244,7 +243,7 @@ def main(args):
     print(f"=> No attack: {stats}")
 
 
-def train(train_loader, model, criterion, optimizer, scaler, epoch, args):
+def train(train_loader, model, criterion, optimizer, scaler, epoch):
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":.4e")
@@ -253,7 +252,7 @@ def train(train_loader, model, criterion, optimizer, scaler, epoch, args):
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, losses, top1, mem],
-        prefix="Epoch: [{}]".format(epoch),
+        prefix=f"Epoch: [{epoch}]",
     )
 
     # Switch to train mode
@@ -325,7 +324,7 @@ def train(train_loader, model, criterion, optimizer, scaler, epoch, args):
     }
 
 
-def validate(val_loader, model, criterion, args):
+def validate(val_loader, model, criterion):
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":.4e")
@@ -407,9 +406,9 @@ def validate(val_loader, model, criterion, args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
+    argparser = argparse.ArgumentParser(
         "Train/test traffic sign classifier.", parents=[_get_args_parser()]
     )
-    args = parser.parse_args()
+    args = argparser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
     main(args)
