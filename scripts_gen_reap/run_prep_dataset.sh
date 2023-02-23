@@ -10,7 +10,7 @@ BASE_DIR="./scripts_gen_reap/"
 # Train traffic sign classifier on MTSD
 NUM_CLASSES=100  # 12 for no_color
 ARCH="convnext_small_in22k"
-CUDA_VISIBLE_DEVICES=1 python train_classifier_main.py \
+CUDA_VISIBLE_DEVICES=0 python train_classifier_main.py \
     --seed 0 --workers 8 --dataset "mtsd" \
     --data "$HOME/data/mtsd_v2_fully_annotated/cropped_signs_mtsd-100/" \
     --arch $ARCH --full-precision --pretrained --epochs 100 \
