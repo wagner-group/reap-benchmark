@@ -36,7 +36,7 @@ _EVAL_PARAMS = [
     "interp",
     "num_eval",
     "padded_imgsz",
-    "patch_size_inch",
+    "patch_size",
     "reap_geo_method",
     "reap_relight_method",
     "reap_relight_polynomial_degree",
