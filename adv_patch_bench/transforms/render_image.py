@@ -48,7 +48,6 @@ class RenderImage:
         """Initialize RenderImage containing full image and various metadata.
 
         Args:
-            dataset: Name of dataset being used.
             sample: Sample to wrap RenderImage around. Must be a dictionary
                 containing image and target/metadata.
             img_size: Desired image size. If None, use size of the image given

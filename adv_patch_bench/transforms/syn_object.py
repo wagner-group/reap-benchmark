@@ -50,7 +50,9 @@ class SynObject(render_object.RenderObject):
             syn_3d_dist: _description_. Defaults to None.
             syn_colorjitter: _description_. Defaults to None.
         """
-        super().__init__(dataset="synthetic", pad_to_square=True, **kwargs)
+        if "dataset" not in kwargs:
+            kwargs["dataset"] = "synthetic"
+        super().__init__(pad_to_square=True, **kwargs)
         if img_size is None:
             raise ValueError("img_size must be specified for SynObject!")
         if syn_obj_path is None:

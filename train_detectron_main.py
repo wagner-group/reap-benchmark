@@ -137,6 +137,7 @@ def train(cfg, config, model, attack):
         "mode": "mtsd",
     }
     robj_kwargs = {
+        "dataset": config_base["dataset"],
         "obj_size_px": config_base["obj_size_px"],
         "interp": config_base["interp"],
         **{k: v for k, v in config_base.items() if "reap" in k},
