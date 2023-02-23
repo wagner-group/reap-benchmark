@@ -15,15 +15,8 @@ def build_classifier(args):
 
     normalize = DATASET_DICT[args.dataset]["normalize"]
     model = timm.create_model(
-        args.arch, pretrained=args.pretrained, num_classes=0
+        args.arch, pretrained=args.pretrained, num_classes=args.num_classes
     )
-    with torch.no_grad():
-        dummy_input = torch.zeros(
-            (2,) + DATASET_DICT[args.dataset]["input_dim"]
-        )
-        rep_dim = model(dummy_input).size(-1)
-
-    model.fc = nn.Linear(rep_dim, args.num_classes)
     model = nn.Sequential(Normalize(**normalize), model)
 
     n_model = sum(p.numel() for p in model.parameters()) / 1e6
@@ -81,7 +74,7 @@ def build_classifier(args):
                 loc = "cuda:{}".format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint["epoch"]
-            model.load_state_dict(checkpoint["state_dict"])
+            model.load_state_dict(checkpoint["state_dict"], strict=False)
             optimizer.load_state_dict(checkpoint["optimizer"])
             scaler.load_state_dict(checkpoint["scaler"])
             print(f'=> loaded resume checkpoint (epoch {checkpoint["epoch"]})')

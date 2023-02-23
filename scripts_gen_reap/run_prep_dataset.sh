@@ -14,7 +14,7 @@ CUDA_VISIBLE_DEVICES=1 python train_classifier_main.py \
     --seed 0 --workers 8 --dataset "mtsd" \
     --data "$HOME/data/mtsd_v2_fully_annotated/cropped_signs_mtsd-100/" \
     --arch $ARCH --full-precision --pretrained --epochs 100 \
-    --batch-size 4 --lr 0.01 --wd 1e-4 \
+    --batch-size 128 --optim "adamw" --lr 5e-5 --wd 1e-8 \
     --output-dir "./results/mtsd_full/" \
     --num-classes $NUM_CLASSES --balance-sampler
 
