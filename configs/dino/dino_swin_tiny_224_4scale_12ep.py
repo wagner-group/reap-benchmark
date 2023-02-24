@@ -99,8 +99,7 @@ lr_multiplier = L(WarmupParamScheduler)(
 
 DATALOADER = {
     "NUM_WORKERS": 24,
-    # "SAMPLER_TRAIN": "RepeatFactorTrainingSampler",  # EDIT: default: 'TrainingSampler'
-    "SAMPLER_TRAIN": "TrainingSampler",
+    "SAMPLER_TRAIN": "RepeatFactorTrainingSampler",  # EDIT: default: 'TrainingSampler'
     "REPEAT_THRESHOLD": 1.0,  # EDIT: default: 0
 }
 

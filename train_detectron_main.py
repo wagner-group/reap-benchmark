@@ -11,6 +11,7 @@ import pickle
 import sys
 import warnings
 from collections import OrderedDict
+from datetime import timedelta
 from typing import Any
 
 import torch
@@ -127,6 +128,7 @@ def train(cfg, config, model, attack):
     config_base = config["base"]
     use_attack: bool = config_base["attack_type"] != "none"
     train_dataset = cfg.DATASETS.TRAIN[0]
+    use_ddp = torch.distributed.is_initialized()
 
     rimg_kwargs: dict[str, Any] = {
         "img_mode": cfg.INPUT.FORMAT,
@@ -236,17 +238,21 @@ def train(cfg, config, model, attack):
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
+            batch_size = len(data)
 
-            data_clean = []
-            if config_base["use_mixed_batch"]:
+            data_adv = data
+            if config_base["use_mixed_batch"] and not use_ddp:
+                # This only works for single GPU training. Trying to have an
+                # uneven batch size for DDP will hang indefinitely. When DDP is
+                # used, we run attack on the entire batch.
                 assert len(data) > 1, "Mixed batch requires at least 2 samples!"
-                data_clean = data[: len(data) // 2]
-                data = data[len(data) // 2 :]
+                data_adv = data[: batch_size // 2]
+                data = data[batch_size // 2 :]
 
             if use_attack:
                 # Create image wrapper that handles tranforms
                 rimg: RenderImage = RenderImage(
-                    samples=data,
+                    samples=data_adv,
                     robj_kwargs=robj_kwargs,
                     **rimg_kwargs,
                 )
@@ -256,7 +262,10 @@ def train(cfg, config, model, attack):
                     cur_patch_mask = [patch_masks[i] for i in rimg.obj_classes]
                     cur_patch_mask = torch.cat(cur_patch_mask, dim=0)
                     assert len(cur_patch_mask) == rimg.num_objs
+
+                    # Apply geometric augmentation to adversarial patch mask
                     cur_patch_mask = trn_aug_mask(cur_patch_mask)
+
                     if config_base["attack_type"] == "per-sign":
                         # Load cached adversarial patches
                         init_adv_patch = [
@@ -280,8 +289,11 @@ def train(cfg, config, model, attack):
                         cur_adv_patch = torch.cat(cur_adv_patch, dim=0)
 
                     cur_adv_patch.clamp_(0 + _EPS, 1 - _EPS)
+
+                    # Apply color augmentation to adversarial patch
                     cur_adv_patch = trn_aug_color(cur_adv_patch)
-                    img_render, data = rimg.apply_objects(
+
+                    img_render, data_adv = rimg.apply_objects(
                         cur_adv_patch, cur_patch_mask
                     )
 
@@ -294,10 +306,17 @@ def train(cfg, config, model, attack):
                         )
 
                     img_render = rimg.post_process_image(img_render)
-                    for i, dataset_dict in enumerate(data):
+                    for i, dataset_dict in enumerate(data_adv):
                         dataset_dict["image"] = img_render[i]
 
-            data = [*data_clean, *data]
+            if config_base["use_mixed_batch"] and not use_ddp:
+                data = [*data_adv, *data]
+            elif config_base["use_mixed_batch"]:
+                data = [*data_adv[:batch_size // 2], *data[batch_size // 2:]]
+            else:
+                # Normal training or adversarial training w/o use_mixed_batch
+                data = data_adv
+
             loss_dict = model(data)
             losses = sum(loss_dict.values())
             assert torch.isfinite(
@@ -307,8 +326,8 @@ def train(cfg, config, model, attack):
             loss_dict_reduced = {
                 k: v.item() for k, v in comm.reduce_dict(loss_dict).items()
             }
-            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
             if comm.is_main_process():
+                losses_reduced = sum(loss_dict_reduced.values())
                 storage.put_scalars(
                     total_loss=losses_reduced, **loss_dict_reduced
                 )
@@ -387,4 +406,5 @@ if __name__ == "__main__":
         machine_rank=config["base"]["machine_rank"],
         dist_url=config["base"]["dist_url"],
         args=(config,),
+        timeout=timedelta(hours=2),  # Set custom timeout
     )
