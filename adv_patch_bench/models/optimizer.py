@@ -7,10 +7,10 @@ from typing import Any
 
 import torch
 from detectron2.config import instantiate
+from detectron2.solver import LRMultiplier
 from detectron2.solver import build_lr_scheduler as build_d2_lr_scheduler
 from detectron2.solver import build_optimizer as build_d2_optimizer
 from torch import nn
-from detectron2.solver import LRMultiplier
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def build_optimizer(cfg, model):
     if cfg.MODEL.META_ARCHITECTURE == "YOLOF":
         logger.info("Using YOLOF optimizer.")
         return _build_yolof_optimizer(cfg, model)
-    elif "detrex" in cfg.MODEL.META_ARCHITECTURE:
+    if "detrex" in cfg.MODEL.META_ARCHITECTURE:
         logger.info("Using detrex optimizer.")
         return _build_detrex_optimizer(cfg, model)
     return build_d2_optimizer(cfg, model)

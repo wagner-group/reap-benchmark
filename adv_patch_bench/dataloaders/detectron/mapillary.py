@@ -15,7 +15,7 @@ from tqdm import tqdm
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import DATASET_METADATA, LABEL_LIST, RELIGHT_METHODS
+from hparams import DATASET_METADATA, RELIGHT_METHODS
 
 _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
@@ -232,12 +232,14 @@ def register_mapillary(
     if split is not None:
         dataset_name = "-".join(dataset_name.split("-")[:-1])
 
-    # TODO: Need new dataset name for 100
+    # FIXME: Need new dataset name for 100
     data_path = os.path.join(
         base_path, "mapillary_vistas", "color" if use_color else "no_color"
     )
 
-    class_names: List[str] = LABEL_LIST[dataset_name]
+    class_names: List[str] = list(
+        DATASET_METADATA[dataset_name]["class_name"].values()
+    )
     bg_class: int = len(class_names) - 1
     thing_classes: List[str] = class_names
     if ignore_bg_class:

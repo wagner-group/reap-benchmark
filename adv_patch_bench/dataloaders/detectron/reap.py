@@ -9,7 +9,7 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 
 from adv_patch_bench.dataloaders.detectron import mapillary
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import DATASET_METADATA, LABEL_LIST
+from hparams import DATASET_METADATA
 
 _NUM_KEYPOINTS = 4
 
@@ -55,7 +55,9 @@ def register_reap(
             DatasetMapper is not called properly, bbox and keypoints may be
             wrong. Defaults to None.
     """
-    class_names: list[str] = LABEL_LIST[dataset_name]
+    class_names: list[str] = list(
+        DATASET_METADATA[dataset_name]["class_name"].values()
+    )
     # Get index of background or "other" class
     bg_class: int = len(class_names) - 1
     base_path = os.path.expanduser(base_path)

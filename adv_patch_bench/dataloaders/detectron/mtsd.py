@@ -17,7 +17,6 @@ from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DATASET_METADATA,
     DEFAULT_PATH_MTSD_LABEL,
-    LABEL_LIST,
     OLD_TO_NEW_LABELS,
     PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
@@ -36,7 +35,9 @@ def _readlines(path: str) -> List:
 
 def get_mtsd_anno(base_path: str, dataset_name: str) -> Dict[str, Any]:
     """Get MTSD annotation and metadata needed for loading dataset."""
-    class_names: list[str] = LABEL_LIST[dataset_name]
+    class_names: list[str] = list(
+        DATASET_METADATA[dataset_name]["class_name"].values()
+    )
     bg_idx = len(class_names) - 1
     label_path: pathlib.Path = pathlib.Path(base_path) / "annotations"
     similarity_df_csv_path: str = PATH_DUPLICATE_FILES
@@ -225,7 +226,9 @@ def register_mtsd(
     ) = parse_dataset_name(dataset_name)
     if split is not None:
         dataset_name = "-".join(dataset_name.split("-")[:-1])
-    class_names: list[str] = LABEL_LIST[dataset_name]
+    class_names: list[str] = list(
+        DATASET_METADATA[dataset_name]["class_name"].values()
+    )
     mtsd_anno: dict[str, Any] = get_mtsd_anno(data_path, dataset_name)
     bg_class: int = len(class_names) - 1
 

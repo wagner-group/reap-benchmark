@@ -50,6 +50,9 @@ RELIGHT_METHODS = [
 
 # =========================================================================== #
 
+# TODO(enhancement): Eventually we will integrate this ad-hoc metadata with
+# detectron2's metadata API.
+
 # Available dataset and class labels
 DATASETS = (
     "mtsd-orig",
@@ -211,18 +214,18 @@ MTSD100_TO_SHAPE = {
 }
 MTSD100_LABELS = list(MTSD100_TO_SHAPE.keys())
 
-LABEL_LIST = {
-    "mtsd-color": TS_COLOR_LABEL_LIST,
-    "mapillary-color": TS_COLOR_LABEL_LIST,
-    "mtsd-no_color": TS_NO_COLOR_LABEL_LIST,
-    "mapillary-no_color": TS_NO_COLOR_LABEL_LIST,
-    "mtsd-100": MTSD100_LABELS,
-}
-LABEL_LIST["reap"] = LABEL_LIST["mapillary-no_color"]
-LABEL_LIST["synthetic"] = LABEL_LIST["mapillary-no_color"]
-LABEL_LIST["reap-100"] = LABEL_LIST["mtsd-100"]
-LABEL_LIST["synthetic-100"] = LABEL_LIST["mtsd-100"]
-LABEL_LIST["mapillary-100"] = LABEL_LIST["mtsd-100"]
+# LABEL_LIST = {
+#     "mtsd-color": TS_COLOR_LABEL_LIST,
+#     "mapillary-color": TS_COLOR_LABEL_LIST,
+#     "mtsd-no_color": TS_NO_COLOR_LABEL_LIST,
+#     "mapillary-no_color": TS_NO_COLOR_LABEL_LIST,
+#     "mtsd-100": MTSD100_LABELS,
+# }
+# LABEL_LIST["reap"] = LABEL_LIST["mapillary-no_color"]
+# LABEL_LIST["synthetic"] = LABEL_LIST["mapillary-no_color"]
+# LABEL_LIST["reap-100"] = LABEL_LIST["mtsd-100"]
+# LABEL_LIST["synthetic-100"] = LABEL_LIST["mtsd-100"]
+# LABEL_LIST["mapillary-100"] = LABEL_LIST["mtsd-100"]
 
 # Get list of shape (no size, no color)
 TS_SHAPE_LIST = list(
@@ -231,19 +234,19 @@ TS_SHAPE_LIST = list(
 
 # =========================================================================== #
 
-# Number of classes in each dataset
-NUM_CLASSES = {
-    "mtsd-orig": 401,
-    "mtsd-no_color": len(TS_NO_COLOR_LABEL_LIST),
-    "mtsd-color": len(TS_COLOR_LABEL_LIST),
-    "mapillary-no_color": len(TS_NO_COLOR_LABEL_LIST),
-    "mapillary-color": len(TS_COLOR_LABEL_LIST),
-    "mtsd-100": len(MTSD100_LABELS),
-}
-NUM_CLASSES["reap"] = NUM_CLASSES["mapillary-no_color"]
-NUM_CLASSES["synthetic"] = NUM_CLASSES["mapillary-no_color"]
-NUM_CLASSES["reap-100"] = NUM_CLASSES["mtsd-100"]
-NUM_CLASSES["synthetic-100"] = NUM_CLASSES["mtsd-100"]
+# DEPRECATED: Number of classes in each dataset
+# NUM_CLASSES = {
+#     "mtsd-orig": 401,
+#     "mtsd-no_color": len(TS_NO_COLOR_LABEL_LIST),
+#     "mtsd-color": len(TS_COLOR_LABEL_LIST),
+#     "mapillary-no_color": len(TS_NO_COLOR_LABEL_LIST),
+#     "mapillary-color": len(TS_COLOR_LABEL_LIST),
+#     "mtsd-100": len(MTSD100_LABELS),
+# }
+# NUM_CLASSES["reap"] = NUM_CLASSES["mapillary-no_color"]
+# NUM_CLASSES["synthetic"] = NUM_CLASSES["mapillary-no_color"]
+# NUM_CLASSES["reap-100"] = NUM_CLASSES["mtsd-100"]
+# NUM_CLASSES["synthetic-100"] = NUM_CLASSES["mtsd-100"]
 
 # =========================================================================== #
 
@@ -328,6 +331,12 @@ DATASET_METADATA["reap-100"] = DATASET_METADATA["mtsd-100"]
 DATASET_METADATA["synthetic-100"] = DATASET_METADATA["mtsd-100"]
 
 # =========================================================================== #
+
+# Add dataset modifier to metadata
+extra_metadata = {}
+for dataset, metadata in DATASET_METADATA.items():
+    extra_metadata[dataset + "-skipbg"] = metadata
+DATASET_METADATA = {**DATASET_METADATA, **extra_metadata}
 
 # DEPRECATED: Kept for reference
 

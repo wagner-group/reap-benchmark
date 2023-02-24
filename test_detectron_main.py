@@ -23,7 +23,7 @@ import adv_patch_bench.utils.docker_bug_fixes  # pylint: disable=unused-import
 from adv_patch_bench.evaluators import detectron_evaluator
 from adv_patch_bench.models.custom_build import build_model
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
-from hparams import LABEL_LIST, NUM_CLASSES
+from hparams import DATASET_METADATA
 
 logger = logging.getLogger(__name__)
 # This is to ignore a warning from detectron2/structures/keypoints.py:29
@@ -297,14 +297,20 @@ def _dump_results(results: Dict[str, Any]) -> None:
                 "conf_thres does not exist in metadata. Creating an empty "
                 "one..."
             )
-            metadata["conf_thres"] = [None for _ in LABEL_LIST[dataset]]
+            metadata["conf_thres"] = [
+                None for _ in DATASET_METADATA[dataset]["class_name"]
+            ]
 
         # Write new conf_thres
         conf_thres = results["bbox"]["conf_thres"]
         if isinstance(conf_thres, float):
             metadata["conf_thres"][config_base["obj_class"]] = conf_thres
         else:
-            assert len(conf_thres) == NUM_CLASSES[dataset]
+            num_classes = len(DATASET_METADATA[dataset]["class_name"])
+            assert len(conf_thres) == num_classes, (
+                "conf_thres must either be a float or an array with the length "
+                f"num_classes, but got {conf_thres}!"
+            )
             obj_class = config_base["obj_class"]
             if obj_class == -1:
                 metadata["conf_thres"] = conf_thres
@@ -328,7 +334,9 @@ def _dump_results(results: Dict[str, Any]) -> None:
 def main() -> None:
     """Main function."""
     attack_config_path: str = config_base["attack_config_path"]
-    class_names: List[str] = LABEL_LIST[config_base["dataset"]]
+    class_names: List[str] = DATASET_METADATA[config_base["dataset"]][
+        "class_name"
+    ]
 
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):

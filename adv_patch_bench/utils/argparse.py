@@ -18,13 +18,7 @@ from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
 from omegaconf import OmegaConf
 
-from hparams import (
-    DATASET_METADATA,
-    DEFAULT_SYN_OBJ_DIR,
-    INTERPS,
-    LABEL_LIST,
-    NUM_CLASSES,
-)
+from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR, INTERPS
 
 _TRANSFORM_PARAMS: List[str] = [
     "interp",
@@ -374,6 +368,11 @@ def reap_args_parser(
         action="store_true",
         help="Use mixed batch for adversarial training.",
     )
+    parser.add_argument(
+        "--skip-bg",
+        action="store_true",
+        help="Skip images with only background or 'other' classes.",
+    )
 
     # ===================== Patch generation arguments ====================== #
     parser.add_argument(
@@ -610,7 +609,7 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
 
     # Verify obj_class arg
     obj_class = config_base["obj_class"]
-    max_cls = NUM_CLASSES[dataset] - 1
+    max_cls = len(DATASET_METADATA[dataset]["class_name"]) - 1
     if not -1 <= obj_class <= max_cls:
         raise ValueError(
             f"Target object class {obj_class} is not between 0 and {max_cls}!"
@@ -733,7 +732,9 @@ def _update_split_file(
     if config_base["obj_class"] < 0:
         default_filename: str = "all.txt"
     else:
-        class_name: str = LABEL_LIST[dataset][config_base["obj_class"]]
+        class_name: str = DATASET_METADATA[dataset]["class_name"][
+            config_base["obj_class"]
+        ]
         default_filename: str = f"{class_name}_{split}.txt"
 
     split_file_path: pathlib.Path = split_file_dir / default_filename
@@ -769,7 +770,7 @@ def _update_syn_obj_path(config: Dict[str, Dict[str, Any]]) -> None:
     dataset = config_base["dataset"]
     obj_class = config_base["obj_class"]
     if obj_class >= 0:
-        class_name = LABEL_LIST[dataset][obj_class]
+        class_name = DATASET_METADATA[dataset]["class_name"][obj_class]
         config_base["syn_obj_path"] = os.path.join(
             DEFAULT_SYN_OBJ_DIR, dataset, f"{class_name}.png"
         )
@@ -934,7 +935,7 @@ def _update_save_dir(
     obj_class: int = config_base["obj_class"]
     if not is_train:
         class_name = (
-            LABEL_LIST[config_base["dataset"]][obj_class]
+            DATASET_METADATA[config_base["dataset"]]["class_name"][obj_class]
             if obj_class >= 0
             else "all"
         )
@@ -971,6 +972,7 @@ def setup_detectron_cfg(
     config_base = config["base"]
     dataset: str = config_base["dataset"]
     split: str = config_base["dataset_split"]
+    num_classes = len(DATASET_METADATA[dataset]["class_name"])
 
     # Set default path to load adversarial patch
     if not config_base["adv_patch_path"]:
@@ -1015,7 +1017,7 @@ def setup_detectron_cfg(
     cfg.eval_mode = config_base["eval_mode"]
     cfg.obj_class = config_base["obj_class"]
     # Assume that "other" class is always last
-    cfg.other_catId = NUM_CLASSES[dataset] - 1
+    cfg.other_catId = num_classes - 1
     config_base["other_sign_class"] = cfg.other_catId
     # cfg.conf_thres = config_base["conf_thres"]
 
@@ -1037,7 +1039,6 @@ def setup_detectron_cfg(
     # Replace SynBN with BN when running on one GPU
     _find_and_set_bn(cfg)
 
-    num_classes = NUM_CLASSES[dataset]
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
     if "YOLOF" in cfg.MODEL:
         cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = num_classes
@@ -1098,25 +1099,6 @@ def parse_dataset_name(dataset_name: str) -> list[str, bool, int]:
         num_classes,
         split,
     )
-
-
-def setup_yolo_test_args(config, other_sign_class):
-    """Set up config for YOLO.
-
-    # FIXME(YOLO): fix for yolo.
-
-    Args:
-        config: Config dict.
-        other_sign_class: Class of "other" or background object.
-    """
-    _ = other_sign_class  # Unused
-    config_base = config["base"]
-
-    # Set YOLO data yaml file
-    config_base["data"] = config_base["dataset"] + ".yaml"
-
-    # Set to default value. This is different from conf_thres in detectron
-    # args.conf_thres = 0.001
 
 
 def _find_and_set_bn(cfg_node):

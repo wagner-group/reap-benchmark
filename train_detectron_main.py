@@ -239,6 +239,7 @@ def train(cfg, config, model, attack):
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
             batch_size = len(data)
+            print(batch_size)
 
             data_adv = data
             if config_base["use_mixed_batch"] and not use_ddp:
@@ -287,7 +288,6 @@ def train(cfg, config, model, attack):
                             adv_patches[i] for i in rimg.obj_classes
                         ]
                         cur_adv_patch = torch.cat(cur_adv_patch, dim=0)
-
                     cur_adv_patch.clamp_(0 + _EPS, 1 - _EPS)
 
                     # Apply color augmentation to adversarial patch
