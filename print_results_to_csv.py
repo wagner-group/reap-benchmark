@@ -10,10 +10,7 @@ import pandas as pd
 
 from hparams import DATASET_METADATA
 
-_DATASET = "reap"
-LABEL_LIST = list(DATASET_METADATA[_DATASET]["class_name"])
-_NUM_CLASSES = len(LABEL_LIST[_DATASET]) - 1
-_NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
+_LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS = 0, 0, 0
 _NUM_IOU_THRES = 10
 BASE_PATH = "./results/"
 # CONF_THRES = 0.634  # FIXME
@@ -272,8 +269,10 @@ def _average(print_df_rows, base_sid, all_class_sid, metric_name):
     return metrics
 
 
-def main(args):
+def main():
     """Main function."""
+    global _LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS
+
     exp_type = args.exp_type
     clean_exp_name = args.clean_exp_name
     attack_exp_name = args.attack_exp_name
@@ -341,17 +340,28 @@ def main(args):
                 with open(result_path, "rb") as file:
                     results = pickle.load(file)
 
-                if "obj_class" not in results:
+                if any(attr not in results for attr in ["bbox", "obj_class"]):
                     continue
+
+                dataset = results["dataset"]
+                obj_class = results["obj_class"]
+                metrics = results["bbox"]
+                attack_type = results["attack_type"]
+                _LABEL_LIST = list(DATASET_METADATA[dataset]["class_name"])
+                _NUM_CLASSES = len(_LABEL_LIST) - 1
+                _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 
                 if conf_thres is None:
                     # Get conf_thres from metadata
                     weights = results["weights"].split("/")[-1]
                     metadata_path = "/".join(results["weights"].split("/")[:-1])
-                    dataset = "syn" if is_syn else "reap"
+                    # dataset = "syn" if is_syn else "reap"
                     with open(metadata_path + "/metadata.pkl", "rb") as file:
                         metadata = pickle.load(file)
                     conf_thres = metadata[weights][dataset]["conf_thres"]
+
+                if conf_thres[obj_class] is None:
+                    continue
 
                 # Add timestamp
                 # time = result_path.split("_")[-1].split(".pkl")[0]
@@ -369,19 +379,13 @@ def main(args):
                 #     split_hash = "null"
                 # else:
                 #     split_hash = hashes[2].split("split")[1].split(".pkl")[0]
-                if "bbox" not in results:
-                    continue
-                metrics = results["bbox"]
-                print(result_path)
 
                 # Experiment setting identifier for matching clean and attack
-                obj_class = results["obj_class"]
                 if obj_class < 0:
                     continue
                 # FIXME
                 synthetic = int(results["synthetic"])
                 # synthetic = False
-                attack_type = results["attack_type"]
                 is_attack = int(results["attack_type"] != "none")
                 scores_dict = gt_scores[is_attack]
 
@@ -429,7 +433,7 @@ def main(args):
                 scores_dict[sid] = scores
 
                 tp = np.sum(scores[iou_idx] >= conf_thres[obj_class])
-                class_name = LABEL_LIST[_DATASET][obj_class]
+                class_name = _LABEL_LIST[obj_class]
                 tpr = tp / num_gts
                 metrics[f"FNR-{class_name}"] = 1 - tpr
 
@@ -660,4 +664,4 @@ if __name__ == "__main__":
         help="reap or syn (default is both)",
     )
     args = parser.parse_args()
-    main(args)
+    main()
