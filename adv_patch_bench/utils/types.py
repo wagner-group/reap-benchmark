@@ -1,4 +1,5 @@
 """Custom type definition."""
+
 from typing import Any, Callable, Dict, NewType, Tuple, Union
 
 import kornia.augmentation as K

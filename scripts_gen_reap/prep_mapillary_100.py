@@ -115,8 +115,10 @@ def classify(
         resized_patches = torch.cat(resized_patches, dim=0) / 255
         with torch.no_grad():
             logits = model(resized_patches.to(device))
-            outputs = torch.argsort(logits, dim=-1, descending=True)
             confidence = torch.softmax(logits, dim=-1)
+            confidence, outputs = torch.sort(
+                confidence, dim=-1, descending=True
+            )
             # If confidene is below threshold, set label to background
             outputs[confidence < CONF_THRES] = CLF_NUM_CLASSES - 1
             predicted_labels.append(outputs.cpu())
@@ -164,8 +166,9 @@ def main():
     # Merge predicted labels with current REAP annotations
     anno = load_annotation_df(BASE_REAP_ANNO_PATH, keep_others=True)
     new_col = f"{DATASET_MODIFIER}_label"
-    label_list = LABEL_LIST[f"mapillary-{DATASET_MODIFIER}"]
-    anno[new_col] = "other"
+    label_list = DATASET_METADATA[f"mapillary-{DATASET_MODIFIER}"]["class_name"]
+    if new_col not in anno.columns:
+        anno[new_col] = "other"
 
     num_wrong, num_non_other, num_corrected = 0, 0, 0
     for i, (anno_id, label) in enumerate(zip(ids, predicted_labels)):
@@ -198,8 +201,7 @@ def main():
             new_class = "other"
             predicted_labels[i, 0] = len(label_list) - 1
             for alt_label in label[1:]:
-                print(alt_label, len(label_list))
-                alt_class = label_list[alt_label]
+                alt_class = label_list[int(alt_label)]
                 alt_shape = MTSD100_TO_SHAPE[alt_class]
                 if alt_shape == orig_shape:
                     new_class = alt_class
@@ -225,6 +227,7 @@ def main():
     label_path = os.path.join(DATA_DIR, f"labels_{DATASET_MODIFIER}")
     os.makedirs(label_path, exist_ok=True)
 
+    print("=> Writing annotations to files...")
     for img_id, obj_idx in tqdm(filename_to_idx.items()):
         # Skip image with no valid objects
         if len(obj_idx) == 0:
@@ -235,9 +238,9 @@ def main():
             # Write label in Detectron2 format
             class_label = int(predicted_labels[idx].item())
             obj_id = ids[idx]["obj_id"]
-            assert img_id == ids[idx]["img_id"], (
-                "Image ID mismatch! Sanity check failed!"
-            )
+            assert (
+                img_id == ids[idx]["img_id"]
+            ), "Image ID mismatch! Sanity check failed!"
             xmin, ymin, xmax, ymax, img_width, img_height = bboxes[idx]
             obj_target += (
                 f"{class_label:d},{xmin},{ymin},{xmax},{ymax},{img_width},"
@@ -248,6 +251,8 @@ def main():
             save_label_path = os.path.join(label_path, img_id + ".txt")
             with open(save_label_path, "w", encoding="utf-8") as file:
                 file.write(obj_target)
+
+    print("Finished!")
 
 
 if __name__ == "__main__":
@@ -263,17 +268,17 @@ if __name__ == "__main__":
 
     # Lazy arguments (data)
     BASE_REAP_ANNO_PATH = f"{BASE_PATH}/reap_annotations.csv"
-    SPLIT = "training"  # TODO(user): "training" or "validation"
+    SPLIT = "validation"  # TODO(user): "training" or "validation"
     DATA_DIR = os.path.expanduser(f"~/data/mapillary_vistas/{SPLIT}/")
     MIN_AREA = 1000  # Minimum area of traffic signs to consider in pixels
-    MAX_NUM_IMGS = 1e2  # Set to small number for debugging
+    MAX_NUM_IMGS = 1e9  # Set to small number for debugging
     LABEL_TO_CLF = 95  # Class id of traffic signs on Vistas
     # If confidence score is below this threshold, set label to background
-    CONF_THRES = 0.0
+    CONF_THRES = 0.1
 
     # Hacky way of loading hyperparameters and metadata
-    LABEL_LIST: dict[str, list[str]] = {}
     MTSD100_TO_SHAPE: dict[str, str] = {}
+    DATASET_METADATA = {}
     with open(f"{BASE_PATH}/hparams.py", "r", encoding="utf-8") as metadata:
         source = metadata.read()
     exec(source)  # pylint: disable=exec-used

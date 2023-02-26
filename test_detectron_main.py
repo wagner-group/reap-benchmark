@@ -364,7 +364,7 @@ def main() -> None:
         dataloader,
         class_names=class_names,
     )
-    logger.info("=> Running attack...")
+    logger.info("=> Running evaluation by DetectronEvaluator...")
     _, metrics = evaluator.run()
 
     eval_cfg = _normalize_dict(config_base)

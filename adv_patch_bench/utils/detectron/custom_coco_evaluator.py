@@ -11,7 +11,6 @@ import pickle
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 
-import detectron2.utils.comm as comm
 import numpy as np
 import pycocotools.mask as mask_util
 import torch
@@ -21,12 +20,15 @@ from detectron2.data.datasets.coco import convert_to_coco_json
 from detectron2.evaluation.evaluator import DatasetEvaluator
 from detectron2.evaluation.fast_eval_api import COCOeval_opt
 from detectron2.structures import Boxes, BoxMode, pairwise_iou
+from detectron2.utils import comm
 from detectron2.utils.file_io import PathManager
 from detectron2.utils.logger import create_small_table
 from pycocotools.coco import COCO
 from tabulate import tabulate
 
 from adv_patch_bench.utils.detectron.custom_cocoeval import COCOeval
+
+logger = logging.getLogger(__name__)
 
 
 class CustomCOCOEvaluator(DatasetEvaluator):
@@ -83,7 +85,6 @@ class CustomCOCOEvaluator(DatasetEvaluator):
                 When empty, it will use the defaults in COCO.
                 Otherwise it should be the same length as ROI_KEYPOINT_HEAD.NUM_KEYPOINTS.
         """
-        self._logger = logging.getLogger(__name__)
         if isinstance(tasks, CfgNode):
             kpt_oks_sigmas = (
                 tasks.TEST.KEYPOINT_OKS_SIGMAS
@@ -91,9 +92,9 @@ class CustomCOCOEvaluator(DatasetEvaluator):
                 else kpt_oks_sigmas
             )
             self._tasks = self._tasks_from_config(tasks)
-            self._logger.warn(
-                "COCO Evaluator instantiated using config, this is deprecated behavior."
-                " Please pass tasks in directly"
+            logger.warning(
+                "COCO Evaluator instantiated using config, this is deprecated "
+                "behavior. Please pass tasks in directly!"
             )
         else:
             self._tasks = tasks
@@ -106,11 +107,11 @@ class CustomCOCOEvaluator(DatasetEvaluator):
 
         self._metadata = MetadataCatalog.get(dataset_name)
         if not hasattr(self._metadata, "json_file"):
-            self._logger.info(
-                f"'{dataset_name}' is not registered by `register_coco_instances`."
-                " Therefore trying to convert it to COCO format ..."
+            logger.info(
+                "%s is not registered by `register_coco_instances`. Therefore "
+                "trying to convert it to COCO format ...",
+                dataset_name,
             )
-
             cache_path = os.path.join(
                 output_dir, f"{dataset_name}_coco_format.json"
             )
@@ -159,10 +160,10 @@ class CustomCOCOEvaluator(DatasetEvaluator):
             outputs: the outputs of a COCO model. It is a list of dicts with key
                 "instances" that contains :class:`Instances`.
         """
-        for input, output in zip(inputs, outputs):
+        for inpt, output in zip(inputs, outputs):
             prediction = {
-                "image_id": input["image_id"],
-                "file_name": input["file_name"],
+                "image_id": inpt["image_id"],
+                "file_name": inpt["file_name"],
             }
 
             # EDIT: Add outputs_are_json for test_detectron.py
@@ -171,7 +172,7 @@ class CustomCOCOEvaluator(DatasetEvaluator):
             elif "instances" in output:
                 instances = output["instances"].to(self._cpu_device)
                 prediction["instances"] = instances_to_coco_json(
-                    instances, input["image_id"]
+                    instances, inpt["image_id"]
                 )
             elif "proposals" in output:
                 prediction["proposals"] = output["proposals"].to(
@@ -201,9 +202,7 @@ class CustomCOCOEvaluator(DatasetEvaluator):
             predictions = self._predictions
 
         if len(predictions) == 0:
-            self._logger.warning(
-                "[COCOEvaluator] Did not receive valid predictions."
-            )
+            logger.warning("[COCOEvaluator] Did not receive valid predictions.")
             return {}
 
         if self._output_dir:
@@ -229,7 +228,7 @@ class CustomCOCOEvaluator(DatasetEvaluator):
 
         Fill self._results with the metrics of the tasks.
         """
-        self._logger.info("Preparing results for COCO format ...")
+        logger.info("Preparing results for COCO format ...")
         coco_results = list(
             itertools.chain(*[x["instances"] for x in predictions])
         )
@@ -253,16 +252,16 @@ class CustomCOCOEvaluator(DatasetEvaluator):
             file_path = os.path.join(
                 self._output_dir, "coco_instances_results.json"
             )
-            self._logger.info("Saving results to {}".format(file_path))
+            logger.info("Saving results to {}".format(file_path))
             with PathManager.open(file_path, "w") as f:
                 f.write(json.dumps(coco_results))
                 f.flush()
 
         if not self._do_evaluation:
-            self._logger.info("Annotations are not available for evaluation.")
+            logger.info("Annotations are not available for evaluation.")
             return
 
-        self._logger.info(
+        logger.info(
             "Evaluating predictions with {} COCO API...".format(
                 "unofficial" if self._use_fast_impl else "official"
             )
@@ -319,10 +318,10 @@ class CustomCOCOEvaluator(DatasetEvaluator):
                 pickle.dump(proposal_data, f)
 
         if not self._do_evaluation:
-            self._logger.info("Annotations are not available for evaluation.")
+            logger.info("Annotations are not available for evaluation.")
             return
 
-        self._logger.info("Evaluating bbox proposals ...")
+        logger.info("Evaluating bbox proposals ...")
         res = {}
         areas = {"all": "", "small": "s", "medium": "m", "large": "l"}
         for limit in [100, 1000]:
@@ -332,7 +331,7 @@ class CustomCOCOEvaluator(DatasetEvaluator):
                 )
                 key = "AR{}@{:d}".format(suffix, limit)
                 res[key] = float(stats["ar"].item() * 100)
-        self._logger.info("Proposal metrics: \n" + create_small_table(res))
+        logger.info("Proposal metrics: \n" + create_small_table(res))
         self._results["box_proposals"] = res
 
     def _derive_coco_results(self, coco_eval, iou_type, class_names=None):
@@ -354,7 +353,7 @@ class CustomCOCOEvaluator(DatasetEvaluator):
         }[iou_type]
 
         if coco_eval is None:
-            self._logger.warn("No predictions from the model!")
+            logger.warn("No predictions from the model!")
             return {metric: float("nan") for metric in metrics}
 
         # the standard metrics
@@ -366,14 +365,12 @@ class CustomCOCOEvaluator(DatasetEvaluator):
             )
             for idx, metric in enumerate(metrics)
         }
-        self._logger.info(
+        logger.info(
             "Evaluation results for {}: \n".format(iou_type)
             + create_small_table(results)
         )
         if not np.isfinite(sum(results.values())):
-            self._logger.info(
-                "Some metrics cannot be computed and is shown as NaN."
-            )
+            logger.info("Some metrics cannot be computed and is shown as NaN.")
 
         if class_names is None or len(class_names) <= 1:
             return results
@@ -412,7 +409,7 @@ class CustomCOCOEvaluator(DatasetEvaluator):
             headers=["category", "AP"] * (N_COLS // 2),
             numalign="left",
         )
-        self._logger.info("Per-category {} AP: \n".format(iou_type) + table)
+        logger.info("Per-category {} AP: \n".format(iou_type) + table)
 
         results.update({"AP-" + name: ap for name, ap in results_per_category})
         results["scores_full"] = coco_eval.eval["scores_full"]

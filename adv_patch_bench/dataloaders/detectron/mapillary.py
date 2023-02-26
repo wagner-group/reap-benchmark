@@ -14,6 +14,7 @@ from tqdm.auto import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.argparse import parse_dataset_name
+from adv_patch_bench.utils.tqdm_logger import TqdmLoggingHandler
 from adv_patch_bench.utils.types import DetectronSample, SizePx
 from hparams import DATASET_METADATA, RELIGHT_METHODS
 
@@ -21,6 +22,7 @@ _ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
 
 logger = logging.getLogger(__name__)
+logger.addHandler(TqdmLoggingHandler())
 
 
 def get_mapillary_dict(
@@ -55,7 +57,7 @@ def get_mapillary_dict(
         List of Mapillary Vistas samples in Detectron2 format.
     """
     _ = kwargs  # Unused
-    logger.info("Registering %s Mapillary Vistas data at %s", split, data_path)
+    logger.info("Getting %s Mapillary Vistas data at %s", split, data_path)
     if split not in _ALLOWED_SPLITS:
         raise ValueError(
             f"split must be among {_ALLOWED_SPLITS}, but it is {split}!"
@@ -69,7 +71,10 @@ def get_mapillary_dict(
         "combined": "combined",
     }[split]
     bpath: pathlib.Path = pathlib.Path(data_path)
+    # DEPRECATED: We're deprecating detectron_labels in favor of labels
     label_path: pathlib.Path = bpath / mapillary_split / "detectron_labels"
+    if not label_path.exists():
+        label_path = bpath / mapillary_split / "labels"
     img_path: pathlib.Path = bpath / mapillary_split / "images"
 
     dataset_dicts = []
@@ -226,16 +231,15 @@ def register_mapillary(
             DatasetMapper is not called properly, bbox and keypoints may be
             wrong. Defaults to None.
     """
-    _, use_color, _, ignore_bg_class, _, _, split = parse_dataset_name(
-        dataset_name
-    )
+    _, _, _, ignore_bg_class, _, _, split = parse_dataset_name(dataset_name)
+    dataset_tokens = dataset_name.split("-")
     if split is not None:
-        dataset_name = "-".join(dataset_name.split("-")[:-1])
-
-    # FIXME: Need new dataset name for 100
-    data_path = os.path.join(
-        base_path, "mapillary_vistas", "color" if use_color else "no_color"
-    )
+        # Remove split from dataset name
+        dataset_name = "-".join(dataset_tokens[:-1])
+    # Get only the modifier and not the base dataset name
+    modifier = dataset_name.split("-", maxsplit=1)[1]
+    data_path = os.path.join(base_path, "mapillary_vistas", modifier)
+    logger.info("Registering Mapillary Vistas dataset at %s", data_path)
 
     class_names: List[str] = list(
         DATASET_METADATA[dataset_name]["class_name"].values()
@@ -246,7 +250,7 @@ def register_mapillary(
         thing_classes = thing_classes[:-1]
 
     for split in _ALLOWED_SPLITS:
-        dataset_with_split: str = f"{dataset_name}_{split}"
+        dataset_with_split: str = f"{dataset_name}-{split}"
         DatasetCatalog.register(
             dataset_with_split,
             lambda s=split: get_mapillary_dict(
@@ -267,3 +271,15 @@ def register_mapillary(
             obj_dim_dict=DATASET_METADATA[dataset_name],
             bg_class=bg_class,
         )
+
+    # if not hasattr(self._metadata, "json_file"):
+    #     logger.info(
+    #         "%s is not registered by `register_coco_instances`. Therefore "
+    #         "trying to convert it to COCO format ...",
+    #         dataset_name,
+    #     )
+    #     cache_path = os.path.join(
+    #         output_dir, f"{dataset_name}_coco_format.json"
+    #     )
+    #     self._metadata.json_file = cache_path
+    #     convert_to_coco_json(dataset_name, cache_path)

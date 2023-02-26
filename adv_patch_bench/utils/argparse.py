@@ -745,7 +745,7 @@ def _update_split_file(
 
     # Try to automatically generate correct path to split file
     split_file_path = (
-        split_file_dir / dataset / f"bg{num_bg}" / default_filename
+        split_file_dir / dataset / f"bg_{num_bg}" / default_filename
     )
     if not split_file_path.is_file():
         raise FileNotFoundError(
