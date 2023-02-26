@@ -165,7 +165,7 @@ def prep_adv_patch(
 
 
 def prep_adv_patch_all_classes(
-    dataset: str = "mtsd_no_color",
+    dataset: str = "mtsd-no_color",
     attack_type: str = "none",
     adv_patch_paths: list[str] | None = None,
     patch_size: str | None = None,

@@ -136,7 +136,7 @@ def train(cfg, config, model, attack):
         "img_aug_prob_geo": config_base["img_aug_prob_geo"],
         "device": model.device,
         "obj_class": config_base["obj_class"],
-        "mode": "mtsd",
+        "mode": config_base["dataset"].split("-")[0],
     }
     robj_kwargs = {
         "dataset": config_base["dataset"],
