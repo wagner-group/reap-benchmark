@@ -18,12 +18,13 @@ from adv_patch_bench.utils import pad_image
 
 
 def classify(
+    data_dir,
     model,
     panoptic_per_image_id,
     device: str = "cuda",
 ):
     """Classify objects to get pseudo-labels."""
-    img_path = os.path.join(DATA_DIR, "images")
+    img_path = os.path.join(data_dir, "images")
 
     filenames = [
         filename
@@ -99,6 +100,8 @@ def classify(
                     interpolation=InterpolationMode.BICUBIC,
                 )
             )
+            # We want to use the original bbox, not the padded one
+            xmin, ymin, width, height = cropped_obj["bbox"]
             bboxes.append(
                 [xmin, ymin, xmin + width, ymin + height, img_width, img_height]
             )
@@ -132,19 +135,20 @@ def classify(
     return predicted_labels, ids, filename_to_idx, bboxes
 
 
-def main():
+def main(split: str):
     """Main function."""
     device = "cuda"
     seed = 2021
     torch.manual_seed(seed)
     np.random.seed(seed)
     cudnn.benchmark = True
+    data_dir = f"{BASE_DATA_DIR}/{split}/"
 
     # Load trained model
     model, _, _ = build_classifier(args)
 
     # Read in panoptic file
-    panoptic_json_path = f"{DATA_DIR}/v2.0/panoptic/panoptic_2020.json"
+    panoptic_json_path = f"{data_dir}/v2.0/panoptic/panoptic_2020.json"
     with open(panoptic_json_path, "r", encoding="utf-8") as panoptic_file:
         panoptic = json.load(panoptic_file)
 
@@ -159,8 +163,9 @@ def main():
         panoptic_category_per_id[category["id"]] = category
 
     # Get predicted labels from model
+    print("=> Classifying images to get pseudo-labels...")
     predicted_labels, ids, filename_to_idx, bboxes = classify(
-        model, panoptic_per_image_id, device=device
+        data_dir, model, panoptic_per_image_id, device=device
     )
 
     # Merge predicted labels with current REAP annotations
@@ -224,7 +229,7 @@ def main():
     anno.to_csv(BASE_REAP_ANNO_PATH, index=False)
 
     # Create dir for new modified dataset
-    label_path = os.path.join(DATA_DIR, f"labels_{DATASET_MODIFIER}")
+    label_path = os.path.join(data_dir, f"labels_{DATASET_MODIFIER}")
     os.makedirs(label_path, exist_ok=True)
 
     print("=> Writing annotations to files...")
@@ -257,6 +262,7 @@ def main():
 
 if __name__ == "__main__":
     BASE_PATH = os.path.expanduser("~/reap-benchmark/")
+    BASE_DATA_DIR = os.path.expanduser("~/data/mapillary_vistas/")
 
     # Lazy arguments (classifier)
     MODEL_PATH = f"{BASE_PATH}/results/classifier_mtsd-100/checkpoint_best.pt"
@@ -268,8 +274,6 @@ if __name__ == "__main__":
 
     # Lazy arguments (data)
     BASE_REAP_ANNO_PATH = f"{BASE_PATH}/reap_annotations.csv"
-    SPLIT = "validation"  # TODO(user): "training" or "validation"
-    DATA_DIR = os.path.expanduser(f"~/data/mapillary_vistas/{SPLIT}/")
     MIN_AREA = 1000  # Minimum area of traffic signs to consider in pixels
     MAX_NUM_IMGS = 1e9  # Set to small number for debugging
     LABEL_TO_CLF = 95  # Class id of traffic signs on Vistas
@@ -303,4 +307,6 @@ if __name__ == "__main__":
     args.optim = "sgd"
     args.full_precision = True
 
-    main()
+    for SPLIT in ["training", "validation"]:
+        print(f"================ Processing {SPLIT} split... ================")
+        main(SPLIT)

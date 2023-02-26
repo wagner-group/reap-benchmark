@@ -271,15 +271,3 @@ def register_mapillary(
             obj_dim_dict=DATASET_METADATA[dataset_name],
             bg_class=bg_class,
         )
-
-    # if not hasattr(self._metadata, "json_file"):
-    #     logger.info(
-    #         "%s is not registered by `register_coco_instances`. Therefore "
-    #         "trying to convert it to COCO format ...",
-    #         dataset_name,
-    #     )
-    #     cache_path = os.path.join(
-    #         output_dir, f"{dataset_name}_coco_format.json"
-    #     )
-    #     self._metadata.json_file = cache_path
-    #     convert_to_coco_json(dataset_name, cache_path)
