@@ -239,7 +239,7 @@ def main():
         loc = "cuda:{}".format(args.gpu)
         checkpoint = torch.load(best_path, map_location=loc)
     model.load_state_dict(checkpoint["state_dict"])
-    stats = validate(test_loader, model, criterion, args)
+    stats = validate(test_loader, model, criterion)
     print(f"=> No attack: {stats}")
 
 
