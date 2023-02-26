@@ -77,11 +77,16 @@ def get_dataloader(
     """Get eval dataloader from base config."""
     dataset: str = config_base["dataset"]
     split_file_path: str = config_base["split_file_path"]
+    metadata = MetadataCatalog.get(dataset)
 
     # First, get list of file names to evaluate on
-    data_dicts: list[DetectronSample] = DatasetCatalog.get(
-        config_base["dataset"]
-    )
+    if not hasattr(metadata, "data_dict"):
+        data_dicts: list[DetectronSample] = DatasetCatalog.get(
+            config_base["dataset"]
+        )
+        metadata.set(data_dict=data_dicts)
+    else:
+        data_dicts = metadata.data_dict
     split_file_names: set[str] = set()
     if split_file_path is not None:
         logger.info("Loading file names from %s...", split_file_path)
