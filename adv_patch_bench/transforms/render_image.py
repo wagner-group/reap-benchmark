@@ -166,7 +166,11 @@ class RenderImage:
 
         for name, params in self.tf_params.items():
             if isinstance(params, list) and isinstance(params[0], torch.Tensor):
-                self.tf_params[name] = torch.cat(params, dim=0)
+                try:
+                    self.tf_params[name] = torch.cat(params, dim=0)
+                except RuntimeError:
+                    import pdb
+                    pdb.set_trace()
         self.tf_params["obj_transforms"] = RenderObject.get_augmentation(
             robj_kwargs.get("patch_aug_params"), interp
         )
