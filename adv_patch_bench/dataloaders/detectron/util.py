@@ -8,10 +8,10 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-import detectron2
 import pandas as pd
 import torch
 from detectron2.config import global_cfg
+from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.data.datasets.coco import convert_to_coco_json
 from detectron2.utils.file_io import PathManager
 from pycocotools.coco import COCO
@@ -28,25 +28,23 @@ from adv_patch_bench.dataloaders.detectron import (
 )
 from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample
-from hparams import DATASETS
 
-_LOAD_DATASET = {
-    "reap": reap.get_reap_dict,
-    "synthetic": reap.get_reap_dict,
-    "mapillary": mapillary.get_mapillary_dict,
-    "mtsd": mtsd.get_mtsd_dict,
-}
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _get_img_ids(dataset: str, obj_class: int | None) -> list[int]:
     """Get ids of images that contain desired object class."""
-    metadata = detectron2.data.MetadataCatalog.get(dataset)
+    metadata = MetadataCatalog.get(dataset)
     if not hasattr(metadata, "json_file"):
+        logger.info(
+            "COCO json file not found in MetadataCatalog for %s dataset. "
+            "Converting dataset to COCO format...",
+            dataset,
+        )
         cache_path = os.path.join(
             global_cfg.OUTPUT_DIR, f"{dataset}_coco_format.json"
         )
+        metadata.set(json_file=cache_path)
         metadata.json_file = cache_path
         convert_to_coco_json(dataset, cache_path)
 
@@ -81,22 +79,23 @@ def get_dataloader(
     split_file_path: str = config_base["split_file_path"]
 
     # First, get list of file names to evaluate on
-    data_dicts: List[DetectronSample] = detectron2.data.DatasetCatalog.get(
+    data_dicts: list[DetectronSample] = DatasetCatalog.get(
         config_base["dataset"]
     )
     split_file_names: set[str] = set()
     if split_file_path is not None:
-        log.info("Loading file names from %s...", split_file_path)
+        logger.info("Loading file names from %s...", split_file_path)
         with open(split_file_path, "r", encoding="utf-8") as file:
             split_file_names = set(file.read().splitlines())
 
     # Filter only images with desired class when evaluating on REAP
-    if dataset == "reap":
+    if "reap" in dataset:
         img_ids = _get_img_ids(dataset, config_base["obj_class"])
         class_file_names = set(_get_filename_from_id(data_dicts, img_ids))
         split_file_names = split_file_names.intersection(class_file_names)
 
     if sampler == "shuffle":
+        logger.info("Using shuffle sampler...")
         num_samples: int = (
             len(split_file_names)
             if split_file_path is not None
@@ -134,41 +133,7 @@ def get_dataset(config_base: Dict[str, Any]) -> List[DetectronSample]:
     Returns:
         Dataset as list of dictionaries.
     """
-    dataset: str = config_base["dataset"]
-    base_dataset: str = dataset.split("-")[0]
-    split: str = config_base["dataset_split"]
-    base_path: str = os.path.expanduser(config_base["data_dir"])
-    # This assumes that dataset has been registered before
-    class_names: List[str] = detectron2.data.MetadataCatalog.get(
-        base_dataset
-    ).get("thing_classes")
-    bg_class: int = len(class_names) - 1
-    # Load annotation if specified
-    anno_df: Optional[pd.DataFrame] = None
-    if config_base["annotated_signs_only"]:
-        anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
-
-    if base_dataset not in _LOAD_DATASET:
-        raise NotImplementedError(
-            f"Dataset {base_dataset} is not implemented! Only {DATASETS} are "
-            "available."
-        )
-
-    mtsd_anno = {}
-    if "mtsd" in dataset:
-        # Load additional metadata for MTSD
-        mtsd_anno: Dict[str, Any] = mtsd.get_mtsd_anno(base_path, dataset)
-
-    data_dict: List[DetectronSample] = _LOAD_DATASET[base_dataset](
-        split=split,
-        data_path=base_path,
-        bg_class=bg_class,
-        ignore_bg_class=False,
-        anno_df=anno_df,
-        img_size=config_base["img_size"],
-        **mtsd_anno,
-    )
-    return data_dict
+    return DatasetCatalog.get(config_base["dataset"])
 
 
 def register_dataset(config_base: Dict[str, Any]) -> None:
@@ -187,7 +152,7 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
     if config_base.get("annotated_signs_only", False):
         anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
 
-    log.info("Registering %s dataset...", base_dataset)
+    logger.info("Registering %s dataset...", base_dataset)
     if any(name in base_dataset for name in ("reap", "synthetic")):
         # Our synthetic benchmark is also based on samples in REAP
         reap.register_reap(

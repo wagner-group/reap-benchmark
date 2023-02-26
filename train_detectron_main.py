@@ -239,7 +239,6 @@ def train(cfg, config, model, attack):
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
             batch_size = len(data)
-            print(batch_size)
 
             data_adv = data
             if config_base["use_mixed_batch"] and not use_ddp:

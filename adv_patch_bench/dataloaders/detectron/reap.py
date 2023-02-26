@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import pandas as pd
@@ -12,6 +13,8 @@ from adv_patch_bench.utils.types import DetectronSample, SizePx
 from hparams import DATASET_METADATA
 
 _NUM_KEYPOINTS = 4
+
+logger = logging.getLogger(__name__)
 
 
 def get_reap_dict(
@@ -61,7 +64,9 @@ def register_reap(
     # Get index of background or "other" class
     bg_class: int = len(class_names) - 1
     base_path = os.path.expanduser(base_path)
-    data_path: str = os.path.join(base_path, "mapillary_vistas", "no_color")
+    modifier = dataset_name.split("-", maxsplit=1)[1]
+    data_path: str = os.path.join(base_path, "mapillary_vistas", modifier)
+    logger.info("Registering REAP dataset at %s", data_path)
 
     DatasetCatalog.register(
         dataset_name,

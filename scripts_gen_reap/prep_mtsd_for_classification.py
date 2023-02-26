@@ -79,9 +79,11 @@ def main(data_dir, new_label_dict, dataset_name, pad=0.0):
             # if len(images) > 100:
             #     break
 
+    # label_counts is a tuple of (labels, counts)
     label_counts = np.unique(labels, return_counts=True)
     print("Label distribution: ", label_counts)
 
+    # Sort labels by count and keep only top MAX_NUM_CLASSES
     sorted_idx = np.argsort(label_counts[1])[::-1]
     kept_classes = label_counts[0][sorted_idx][:MAX_NUM_CLASSES]
     # Set all labels not in kept_classes to background

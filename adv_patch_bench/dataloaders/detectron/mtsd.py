@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pathlib
 from typing import Any, Dict, List, Optional
@@ -10,9 +11,10 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from adv_patch_bench.utils.argparse import parse_dataset_name
+from adv_patch_bench.utils.tqdm_logger import TqdmLoggingHandler
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
     DATASET_METADATA,
@@ -25,6 +27,10 @@ from hparams import (
 
 _ALLOWED_SPLITS = ("train", "test", "val")
 _NUM_KEYPOINTS = 4
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(TqdmLoggingHandler())
 
 
 def _readlines(path: str) -> List:

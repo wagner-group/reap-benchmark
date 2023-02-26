@@ -31,7 +31,6 @@ from adv_patch_bench.utils.types import (
     ImageTensor,
     ImageTensorDet,
     SizeMM,
-    SizePatch,
     SizePx,
     Target,
 )
@@ -116,6 +115,7 @@ class DetectronEvaluator:
             config_base.get("obj_size_mm", (0.0, 0.0))
         )
         robj_kwargs = {
+            "dataset": self._dataset,
             "obj_size_px": self._obj_size_px,
             "interp": interp,
         }
