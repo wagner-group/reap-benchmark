@@ -370,9 +370,7 @@ def main(config):
     logging.basicConfig(
         stream=sys.stdout,
         format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
-        level=logging.DEBUG
-        if config["base"]["debug"] or config["base"]["verbose"]
-        else logging.INFO,
+        level=config["base"]["verbosity"],
     )
     logging.getLogger("yolov7_d2").setLevel(logging.ERROR)
 
@@ -383,11 +381,7 @@ def main(config):
     logger.info("Model:\n%s", model)
 
     # Set up attack for adversarial training
-    attack = attack_util.setup_attack(
-        config=config,
-        model=model,
-        verbose=config["base"]["verbose"],
-    )
+    attack = attack_util.setup_attack(config=config, model=model)
 
     train(cfg, config, model, attack)
     logger.info("Start final testing...")

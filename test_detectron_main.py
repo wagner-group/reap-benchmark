@@ -458,17 +458,12 @@ if __name__ == "__main__":
     seed: int = config_base["seed"]
 
     # Set up logger to both stdout and log file
-    log_level: int = (
-        logging.DEBUG
-        if config_base["debug"] or config_base["verbose"]
-        else logging.INFO
-    )
     FORMAT_STR = "[%(asctime)s - %(name)s - %(levelname)s]: %(message)s"
     formatter = logging.Formatter(FORMAT_STR)
     logging.basicConfig(
         stream=sys.stdout,
         format=FORMAT_STR,
-        level=log_level,
+        level=config_base["verbosity"],
     )
     file_handler = logging.FileHandler(
         os.path.join(config_base["result_dir"], "results.log"), mode="a"
@@ -477,8 +472,8 @@ if __name__ == "__main__":
     logger.addHandler(file_handler)
     logger.info(config)
 
-    logging.getLogger("detectron2").setLevel(log_level)
-    logging.getLogger("fvcore").setLevel(log_level)
+    logging.getLogger("detectron2").setLevel(config_base["verbosity"])
+    logging.getLogger("fvcore").setLevel(config_base["verbosity"])
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
 

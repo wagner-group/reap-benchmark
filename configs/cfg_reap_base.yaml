@@ -30,7 +30,7 @@ base:
   attack_type: 'load'
   # IoU threshold for matching predicted and grond-truth bounding boxes
   iou_thres: 0.5
-  verbose: True
+  verbosity: 1
 
   # REAP benchmark params
   reap_geo_method: 'perspective'  # Transform mode for patch during eval

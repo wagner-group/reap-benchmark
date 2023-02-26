@@ -9,6 +9,7 @@ https://github.com/yizhe-ang/detectron2-1/blob/master/detectron2_1/adv.py
 
 from __future__ import annotations
 
+import logging
 import pathlib
 from typing import Any
 
@@ -34,6 +35,8 @@ from adv_patch_bench.utils.types import (
     SizePx,
     Target,
 )
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_IOU_THRESHOLDS = np.linspace(
     0.5, 0.95, int(np.round((0.95 - 0.5) / 0.05)) + 1, endpoint=True
@@ -69,7 +72,6 @@ class DetectronEvaluator:
         self._dataloader = dataloader
         self._input_format: str = global_cfg.INPUT.FORMAT
         self._metadata = MetadataCatalog.get(self._dataset)
-        self._verbose: bool = config_base["verbose"]
 
         interp: str = config_base["interp"]
         self._img_size: SizePx = SizePx(config_base["img_size"])
@@ -120,9 +122,6 @@ class DetectronEvaluator:
             "interp": interp,
         }
         keyword = "syn" if self._synthetic else "reap"
-        # self._robj_fn: render_object.RenderObject = (
-        #     syn_object.SynObject if self._synthetic else reap_object.ReapObject
-        # )
         self._robj_kwargs: dict[str, Any] = {
             **robj_kwargs,
             **{k: v for k, v in config_base.items() if keyword in k},
@@ -134,11 +133,7 @@ class DetectronEvaluator:
         self._attack: base_attack.DetectorAttackModule | None = None
         # Set up attack when running  "per-sign"
         if self._attack_type == "per-sign":
-            self._attack = attack_util.setup_attack(
-                config=config,
-                model=model,
-                verbose=self._verbose,
-            )
+            self._attack = attack_util.setup_attack(config=config, model=model)
         self._adv_patch_path: str = config_base["adv_patch_path"]
         self._patch_size = config_base.get("patch_size")
 
@@ -168,10 +163,6 @@ class DetectronEvaluator:
         )
         self.syn_matches = torch.zeros_like(self.syn_scores)
         self._syn_idx = 0
-
-    def _log(self, *args, **kwargs) -> None:
-        if self._verbose:
-            print(*args, **kwargs)
 
     def _syn_eval(self, outputs: list[Target], target_renders: list[Target]):
         """Compute and save metrics for synthetic data evaluation.
@@ -319,7 +310,7 @@ class DetectronEvaluator:
         else:
             metrics = self.evaluator.evaluate(img_ids=eval_img_ids)
         if "bbox" not in metrics:
-            self._log("There are no valid predictions.")
+            logger.info("There are no valid predictions.")
             return coco_instances_results, metrics
 
         metrics["bbox"]["total_num_patches"] = total_num_patches

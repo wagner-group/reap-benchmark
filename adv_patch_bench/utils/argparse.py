@@ -129,7 +129,12 @@ def reap_args_parser(
     parser.add_argument(
         "--name", type=str, default=None, help="save to project/name"
     )
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--verbosity",
+        type=int,
+        default=0,
+        help="Verbosity level (0=ERROR, 1=INFO, 2=DEBUG).",
+    )
     parser.add_argument("--seed", type=int, default=0, help="set random seed")
     parser.add_argument(
         "--padded-imgsz",
@@ -570,8 +575,13 @@ def reap_args_parser(
     _update_result_dir(config)
     _update_conf_thres(config, is_train=is_train)
 
+    config["base"]["verbosity"] = {
+        0: logging.ERROR,
+        1: logging.INFO,
+        2: logging.DEBUG,
+    }[config["base"]["verbosity"]]
     if config["base"]["debug"]:
-        config["base"]["verbose"] = True
+        config["base"]["verbosity"] = logging.DEBUG
 
     return config
 

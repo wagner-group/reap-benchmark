@@ -2,12 +2,15 @@
 
 import copy
 import datetime
+import logging
 import time
 from collections import defaultdict
 from typing import Optional
 
 import numpy as np
 from pycocotools import mask as maskUtils
+
+logger = logging.getLogger(__name__)
 
 
 class COCOeval:
@@ -84,7 +87,7 @@ class COCOeval:
                 all classes).
         """
         if not iouType:
-            print("iouType not specified. use default iouType segm")
+            logger.info("iouType not specified. use default iouType segm")
         self.cocoGt = cocoGt  # ground truth COCO API
         self.cocoDt = cocoDt  # detections COCO API
         self.evalImgs = defaultdict(
@@ -164,17 +167,17 @@ class COCOeval:
         dict) in self.evalImgs
         """
         tic = time.time()
-        print("Running per image evaluation...")
+        logger.info("Running per image evaluation...")
         p = self.params
         # add backward compatibility if useSegm is specified in params
         if p.useSegm is not None:
             p.iouType = "segm" if p.useSegm == 1 else "bbox"
-            print(
+            logger.info(
                 "useSegm (deprecated) is not None. Running {} evaluation".format(
                     p.iouType
                 )
             )
-        print("Evaluate annotation type *{}*".format(p.iouType))
+        logger.info("Evaluate annotation type *{}*".format(p.iouType))
         p.imgIds = list(np.unique(p.imgIds))
         if p.useCats:
             p.catIds = list(np.unique(p.catIds))
@@ -205,7 +208,7 @@ class COCOeval:
         ]
         self._paramsEval = copy.deepcopy(self.params)
         toc = time.time()
-        print("DONE (t={:0.2f}s).".format(toc - tic))
+        logger.info("DONE (t={:0.2f}s).".format(toc - tic))
 
     def computeIoU(self, imgId, catId):
         p = self.params
@@ -242,7 +245,7 @@ class COCOeval:
             g = [g["bbox"] for g in gt]
             d = [d["bbox"] for d in dt]
         else:
-            raise Exception("unknown iouType for iou computation")
+            raise NotImplementedError("unknown iouType for iou computation")
 
         # compute iou between each dt and gt region
         iscrowd = [int(o["iscrowd"]) for o in gt]
@@ -450,10 +453,10 @@ class COCOeval:
         :param p: input params for evaluation
         :return: None
         """
-        print("Accumulating evaluation results...")
+        logger.info("Accumulating evaluation results...")
         tic = time.time()
         if not self.evalImgs:
-            print("Please run evaluate() first")
+            logger.info("Please run evaluate() first")
         # allows input customized parameters
         if p is None:
             p = self.params
@@ -620,7 +623,7 @@ class COCOeval:
             "gtScores": gtScores,
         }
         toc = time.time()
-        print("DONE (t={:0.2f}s).".format(toc - tic))
+        logger.info("DONE (t={:0.2f}s).".format(toc - tic))
 
     def summarize(self):
         """
@@ -660,7 +663,7 @@ class COCOeval:
                 mean_s = -1
             else:
                 mean_s = np.mean(s[s > -1])
-            print(
+            logger.info(
                 iStr.format(titleStr, typeStr, iouStr, areaRng, maxDets, mean_s)
             )
             return mean_s
@@ -796,7 +799,7 @@ class Params:
         elif iouType == "keypoints":
             self.setKpParams()
         else:
-            raise Exception("iouType not supported")
+            raise NotImplementedError("iouType not supported")
         self.iouType = iouType
         # useSegm is deprecated
         self.useSegm = None

@@ -19,7 +19,6 @@ class DetectorAttackModule(nn.Module):
         self,
         attack_config: dict[str, Any],
         core_model: torch.nn.Module,
-        verbose: bool = False,
         **kwargs,
     ) -> None:
         """Initialize DetectorAttackModule.
@@ -27,13 +26,11 @@ class DetectorAttackModule(nn.Module):
         Args:
             attack_config: Config dict for attacks.
             core_model: Target model to attack.
-            verbose: Whether to log messages during attack.
         """
         super().__init__()
         _ = attack_config, kwargs  # Unused
         self._core_model: torch.nn.Module = core_model
         self._device: torch.device = core_model.device
-        self._verbose: bool = verbose
         self._is_training: bool = False
 
     def _on_enter_attack(self, **kwargs) -> None:

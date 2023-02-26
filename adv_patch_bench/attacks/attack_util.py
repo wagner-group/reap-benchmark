@@ -47,7 +47,6 @@ _ATTACK_DICT = {
 def setup_attack(
     config: Optional[Dict[Any, str]] = None,
     model: Optional[torch.nn.Module] = None,
-    verbose: bool = False,
 ) -> base_attack.DetectorAttackModule:
     """Set up attack object."""
     config_attack = config["attack"]
@@ -77,11 +76,7 @@ def setup_attack(
         **config_attack[attack_name],
     }
 
-    return attack_fn(
-        combined_config_attack,
-        model,
-        verbose=verbose,
-    )
+    return attack_fn(combined_config_attack, model)
 
 
 def prep_adv_patch(

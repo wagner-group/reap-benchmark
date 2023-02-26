@@ -32,7 +32,7 @@ class GradAttack(base_attack.DetectorAttackModule):
         attack_config: dict[str, Any],
         core_model: torch.nn.Module,
         **kwargs,
-    ):
+    ) -> None:
         """Base class for gradient-based attack.
 
         Args:
@@ -251,7 +251,6 @@ class GradAttack(base_attack.DetectorAttackModule):
                 patience=int(self._num_steps / 10),
                 threshold=1e-9,
                 min_lr=self._step_size * 1e-6,
-                verbose=self._verbose,
             )
 
         return opt, lr_schedule
@@ -293,7 +292,7 @@ class GradAttack(base_attack.DetectorAttackModule):
                 + (1 - self._ema_const) * loss.item()
             )
 
-        if step % 10 == 0 and self._verbose:
+        if step % 10 == 0:
             logger.debug(
                 "step: %4d  loss: %.4f  time: %.2fs",
                 step,
