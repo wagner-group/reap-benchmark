@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.utils.argparse import parse_dataset_name
