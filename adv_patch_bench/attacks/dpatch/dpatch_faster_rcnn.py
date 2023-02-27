@@ -31,13 +31,17 @@ class DPatchFasterRCNNAttack(rp2_faster_rcnn.RP2FasterRCNNAttack):
         inputs: list[dict[str, Any]] = adv_targets
         instances: list[structures.Instances] = []
         device = self._core_model.device
+        core_model = self._core_model
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+
         for i, inpt in enumerate(inputs):
             inpt["image"] = adv_imgs[i]
             instances.append(inpt["instances"].to(device))
 
         # Get features
-        images = self._core_model.preprocess_image(inputs)
-        features = self._core_model.backbone(images.tensor)
+        images = core_model.preprocess_image(inputs)
+        features = core_model.backbone(images.tensor)
 
         # Get bounding box proposals
         proposals, proposal_losses = self._generate_proposal(

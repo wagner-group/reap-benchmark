@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pickle
-from typing import Any, Dict, Optional
+from typing import Any
 
 import detectron2
 import torch
@@ -45,8 +45,8 @@ _ATTACK_DICT = {
 
 
 def setup_attack(
-    config: Optional[Dict[Any, str]] = None,
-    model: Optional[torch.nn.Module] = None,
+    config: dict[Any, str] | None = None,
+    model: torch.nn.Module | None = None,
 ) -> base_attack.DetectorAttackModule:
     """Set up attack object."""
     config_attack = config["attack"]
@@ -71,7 +71,7 @@ def setup_attack(
         )
 
     attack_fn = _ATTACK_DICT[attack_fn_name]
-    combined_config_attack: Dict[str, Any] = {
+    combined_config_attack: dict[str, Any] = {
         **config_attack["common"],
         **config_attack[attack_name],
     }

@@ -372,7 +372,10 @@ def main(config):
         format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
         level=config["base"]["verbosity"],
     )
-    logging.getLogger("yolov7_d2").setLevel(logging.ERROR)
+    logging.getLogger("detectron2").setLevel(config["base"]["verbosity"])
+    logging.getLogger("fvcore").setLevel(config["base"]["verbosity"])
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
 
     data_util.register_dataset(config["base"])
 

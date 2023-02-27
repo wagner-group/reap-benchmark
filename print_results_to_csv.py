@@ -10,7 +10,8 @@ import pandas as pd
 
 from hparams import DATASET_METADATA
 
-_LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS = 0, 0, 0
+BIG_NUM = 1e9
+_LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS = None, None, None
 _NUM_IOU_THRES = 10
 BASE_PATH = "./results/"
 # CONF_THRES = 0.634  # FIXME
@@ -259,13 +260,13 @@ def _compute_ap_recall(
 
 
 def _average(print_df_rows, base_sid, all_class_sid, metric_name):
-    metrics = np.zeros(len(_NUM_SIGNS_PER_CLASS))
-    for i in range(len(_NUM_SIGNS_PER_CLASS)):
+    metrics = np.zeros(_NUM_CLASSES) + BIG_NUM
+    for i in range(_NUM_CLASSES):
         sid = f"{base_sid} | {i:02d}"
         if sid not in print_df_rows:
             continue
         metrics[i] = print_df_rows[f"{base_sid} | {i:02d}"][metric_name]
-    print_df_rows[all_class_sid][metric_name] = np.mean(metrics)
+    print_df_rows[all_class_sid][metric_name] = np.mean(metrics[metrics < BIG_NUM])
     return metrics
 
 
@@ -347,9 +348,10 @@ def main():
                 obj_class = results["obj_class"]
                 metrics = results["bbox"]
                 attack_type = results["attack_type"]
-                _LABEL_LIST = list(DATASET_METADATA[dataset]["class_name"])
-                _NUM_CLASSES = len(_LABEL_LIST) - 1
-                _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
+                if _LABEL_LIST is None:
+                    _LABEL_LIST = list(DATASET_METADATA[dataset]["class_name"])
+                    _NUM_CLASSES = len(_LABEL_LIST) - 1
+                    _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 
                 if conf_thres is None:
                     # Get conf_thres from metadata
@@ -383,7 +385,7 @@ def main():
                 # Experiment setting identifier for matching clean and attack
                 if obj_class < 0:
                     continue
-                # FIXME
+                # EDIT
                 synthetic = int(results["synthetic"])
                 # synthetic = False
                 is_attack = int(results["attack_type"] != "none")
@@ -411,7 +413,7 @@ def main():
                         continue
                     cls_scores = metrics["gtScores"]
                     tf_mode = results.get("reap_geo_method", "perspective")
-                    # FIXME
+                    # EDIT
                     rl_mode = results["reap_relight_method"]
                     # rl_mode = "polynomial_hsv-sv"
                     # rl_mode = "polynomial_lab-l"
@@ -420,8 +422,8 @@ def main():
                 base_sid += f" | {eval_hash}"
 
                 if base_sid not in tp_scores:
-                    tp_scores[base_sid] = {t: [] for t in range(10)}
-                    fp_scores[base_sid] = {t: [] for t in range(10)}
+                    tp_scores[base_sid] = {t: [] for t in range(_NUM_IOU_THRES)}
+                    fp_scores[base_sid] = {t: [] for t in range(_NUM_IOU_THRES)}
 
                 scores = cls_scores[obj_class]
                 num_gts = scores.shape[1]
@@ -462,7 +464,7 @@ def main():
                     print_df_rows[sid]["Precision"] = outputs["precision"] * 100
                     print_df_rows[sid]["Recall"] = outputs["recall"] * 100
                     print_df_rows[sid]["AP"] = results["bbox"]["AP"]
-                    for t in range(10):
+                    for t in range(_NUM_IOU_THRES):
                         tp_scores[base_sid][t].extend(scores_full[t][0])
                         fp_scores[base_sid][t].extend(scores_full[t][1])
 
@@ -491,9 +493,7 @@ def main():
                         df_row[k] = v
                 df_rows[sid] = df_row
 
-    # FNR for clean syn
-    fnrs = np.zeros(_NUM_CLASSES)
-    sid_no_class = None
+    # FNR for clean data
     for sid, data in print_df_rows.items():
         if data["attack_type"] != "none":
             continue
@@ -534,10 +534,9 @@ def main():
 
         sid_no_class = " | ".join(split_sid[:-1])
         fnr = print_df_rows[sid]["FNR"]
+        ap = -1e9
         if "reap" in sid_no_class:
             ap = print_df_rows[sid]["AP"]
-        else:
-            ap = -1e9
 
         if sid_no_class in results_all_classes:
             results_all_classes[sid_no_class]["num_succeed"] += num_succeed
@@ -547,13 +546,13 @@ def main():
             results_all_classes[sid_no_class]["fnr"][k] = fnr
             results_all_classes[sid_no_class]["ap"][k] = ap
         else:
-            asrs = np.zeros(_NUM_CLASSES)
+            asrs = np.zeros(_NUM_CLASSES) + BIG_NUM
             asrs[k] = attack_success_rate
-            fnrs = np.zeros_like(asrs)
+            fnrs = np.zeros_like(asrs) + BIG_NUM
             fnrs[k] = fnr
-            aps = np.zeros_like(asrs)
+            aps = np.zeros_like(asrs) + BIG_NUM
             aps[k] = ap
-            num_cleans = np.zeros_like(asrs)
+            num_cleans = np.zeros_like(asrs) + BIG_NUM
             num_cleans[k] = num_clean
             results_all_classes[sid_no_class] = {
                 "num_succeed": num_succeed,
@@ -582,9 +581,9 @@ def main():
         all_class_sid = f"{sid} | all"
         asrs = result["asr"]
         fnrs = result["fnr"]
-        avg_asr = np.mean(asrs)
+        avg_asr = np.mean(asrs[asrs < BIG_NUM])
         print_df_rows[all_class_sid]["ASR"] = avg_asr
-        avg_fnr = np.mean(fnrs)
+        avg_fnr = np.mean(fnrs[fnrs < BIG_NUM])
         print_df_rows[all_class_sid]["FNR"] = avg_fnr
 
         # Weighted average by number of real sign distribution
@@ -598,7 +597,7 @@ def main():
 
         if "reap" in sid:
             # This is the correct (or commonly used) definition of mAP
-            mAP = np.mean(result["ap"])
+            mAP = np.mean(result["ap"][result["ap"] < BIG_NUM])
             print_df_rows[all_class_sid]["AP"] = mAP
 
             aps = np.zeros(_NUM_IOU_THRES)
@@ -615,7 +614,7 @@ def main():
                 scores[matched_len:] = fp_scores[sid][t]
                 matches[:matched_len] = 1
                 aps[t] = _compute_ap_recall(scores, matches, total)["AP"]
-            print_df_rows[allw_class_sid]["AP"] = np.mean(aps) * 100
+            print_df_rows[allw_class_sid]["AP"] = np.mean(aps[aps < BIG_NUM]) * 100
 
         print(
             f"{sid}: combined {asr:.2f} ({num_succeed}/{num_clean.sum()}), "

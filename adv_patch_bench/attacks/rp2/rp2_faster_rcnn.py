@@ -25,6 +25,8 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
             core_model: Traget model to attack.
         """
         super().__init__(attack_config, core_model, **kwargs)
+        if hasattr(core_model, "module"):
+            core_model = core_model.module
         # NOTE: Score threshold is used in rp2_base.RP2BaseAttack
         self._nms_thres_orig = copy.deepcopy(
             core_model.proposal_generator.nms_thresh
@@ -66,25 +68,27 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
-        self._core_model.proposal_generator.nms_thresh = self._nms_thres
-        self._core_model.proposal_generator.post_nms_topk = self._post_nms_topk
-        self._core_model.roi_heads.proposal_matcher.thresholds = (
-            self._iou_thres_roi
-        )
-        self._core_model.proposal_generator.anchor_matcher.thresholds = (
+        core_model = self._core_model
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+        core_model.proposal_generator.nms_thresh = self._nms_thres
+        core_model.proposal_generator.post_nms_topk = self._post_nms_topk
+        core_model.roi_heads.proposal_matcher.thresholds = self._iou_thres_roi
+        core_model.proposal_generator.anchor_matcher.thresholds = (
             self._iou_thres_rpn
         )
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
-        self._core_model.proposal_generator.nms_thresh = self._nms_thres_orig
-        self._core_model.proposal_generator.post_nms_topk = (
-            self._post_nms_topk_orig
-        )
-        self._core_model.roi_heads.proposal_matcher.thresholds = (
+        core_model = self._core_model
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+        core_model.proposal_generator.nms_thresh = self._nms_thres_orig
+        core_model.proposal_generator.post_nms_topk = self._post_nms_topk_orig
+        core_model.roi_heads.proposal_matcher.thresholds = (
             self._iou_thres_roi_orig
         )
-        self._core_model.proposal_generator.anchor_matcher.thresholds = (
+        core_model.proposal_generator.anchor_matcher.thresholds = (
             self._iou_thres_rpn_orig
         )
 
@@ -104,10 +108,14 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
             Matched gt target boxes, gt classes, predicted class logits, and
             predicted objectness logits.
         """
-        images = self._core_model.preprocess_image(inputs)
+        core_model = self._core_model
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+
+        images = core_model.preprocess_image(inputs)
 
         # Get features
-        features = self._core_model.backbone(images.tensor)
+        features = core_model.backbone(images.tensor)
 
         # Get bounding box proposals. For API, see
         # https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/proposal_generator/rpn.py#L431
@@ -174,7 +182,11 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
                 "objectness_logits".
             loss: dict[Tensor] if compute_loss is True else None.
         """
-        rpn: nn.Module = self._core_model.proposal_generator
+        core_model = self._core_model
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+
+        rpn: nn.Module = core_model.proposal_generator
         features = [features[f] for f in rpn.in_features]
         anchors = rpn.anchor_generator(features)
 
@@ -260,7 +272,11 @@ class RP2FasterRCNNAttack(rp2_base.RP2BaseAttack):
                 regression.
             losses: ROI losses if compute_loss is True.
         """
-        roi_heads = self._core_model.roi_heads
+        core_model = self._core_model
+        if hasattr(self._core_model, "module"):
+            core_model = self._core_model.module
+
+        roi_heads = core_model.roi_heads
         features = [features[f] for f in roi_heads.box_in_features]
         if gt_instances is not None:
             proposals = roi_heads.label_and_sample_proposals(
