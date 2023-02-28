@@ -231,6 +231,8 @@ Our benchmark is based on the Mapillary Vistas dataset which uses Attribution-No
 So it also shares the same license.
 Please see the `LICENSE` file or this [link](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
+This software and/or data was deposited in the BAIR Open Research Commons repository on Feb 28, 2023.
+
 ## Contact
 
 If you have any question or suggestion, please feel free to open an issue on this repository or directly contact Chawin Sitawarin (chawins AT berkeley DOT edu) or Nabeel Hingun (nabeel126 AT berkeley DOT edu).
