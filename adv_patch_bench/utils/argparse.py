@@ -1079,15 +1079,22 @@ def parse_dataset_name(dataset_name: str) -> list[str, bool, int]:
     dataset_modifiers: list[str] = []
     if "-" in dataset_name:
         dataset_modifiers = dataset_name.split("-")[1:]
-    # Whether sign color is used for labels. Defaults to False
-    use_color = "color" in dataset_modifiers
-    # Whether to use original MTSD labels instead of REAP annotations
-    use_orig_labels = "orig" in dataset_modifiers
+
+    if base_dataset not in ("synthetic", "reap"):
+        # Whether sign color is used for labels. Defaults to False
+        use_color = "color" in dataset_modifiers
+        # Whether to use original MTSD labels instead of REAP annotations
+        use_orig_labels = "orig" in dataset_modifiers
+        # Whether to skip images with no object of interest
+        skip_bg_only = "skipbg" in dataset_modifiers
+    else:
+        use_color = False
+        use_orig_labels = False
+        skip_bg_only = base_dataset == "reap"
+
     # Whether to ignore background class (last class index) and not include it
     # in dataset dict and targets
     ignore_bg_class = "nobg" in dataset_modifiers
-    # Whether to skip images with no object of interest
-    skip_bg_only = "skipbg" in dataset_modifiers
 
     # Get num classes like mtsd-100, reap-100, etc.
     num_classes = None
