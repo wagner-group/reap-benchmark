@@ -160,7 +160,7 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
     logger.info("Registering %s dataset...", base_dataset)
     if any(name in base_dataset for name in ("reap", "synthetic")):
         # Our synthetic benchmark is also based on samples in REAP
-        reap.register_reap(
+        reap.register_reap_syn(
             base_path=base_data_path,
             dataset_name=dataset,
             anno_df=anno_df,

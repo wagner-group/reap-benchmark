@@ -42,7 +42,7 @@ def get_reap_dict(
     return data_dict
 
 
-def register_reap(
+def register_reap_syn(
     base_path: str = "~/data/",
     dataset_name: str = "reap",
     anno_df: pd.DataFrame | None = None,
@@ -69,8 +69,8 @@ def register_reap(
     base_dataset, use_color, _, nobg, _, num_classes, _ = parse_dataset_name(
         dataset_name
     )
-    assert base_dataset == "reap", (
-        f"Dataset name must start with 'reap' but is {base_dataset}!"
+    assert base_dataset in ("reap", "synthetic"), (
+        f"dataset_name must start with 'reap' or 'synthetic' ({base_dataset})!"
     )
     if num_classes is not None:
         modifier = str(num_classes)
