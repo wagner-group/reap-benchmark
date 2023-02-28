@@ -103,7 +103,6 @@ def _generate_adv_patch(
     obj_size_px: SizePx = SizePx((64, 64)),
     save_images: bool = False,
     save_dir: pathlib.Path = pathlib.Path("./"),
-    verbose: bool = False,
 ) -> tuple[ImageTensor, MaskTensor]:
     """Generate adversarial patch.
 
@@ -119,9 +118,7 @@ def _generate_adv_patch(
     )
 
     attack: base_attack.DetectorAttackModule = attack_util.setup_attack(
-        config=config,
-        model=model,
-        verbose=verbose,
+        config=config, model=model
     )
 
     # Generate an adversarial patch
@@ -211,7 +208,6 @@ def main() -> None:
         obj_size_px=config_base["obj_size_px"],
         save_images=config_base["save_images"],
         save_dir=save_dir,
-        verbose=config_base["verbose"],
     )
 
     # Save adv patch
@@ -242,10 +238,10 @@ if __name__ == "__main__":
     logging.basicConfig(
         stream=sys.stdout,
         format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
-        level=logging.DEBUG
-        if config["base"]["debug"] or config["base"]["verbose"]
-        else logging.INFO,
+        level=config["base"]["verbosity"],
     )
+    logging.getLogger("detectron2").setLevel(config_base["verbosity"])
+    logging.getLogger("fvcore").setLevel(config_base["verbosity"])
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
 

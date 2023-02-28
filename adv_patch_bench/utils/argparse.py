@@ -1018,11 +1018,12 @@ def setup_detectron_cfg(
         cfg.merge_from_list(config_base["opts"])
 
     # Copy dataset from args
-    cfg.DATASETS.TEST = (f"{dataset}_{split}",)
+    cfg.DATASETS.TEST = (f"{dataset}_{'val' if is_train else split}",)
     cfg.DATASETS.TRAIN = (config_base["train_dataset"],)
     cfg.SOLVER.IMS_PER_BATCH = config_base["batch_size"]
     if not is_train:
-        cfg.INPUT.CROP.ENABLED = False  # Turn off augmentation for testing
+        # Turn off augmentation for testing. Otherwise, leave it to config file.
+        cfg.INPUT.CROP.ENABLED = False
     cfg.DATALOADER.NUM_WORKERS = config_base["workers"]
     cfg.eval_mode = config_base["eval_mode"]
     cfg.obj_class = config_base["obj_class"]
