@@ -53,7 +53,7 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
         self.use_keypoint = True
 
         # MTSD specific
-        metadata = DATASET_METADATA["mtsd_no_color"]
+        metadata = DATASET_METADATA[config_base["dataset"]]
         class_names = metadata["class_name"]
         hw_ratio_dict = metadata["hw_ratio"]
         shape_dict = metadata["shape"]
@@ -83,8 +83,9 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
                 obj_width_px=config_base["obj_size_px"][1],
                 pad_to_square=False,
             )
+            syn_obj_name = metadata["syn_obj_name"][obj_class]
             syn_obj_path = os.path.join(
-                DEFAULT_SYN_OBJ_DIR, "synthetic", f"{class_name}.png"
+                DEFAULT_SYN_OBJ_DIR, "synthetic", f"{syn_obj_name}.png"
             )
             syn_obj = torchvision.io.read_image(
                 syn_obj_path, mode=torchvision.io.ImageReadMode.RGB
@@ -94,7 +95,6 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
             obj_mask = img_util.coerce_rank(obj_mask, 4)
             self._syn_objs[obj_class] = syn_obj
             self._syn_obj_masks[obj_class] = obj_mask.float()
-        self._column_name = f'{self._relight_params["method"]}_coeffs'
         self._bg_class: int = global_cfg.other_catId
 
     def _load_image_with_annos(self, dataset_dict):
@@ -181,10 +181,8 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
 
     def __call__(self, dataset_dict):
         """Map dataset_dict."""
+        column_name = f'{self._relight_params["method"]}_coeffs'
         dataset_dict = super().__call__(dataset_dict)
-        # if self.is_train:
-        #     dataset_dict.pop("annotations", None)
-        #     return dataset_dict
         instances = dataset_dict["instances"]
         new_annos = []
         num_instances = len(instances)
@@ -195,7 +193,7 @@ class MtsdYoloDatasetMapper(YOLOFDtasetMapper):
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "keypoints": instances[i].gt_keypoints.tensor[0].tolist(),
             }
-            for key in (self._column_name, "has_reap"):
+            for key in (column_name, "has_reap"):
                 obj[key] = dataset_dict["annotations"][i][key]
             new_annos.append(obj)
         dataset_dict["annotations"] = new_annos
