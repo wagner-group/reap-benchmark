@@ -52,7 +52,7 @@ SOLVER = {
 train.device = "cuda"
 model.device = "cuda"
 
-# EDIT: Set num_classes
+# EDIT: Set num_classes. This is overwritten by the main file (argparse.py).
 model.num_classes = 12
 model.criterion.num_classes = 12
 

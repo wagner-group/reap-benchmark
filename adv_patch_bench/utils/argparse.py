@@ -924,11 +924,8 @@ def _update_save_dir(
         ]
         token_list.append(attack_name + "_".join(atk_params_list))
 
-        if is_detectron and "detectron" in atk_params:
-            dt_params: Dict[str, Any] = atk_params["detectron"]
-            dt_params = dict(sorted(dt_params.items()))
-            dt_params_list: List[str] = [str(v) for v in dt_params.values()]
-            token_list.append("dt" + "_".join(dt_params_list))
+        if config_base["use_mixed_batch"]:
+            token_list.append("mix")
 
     # Append custom name at the end
     token_list = [str(t) for t in token_list]
@@ -1057,6 +1054,7 @@ def setup_detectron_cfg(
         cfg.MODEL.YOLO.CLASSES = num_classes
     elif "detrex" in config_base["model_name"]:
         cfg.model.num_classes = num_classes
+        cfg.model.criterion.num_classes = num_classes
 
     if isinstance(cfg, CfgNode):
         cfg.freeze()
