@@ -452,7 +452,7 @@ if __name__ == "__main__":
     config: Dict[str, Dict[str, Any]] = reap_args_parser(
         True, is_gen_patch=False
     )
-    cfg = setup_detectron_cfg(config)
+    cfg = setup_detectron_cfg(config, is_train=False)
 
     config_base: Dict[str, Any] = config["base"]
     seed: int = config_base["seed"]
@@ -469,6 +469,7 @@ if __name__ == "__main__":
         os.path.join(config_base["result_dir"], "results.log"), mode="a"
     )
     file_handler.setFormatter(formatter)
+    logger.setLevel(config_base["verbosity"])
     logger.addHandler(file_handler)
     logger.info(config)
 

@@ -240,6 +240,7 @@ if __name__ == "__main__":
         format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
         level=config["base"]["verbosity"],
     )
+    logger.setLevel(config_base["verbosity"])
     logging.getLogger("detectron2").setLevel(config_base["verbosity"])
     logging.getLogger("fvcore").setLevel(config_base["verbosity"])
     logging.getLogger("matplotlib").setLevel(logging.WARNING)

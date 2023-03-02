@@ -372,6 +372,7 @@ def main(config):
         format="[%(asctime)s - %(name)s - %(levelname)s]: %(message)s",
         level=config["base"]["verbosity"],
     )
+    logger.setLevel(config["base"]["verbosity"])
     logging.getLogger("detectron2").setLevel(config["base"]["verbosity"])
     logging.getLogger("fvcore").setLevel(config["base"]["verbosity"])
     logging.getLogger("matplotlib").setLevel(logging.WARNING)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from torch import nn
@@ -27,18 +28,35 @@ class DPatchDinoAttack(dpatch_yolo.DPatchYoloAttack):
         super(rp2_yolo.RP2YoloAttack, self).__init__(
             attack_config, core_model, **kwargs
         )
+        self._use_only_final_loss = attack_config.get(
+            "use_only_final_loss", False
+        )
+        self._weight_dict: dict[str, float] = {}
 
     def _on_enter_attack(self, **kwargs) -> None:
         self._is_training = self._core_model.training
         self._core_model.eval()
+        core_module = self._core_model
         if hasattr(self._core_model, "module"):
-            self._core_model.module.attack_mode = True
-        else:
-            self._core_model.attack_mode = True
+            core_module = self._core_model.module
+        core_module.attack_mode = True
+
+        # Cache the original weight_dict
+        self._weight_dict = copy.deepcopy(core_module.criterion.weight_dict)
+        if self._use_only_final_loss:
+            # Set all other loss weights to 0 except for actual pred loss
+            for key in core_module.criterion.weight_dict.keys():
+                if (
+                    key.split("_")[-1].isnumeric()
+                    or "dn" in key
+                    or "enc" in key
+                ):
+                    core_module.criterion.weight_dict[key] = 0.0
 
     def _on_exit_attack(self, **kwargs) -> None:
         self._core_model.train(self._is_training)
+        core_module = self._core_model
         if hasattr(self._core_model, "module"):
-            self._core_model.module.attack_mode = False
-        else:
-            self._core_model.attack_mode = False
+            core_module = self._core_model.module
+        core_module.attack_mode = False
+        core_module.criterion.weight_dict = self._weight_dict

@@ -106,6 +106,7 @@ attack:
     obj_loss_const: 0
     iou_thres: 0
     nms_thres: null
+    use_only_final_loss: False  # For DINO only
 
   dpatch:
     attack_mode: ''
@@ -119,6 +120,7 @@ attack:
     obj_loss_const: 0
     iou_thres: 0
     nms_thres: null
+    use_only_final_loss: False  # For DINO only
 
 # Shapeshifter attack
 # https://github.com/shangtse/robust-physical-attack/blob/master/Makefile#L76
