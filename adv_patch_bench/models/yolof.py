@@ -1,3 +1,5 @@
+"""Implement YOLOF in Detectron2 (from https://github.com/chensnathan/YOLOF)."""
+
 import copy
 import logging
 from typing import Dict, List, Tuple
