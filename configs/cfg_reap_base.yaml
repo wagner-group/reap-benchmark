@@ -11,6 +11,7 @@ base:
   data_dir: '~/data/'
   dataset: 'reap'  # dataset name: 'reap', 'synthetic', 'mapillary-no_color-SPLIT', 'mtsd-SPLIT'
   train_dataset: null
+  use_mixed_batch: False
   # Sample dimension (height, width); comma-separated
   padded_imgsz: '1536,2048'  # '1536,2048'
   batch_size: 1

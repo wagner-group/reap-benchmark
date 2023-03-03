@@ -647,8 +647,8 @@ def main():
     df = df.drop(columns=["attack_type"])
     # df = df.reindex(columns=["id", "FNR", "ASR", "AP", "Precision", "Recall"])
     df = df.reindex(columns=["id", "FNR", "ASR", "AP"])
-    idx = ["all" in name and "allw" not in name for name in df["id"]]
-    df = df[idx]
+    # idx = ["all" in name and "allw" not in name for name in df["id"]]
+    # df = df[idx]
     print(df.to_csv(float_format="%0.2f", index=False))
     # print("Repeated results:", repeated_results)
 

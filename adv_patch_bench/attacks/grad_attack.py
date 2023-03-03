@@ -121,7 +121,6 @@ class GradAttack(base_attack.DetectorAttackModule):
             )
             adv_img: BatchImageTensor = rimg.post_process_image(adv_img)
             loss: torch.Tensor = self.compute_loss(delta, adv_img, adv_target)
-            loss.backward()
             if loss.isnan().any():
                 logger.warning(
                     "NaN loss detected (involved image names: %s)! "
@@ -132,13 +131,15 @@ class GradAttack(base_attack.DetectorAttackModule):
 
             # Update perturbation
             if "pgd" in self._optimizer_name:
-                if delta.grad.isnan().any():
+                grad = torch.autograd.grad(loss, delta)[0]
+                if grad.isnan().any():
                     logger.warning("NaN grad!")
                     break
-                grad = delta.grad.detach()
-                grad = torch.sign(grad)
-                z_delta -= self._step_size * grad
+                grad.detach_()
+                grad.sign_()
+                z_delta.sub_(grad, alpha=self._step_size)
             else:
+                loss.backward()
                 if z_delta.grad.isnan().any():
                     logger.warning("NaN grad!")
                     break

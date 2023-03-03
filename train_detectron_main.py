@@ -252,9 +252,7 @@ def train(cfg, config, model, attack):
             if use_attack:
                 # Create image wrapper that handles tranforms
                 rimg: RenderImage = RenderImage(
-                    samples=data_adv,
-                    robj_kwargs=robj_kwargs,
-                    **rimg_kwargs,
+                    samples=data_adv, robj_kwargs=robj_kwargs, **rimg_kwargs
                 )
                 if rimg.num_objs > 0:
                     # Collect patch mask for each class because relative patch

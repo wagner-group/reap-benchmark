@@ -571,7 +571,7 @@ def reap_args_parser(
     _update_syn_obj_path(config)
     _update_syn_obj_size(config)
     _update_attack_transforms(config)
-    _update_save_dir(config, is_detectron=is_detectron, is_train=is_train)
+    _update_save_dir(config, is_train=is_train)
     _update_result_dir(config)
     _update_conf_thres(config, is_train=is_train)
 
@@ -840,9 +840,7 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
 
 
 def _update_save_dir(
-    config: Dict[str, Dict[str, Any]],
-    is_detectron: bool = True,
-    is_train: bool = False,
+    config: Dict[str, Dict[str, Any]], is_train: bool = False
 ) -> None:
     """Create folder for saving eval results and set save_dir in config.
 
@@ -924,7 +922,7 @@ def _update_save_dir(
         ]
         token_list.append(attack_name + "_".join(atk_params_list))
 
-        if config_base["use_mixed_batch"]:
+        if config_base["use_mixed_batch"] and is_train:
             token_list.append("mix")
 
     # Append custom name at the end
