@@ -170,6 +170,7 @@ def main() -> None:
         "mode": "synthetic" if synthetic else "reap",
     }
     robj_kwargs: dict[str, Any] = {
+        "dataset": dataset,
         "obj_size_px": config_base["obj_size_px"],
         "interp": interp,
         "patch_aug_params": config_atk_common,
@@ -247,7 +248,7 @@ if __name__ == "__main__":
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
     # Only allow reap or synthetic as dataset for generating patch
-    if config_base["dataset"] not in ("reap", "synthetic"):
+    if all(kw not in config_base["dataset"] for kw in ("reap", "synthetic")):
         raise ValueError(
             "dataset must be either reap or synthetic, but it is "
             f"{config_base['dataset']}!"

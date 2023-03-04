@@ -371,8 +371,10 @@ def main():
                 # obj_class_name = result_path.split("/")[-3]
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
-                # FIXME
+                # EDIT
                 eval_hash = results["weights"].split("/")[-1]
+                # if eval_hash == "model_0034999.pth":
+                #     eval_hash = "model_best.pth"
                 # eval_hash = "dummy"
                 # if eval_hash == "cd78fbc2":
                 #     eval_hash = "1e47efdb"
@@ -647,8 +649,8 @@ def main():
     df = df.drop(columns=["attack_type"])
     # df = df.reindex(columns=["id", "FNR", "ASR", "AP", "Precision", "Recall"])
     df = df.reindex(columns=["id", "FNR", "ASR", "AP"])
-    # idx = ["all" in name and "allw" not in name for name in df["id"]]
-    # df = df[idx]
+    idx = ["all" in name and "allw" not in name for name in df["id"]]
+    df = df[idx]
     print(df.to_csv(float_format="%0.2f", index=False))
     # print("Repeated results:", repeated_results)
 

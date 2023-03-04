@@ -132,7 +132,7 @@ def reap_args_parser(
     parser.add_argument(
         "--verbosity",
         type=int,
-        default=0,
+        default=1,
         help="Verbosity level (0=ERROR, 1=INFO, 2=DEBUG).",
     )
     parser.add_argument("--seed", type=int, default=0, help="set random seed")
@@ -579,7 +579,7 @@ def reap_args_parser(
         0: logging.ERROR,
         1: logging.INFO,
         2: logging.DEBUG,
-    }[config["base"]["verbosity"]]
+    }[int(config["base"]["verbosity"])]
     if config["base"]["debug"]:
         config["base"]["verbosity"] = logging.DEBUG
 
