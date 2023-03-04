@@ -106,7 +106,11 @@ def _compute_relight_params(
     return coeffs, syn_obj
 
 
-def main(relight_method: str, relight_params: dict[str, Any] | None = None):
+def main(
+    geo_method: str,
+    relight_method: str,
+    relight_params: dict[str, Any] | None = None,
+):
     """Main function for running realism test."""
     # file directory where images are stored
     file_dir = "~/data/reap-benchmark/reap_realism_test/images_jpg/"
@@ -166,7 +170,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
         filepath = os.path.join(file_dir, filename)
         # check if file exists
         if not os.path.exists(filepath):
-            print("File not found: ", filepath)
+            print("File not found:", filepath)
             continue
 
         # Read image in RGB format (no need to reorder channels)
@@ -176,7 +180,6 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
         torch_image /= 255.0
 
         # get image dimensions
-        # img_width, img_height = row["width"], row["height"]
         img_height, img_width = torch_image.shape[-2:]
 
         # get labeled coordinates for object in image
@@ -226,7 +229,7 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
             patch, patch_mask = pickle.load(file)
 
         patch_size_in_pixel = patch.shape[-1]
-        hw_ratio_dict = DATASET_METADATA["mapillary_no_color"]["hw_ratio"]
+        hw_ratio_dict = DATASET_METADATA["mapillary-no_color"]["hw_ratio"]
         # get aspect ratio for current object class
         hw_ratio = hw_ratio_dict[(index // 2) % len(traffic_sign_classes)]
         obj_shape = obj_class_to_shape[obj_class]
@@ -235,7 +238,9 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
         sign_mask, src = util.gen_sign_mask(
             obj_shape,
             hw_ratio=hw_ratio,
-            obj_width_px=patch_size_in_pixel,
+            obj_width_px=round(patch_size_in_pixel * hw_ratio)
+            if "rect" in obj_class
+            else patch_size_in_pixel,
             pad_to_square=False,
         )
         src = np.array(src).astype(np.float32)
@@ -281,22 +286,49 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
             patch_tgt *= 1024 / 6036
 
         transform_func = kornia_tf.warp_perspective
-        if len(src) == 3:
-            tgt = np.array(
-                [[sign_x1, sign_y1], [sign_x2, sign_y2], [sign_x3, sign_y3]]
-            ).astype(np.float32)
-            tgt *= 1024 / 6036
-            sign_tf_matrix = (
-                torch.from_numpy(cv.getAffineTransform(src, tgt))
-                .unsqueeze(0)
-                .float()
-            )
-            # add [0, 0, 1] to M1
-            sign_tf_matrix = torch.cat(
-                (sign_tf_matrix, torch.tensor([0, 0, 1]).view(1, 1, 3).float()),
-                dim=1,
-            )
+        if geo_method in ("affine", "perspective"):
+            if len(src) == 3 or geo_method == "affine":
+                # Affine transformation (3 points)
+                tgt = np.array(
+                    [[sign_x1, sign_y1], [sign_x2, sign_y2], [sign_x3, sign_y3]]
+                ).astype(np.float32)
+                tgt *= 1024 / 6036
+                sign_tf_matrix = (
+                    torch.from_numpy(cv.getAffineTransform(src[:3], tgt))
+                    .unsqueeze(0)
+                    .float()
+                )
+                # add [0, 0, 1] to M1
+                sign_tf_matrix = torch.cat(
+                    (
+                        sign_tf_matrix,
+                        torch.tensor([0, 0, 1]).view(1, 1, 3).float(),
+                    ),
+                    dim=1,
+                )
+            else:
+                # Perspective transformation or homography (4 points)
+                tgt = np.array(
+                    [
+                        [sign_x1, sign_y1],
+                        [sign_x2, sign_y2],
+                        [sign_x3, sign_y3],
+                        [sign_x4, sign_y4],
+                    ]
+                ).astype(np.float32)
+                tgt *= 1024 / 6036
+                src = torch.from_numpy(src).unsqueeze(0)
+                tgt = torch.from_numpy(tgt).unsqueeze(0)
+                sign_tf_matrix = get_perspective_transform(src, tgt)
+                src = src[0]  # unsqueeze(0) above
+                tgt = tgt[0]  # unsqueeze(0) above
+
+            # apply perspective transform to src patch coordinates
+            patch_src_transformed = cv.perspectiveTransform(
+                patch_src.reshape((1, -1, 2)), sign_tf_matrix[0].numpy()
+            )[0]
         else:
+            # Translate and scale transformation (2 points)
             tgt = np.array(
                 [
                     [sign_x1, sign_y1],
@@ -306,16 +338,21 @@ def main(relight_method: str, relight_params: dict[str, Any] | None = None):
                 ]
             ).astype(np.float32)
             tgt *= 1024 / 6036
-            src = torch.from_numpy(src).unsqueeze(0)
-            tgt = torch.from_numpy(tgt).unsqueeze(0)
-            sign_tf_matrix = get_perspective_transform(src, tgt)
-            src = src[0]  # unsqueeze(0) above
-            tgt = tgt[0]  # unsqueeze(0) above
+            tgt = tgt[: len(src)]
+            tgt_center = np.mean(tgt, axis=0)
+            src_center = np.mean(src, axis=0)
 
-        # apply perspective transform to src patch coordinates
-        patch_src_transformed = cv.perspectiveTransform(
-            patch_src.reshape((1, -1, 2)), sign_tf_matrix[0].numpy()
-        )[0]
+            def compute_area(x, y):
+                return 0.5 * np.abs(
+                    np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1))
+                )
+
+            tgt_area = compute_area(tgt[:, 0], tgt[:, 1])
+            src_area = compute_area(src[:, 0], src[:, 1])
+            scale = np.sqrt(tgt_area / src_area)
+            patch_src_transformed = (
+                patch_src - src_center
+            ) * scale + tgt_center
 
         if SAVE_IMG_DEBUG:
             image_resized = _save_images(
@@ -437,6 +474,7 @@ if __name__ == "__main__":
     # flag to control whether to save images for debugging
     SAVE_IMG_DEBUG = False
     results = {}
+    GEO_METHOD = "translate+scale"  # "translate+scale", "affine", "perspective"
 
     # RELIGHT_METHOD = "percentile_hsv-sv"
     # for percentile in range(1, 30):
@@ -492,7 +530,9 @@ if __name__ == "__main__":
     RELIGHT_METHOD = "percentile"
     percentile = 0.2
     params = {"percentile": percentile}
-    results[f"{RELIGHT_METHOD}_{percentile}"] = main(RELIGHT_METHOD, params)
+    results[f"{RELIGHT_METHOD}_{percentile}"] = main(
+        GEO_METHOD, RELIGHT_METHOD, params
+    )
 
     with open("tmp/realism_test_results.pkl", "wb") as f:
         pickle.dump(results, f)
