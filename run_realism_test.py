@@ -18,7 +18,7 @@ import skimage
 import torch
 from kornia.geometry.transform import get_perspective_transform
 from PIL import Image
-from torchvision.utils import save_image
+from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
@@ -110,6 +110,7 @@ def main(
     geo_method: str,
     relight_method: str,
     relight_params: dict[str, Any] | None = None,
+    use_jpeg: bool = True,
 ):
     """Main function for running realism test."""
     # file directory where images are stored
@@ -148,6 +149,7 @@ def main(
     # lists to store geometric and lighting errors for each image
     geometric_errors = []
     lighting_errors = []
+    all_crops = []
 
     relight_transform = lighting_tf.RelightTransform(method=relight_method)
 
@@ -166,7 +168,10 @@ def main(
         ]
 
         # get file path for image
-        filename = row["file_name"].replace(".png", ".jpg")
+        filename = row["file_name"]
+        if use_jpeg:
+            filename = filename.replace(".png", ".jpg")
+
         filepath = os.path.join(file_dir, filename)
         # check if file exists
         if not os.path.exists(filepath):
@@ -434,6 +439,34 @@ def main(
                 torch_image * warped_mask, f"tmp/{index:02d}_real_patch.png"
             )
             save_image(warped_patch, f"tmp/{index:02d}_reap_patch.png")
+            render_image = (
+                1 - warped_mask
+            ) * torch_image + warped_mask * warped_patch
+            # ymin, xmin, height, width = [int(x) for x in img_util.mask_to_box(warped_mask)]
+            if isinstance(tgt, np.ndarray):
+                tgt = torch.from_numpy(tgt)
+            xmin, ymin = tgt.min(0)[0]
+            xmax, ymax = tgt.max(0)[0]
+            height, width = int(ymax - ymin), int(xmax - xmin)
+            size = max(height, width) * 1.25
+            ypad, xpad = round((size - height) // 2), round((size - width) // 2)
+            ymin, xmin = int(ymin), int(xmin)
+            crop_render = render_image[
+                :,
+                :,
+                max(0, ymin - ypad) : ymin + height + ypad,
+                max(0, xmin - xpad) : xmin + width + xpad,
+            ]
+            crop_orig = torch_image[
+                :,
+                :,
+                max(0, ymin - ypad) : ymin + height + ypad,
+                max(0, xmin - xpad) : xmin + width + xpad,
+            ]
+            # save_image(crop_render, f"tmp/{index:02d}_crop_render.png")
+            # save_image(crop_orig, f"tmp/{index:02d}_crop_orig.png")
+            crop_both = torch.cat([crop_orig, crop_render], dim=3)
+            all_crops.append(crop_both)
 
         # calculate relighting error between transformed synthetic patch and real patch
         relighting_l2_error = ((real_patch - reap_patch) ** 2).mean().sqrt()
@@ -467,20 +500,33 @@ def main(
     print(f"max: {np.max(lighting_errors)}")
     print(f"min: {np.min(lighting_errors)}")
 
+    # Save real vs rendered patches for all images
+    num_rows = len(all_crops) // 11
+    imgs = [None for _ in all_crops]
+    for i, crop in enumerate(all_crops):
+        imgs[(i % 11) * 4 + (i // 11)] = img_util.resize_and_pad(
+            obj=crop,
+            resize_size=all_crops[0].shape[-2:],
+            interp="bicubic",
+            keep_aspect_ratio=False,
+        )[0]
+    grid = make_grid(imgs, nrow=num_rows, padding=4, pad_value=1)
+    save_image(grid, "tmp/all_crops.png")
+
     return geometric_errors, lighting_errors
 
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
-    SAVE_IMG_DEBUG = False
+    SAVE_IMG_DEBUG = True
     results = {}
-    GEO_METHOD = "translate+scale"  # "translate+scale", "affine", "perspective"
+    GEO_METHOD = "perspective"  # "translate+scale", "affine", "perspective"
 
-    # RELIGHT_METHOD = "percentile_hsv-sv"
+    # RELIGHT_METHOD = "percentile_lab-l"
     # for percentile in range(1, 30):
     #     params = {"percentile": percentile / 100}
     #     results[f"{RELIGHT_METHOD}_{percentile / 100}"] = main(
-    #         RELIGHT_METHOD, params
+    #         GEO_METHOD, RELIGHT_METHOD, params
     #     )
 
     # RELIGHT_METHOD = "polynomial"
@@ -488,18 +534,18 @@ if __name__ == "__main__":
     #     # for degree in range(4):
     #         params = {"polynomial_degree": degree, "percentile": drop_topk}
     #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-    #             RELIGHT_METHOD, params
+    #             GEO_METHOD, RELIGHT_METHOD, params
     #         )
 
-    # RELIGHT_METHOD = "color_transfer"
-    # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
+    # RELIGHT_METHOD = "color_transfer_lab-l"
+    # results[RELIGHT_METHOD] = main(GEO_METHOD, RELIGHT_METHOD, {})
 
     # RELIGHT_METHOD = "polynomial_max"
     # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
     #     for degree in range(4):
     #         params = {"polynomial_degree": degree, "percentile": drop_topk}
     #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-    #             RELIGHT_METHOD, params
+    #             GEO_METHOD, RELIGHT_METHOD, params
     #         )
 
     # RELIGHT_METHOD = "polynomial_hsv-sv"
@@ -507,31 +553,32 @@ if __name__ == "__main__":
     #     for degree in range(4):
     #         params = {"polynomial_degree": degree, "percentile": drop_topk}
     #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-    #             RELIGHT_METHOD, params
+    #             GEO_METHOD, RELIGHT_METHOD, params
     #         )
 
-    # RELIGHT_METHOD = "polynomial_lab-l"
+    # RELIGHT_METHOD = "polynomial_lab"
     # for drop_topk in [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]:
     #     for degree in range(4):
     #         params = {"polynomial_degree": degree, "percentile": drop_topk}
     #         results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-    #             RELIGHT_METHOD, params
+    #             GEO_METHOD, RELIGHT_METHOD, params
     #         )
 
     # RELIGHT_METHOD = "color_transfer_hsv-sv"
-    # results[RELIGHT_METHOD] = main(RELIGHT_METHOD, {})
+    # results[RELIGHT_METHOD] = main(GEO_METHOD, RELIGHT_METHOD, {})
 
     # RELIGHT_METHOD = "polynomial_hsv-sv"
     # degree, drop_topk = 1, 0.0
     # params = {"polynomial_degree": degree, "percentile": drop_topk}
     # results[f"{RELIGHT_METHOD}_p{degree}_k{drop_topk}"] = main(
-    #     RELIGHT_METHOD, params
+    #     GEO_METHOD, RELIGHT_METHOD, params
     # )
+
     RELIGHT_METHOD = "percentile"
     percentile = 0.2
     params = {"percentile": percentile}
     results[f"{RELIGHT_METHOD}_{percentile}"] = main(
-        GEO_METHOD, RELIGHT_METHOD, params
+        GEO_METHOD, RELIGHT_METHOD, params, use_jpeg=True
     )
 
     with open("tmp/realism_test_results.pkl", "wb") as f:
