@@ -20,7 +20,7 @@ _SHAPE_TO_VERTICES = {
     "pentagon": ((0, 2, 3, 4),),
     "octagon": ((0, 2, 4, 6),),
 }
-_VALID_TRANSFORM_MODE = ("perspective", "translate_scale")
+_VALID_TRANSFORM_MODE = ("perspective", "translate_scale", "affine")
 
 
 def get_corners(mask):
@@ -225,6 +225,8 @@ def get_transform_matrix(
                 [min_src_x, max_src_y],
             ]
         )
+    elif transform_mode == "affine":
+        tgt, src = tgt[:3], src[:3]
 
     assert src.shape == tgt.shape, (
         f"src and tgt keypoints don't have the same shape ({src.shape} vs "
