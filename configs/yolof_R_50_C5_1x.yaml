@@ -64,7 +64,7 @@ INPUT:
   # Maximum size of the side of the image during testing
   MAX_SIZE_TEST: 2048  # This will be set by args during testing
 DATALOADER:
-  NUM_WORKERS: 24
+  NUM_WORKERS: 16
   SAMPLER_TRAIN: 'RepeatFactorTrainingSampler'  # EDIT: default: 'TrainingSampler'
   REPEAT_THRESHOLD: 1.0  # EDIT: default: 0
 DATASETS:

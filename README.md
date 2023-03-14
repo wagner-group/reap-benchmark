@@ -169,6 +169,20 @@ ln -s $BASE_DIR/validation/labels_$MODIFIER/* labels/
 
 ## Usage
 
+### Examples
+
+- `scripts/example_train.sh`: Example training script including both normal and adversarial training.
+- `scripts/example_eval.sh`: Example evaluation script including with and without adversarial patches (per-class, per-instance).
+
+```bash
+cp scripts/example_eval.sh my_eval_script.sh
+# Make changes to my_eval_script.sh as needed
+vi my_eval_script.sh
+...
+# Run script
+bash my_eval_script.sh
+```
+
 ### Use REAP benchmark for evaluation
 
 - `reap_annotations.csv` is the REAP annotation file.
@@ -184,7 +198,7 @@ Coming soon!
 
 - `mtsd_label_metadata.csv` is a mapping between the original MTSD classes to classes in REAP. It contains shapes and sizes for each MTSD class.
 
-#### Computing Religting Params
+#### Computing Relighting Params
 
 **Realism Test.** Run script to test out different relighting methods on the printed signs and patches.
 
