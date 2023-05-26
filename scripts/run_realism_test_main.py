@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import math
 import os
 import pathlib
@@ -16,17 +15,20 @@ import numpy as np
 import pandas as pd
 import skimage
 import torch
+import torchvision
+import torchvision.transforms.functional as F
 from kornia.geometry.transform import get_perspective_transform
-from PIL import Image
 from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import lighting_tf, util
+from adv_patch_bench.utils.realism import compute_relight_params
 from hparams import DATASET_METADATA, TS_COLOR_DICT
 
 # list of point colors for visualizing image points
 POINT_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
+IMG_WIDTH = 2048
 
 
 def _save_images(
@@ -64,48 +66,6 @@ def _save_images(
     return image_resized.float() / 255
 
 
-def _compute_relight_params(
-    torch_image,
-    sign_mask,
-    relight_method,
-    relight_params,
-    obj_class,
-    src,
-    tgt,
-) -> torch.Tensor:
-    syn_obj_path = os.path.join(
-        "attack_assets", "synthetic", f"{obj_class}.png"
-    )
-    obj_numpy = np.array(Image.open(syn_obj_path).convert("RGBA")) / 255
-    syn_obj = torch.from_numpy(obj_numpy[:, :, :-1]).float().permute(2, 0, 1)
-    syn_obj = img_util.coerce_rank(syn_obj, 4)
-    obj_height, obj_width = syn_obj.shape[-2:]
-    orig_height, orig_width = sign_mask.shape[-2:]
-    relight_sign_mask = img_util.resize_and_pad(
-        sign_mask,
-        resize_size=(obj_height, obj_width),
-        is_binary=True,
-        keep_aspect_ratio=False,
-    ).float()
-    relight_params["obj_mask"] = relight_sign_mask
-    src = copy.deepcopy(src)
-    src[:, 0] *= obj_width / orig_width
-    src[:, 1] *= obj_height / orig_height
-    relight_params["src_points"] = src
-    relight_params["tgt_points"] = tgt
-    relight_params["transform_mode"] = "perspective"
-    if "percentile" not in RELIGHT_METHOD:
-        relight_params["syn_obj"] = syn_obj
-
-    # calculate relighting parameters
-    coeffs = lighting_tf.compute_relight_params(
-        torch_image,
-        method=relight_method,
-        **relight_params,
-    )
-    return coeffs, syn_obj
-
-
 def main(
     geo_method: str,
     relight_method: str,
@@ -114,13 +74,14 @@ def main(
 ):
     """Main function for running realism test."""
     # file directory where images are stored
-    file_dir = "~/data/reap-benchmark/reap_realism_test/images_jpg/"
+    data_dir = "~/data/reap-benchmark/reap_realism_test"
+    # file_dir = "~/data/reap-benchmark/reap_realism_test/images_jpg/"
+    file_dir = f"{data_dir}/images/"
     file_dir = os.path.expanduser(file_dir)
 
     # path to directory where patch files are stored
     patch_path = pathlib.Path(
-        "~/data/reap-benchmark/reap_realism_test/"
-        "synthetic-load-64-15-1-0.4-0-0-pd64-bg50-augimg1-rp2_1e-05_0_1_1000_adam_0.01_False"
+        f"{data_dir}/synthetic-load-64-15-1-0.4-0-0-pd64-bg50-augimg1-rp2_1e-05_0_1_1000_adam_0.01_False"
     )
     patch_path = patch_path.expanduser()
 
@@ -129,8 +90,8 @@ def main(
 
     obj_class_to_shape = {
         "circle": "circle",
-        "up-triangle": "triangle_inverted",
         "triangle": "triangle",
+        "up-triangle": "triangle_inverted",
         "rect-s": "rect",
         "rect-m": "rect",
         "rect-l": "rect",
@@ -183,6 +144,11 @@ def main(
         torch_image = torch.from_numpy(image).float().permute(2, 0, 1)
         torch_image.unsqueeze_(0)
         torch_image /= 255.0
+        torch_image = F.resize(
+            torch_image,
+            round(IMG_WIDTH / torch_image.shape[-1] * torch_image.shape[-2]),
+            interpolation=torchvision.transforms.InterpolationMode.BICUBIC,
+        )
 
         # get image dimensions
         img_height, img_width = torch_image.shape[-2:]
@@ -258,8 +224,6 @@ def main(
             factor = 0.2
         elif obj_class == "diamond-l":
             factor = 0.15
-        # elif obj_class in ("circle", "up-triangle"):
-        #     factor = 0.1
         elif obj_class == "circle":
             factor = 0.1
         elif obj_class == "up-triangle":
@@ -288,7 +252,7 @@ def main(
                     [patch_x4, patch_y4],
                 ]
             ).astype(np.float32)
-            patch_tgt *= 1024 / 6036
+            patch_tgt *= IMG_WIDTH / 6036
 
         transform_func = kornia_tf.warp_perspective
         if geo_method in ("affine", "perspective"):
@@ -297,7 +261,7 @@ def main(
                 tgt = np.array(
                     [[sign_x1, sign_y1], [sign_x2, sign_y2], [sign_x3, sign_y3]]
                 ).astype(np.float32)
-                tgt *= 1024 / 6036
+                tgt *= IMG_WIDTH / 6036
                 sign_tf_matrix = (
                     torch.from_numpy(cv.getAffineTransform(src[:3], tgt))
                     .unsqueeze(0)
@@ -321,7 +285,7 @@ def main(
                         [sign_x4, sign_y4],
                     ]
                 ).astype(np.float32)
-                tgt *= 1024 / 6036
+                tgt *= IMG_WIDTH / 6036
                 src = torch.from_numpy(src).unsqueeze(0)
                 tgt = torch.from_numpy(tgt).unsqueeze(0)
                 sign_tf_matrix = get_perspective_transform(src, tgt)
@@ -342,7 +306,7 @@ def main(
                     [sign_x4, sign_y4],
                 ]
             ).astype(np.float32)
-            tgt *= 1024 / 6036
+            tgt *= IMG_WIDTH / 6036
             tgt = tgt[: len(src)]
             tgt_center = np.mean(tgt, axis=0)
             src_center = np.mean(src, axis=0)
@@ -372,9 +336,11 @@ def main(
                 is_clean,
             )
             save_image(image_resized, f"tmp/{index:02d}_test.png")
+            if not is_clean:
+                save_image(torch_image, f"{data_dir}/{EXP_NAME}/real/{index:03d}.jpg")
 
         if is_clean:
-            relight_coeffs, syn_obj = _compute_relight_params(
+            relight_coeffs, syn_obj = compute_relight_params(
                 torch_image,
                 sign_mask,
                 relight_method,
@@ -466,6 +432,7 @@ def main(
             # save_image(crop_render, f"tmp/{index:02d}_crop_render.png")
             # save_image(crop_orig, f"tmp/{index:02d}_crop_orig.png")
             crop_both = torch.cat([crop_orig, crop_render], dim=3)
+            save_image(render_image, f"{data_dir}/{EXP_NAME}/render/{index:03d}.jpg")
             all_crops.append(crop_both)
 
         # calculate relighting error between transformed synthetic patch and real patch
@@ -577,8 +544,12 @@ if __name__ == "__main__":
     RELIGHT_METHOD = "percentile"
     percentile = 0.2
     params = {"percentile": percentile}
-    results[f"{RELIGHT_METHOD}_{percentile}"] = main(
-        GEO_METHOD, RELIGHT_METHOD, params, use_jpeg=True
+    EXP_NAME = f"{RELIGHT_METHOD}_{percentile}"
+    os.makedirs(f"tmp/{EXP_NAME}/render/", exist_ok=True)
+    os.makedirs(f"tmp/{EXP_NAME}/real/", exist_ok=True)
+
+    results[EXP_NAME] = main(
+        GEO_METHOD, RELIGHT_METHOD, params, use_jpeg=False
     )
 
     with open("tmp/realism_test_results.pkl", "wb") as f:

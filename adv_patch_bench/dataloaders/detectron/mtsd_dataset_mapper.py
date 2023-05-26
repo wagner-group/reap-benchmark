@@ -20,7 +20,7 @@ import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.dataloaders.detectron import reap_dataset_mapper
 from adv_patch_bench.transforms import lighting_tf, util
 from adv_patch_bench.utils.types import DetectronSample
-from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR
+from hparams import DEFAULT_SYN_OBJ_DIR, Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,10 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
             config_base: Base config.
         """
         super().__init__(cfg, **kwargs)
-        metadata = DATASET_METADATA[config_base["dataset"]]
-        class_names = metadata["class_name"]
-        hw_ratio_dict = metadata["hw_ratio"]
-        shape_dict = metadata["shape"]
+        metadata = Metadata.get(config_base["dataset"])
+        class_names = metadata.class_name
+        hw_ratio_dict = metadata.hw_ratio
+        shape_dict = metadata.shape
 
         self._syn_objs: dict[int, torch.Tensor] = {}
         self._syn_obj_masks: dict[int, torch.Tensor] = {}
@@ -74,7 +74,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
                 obj_width_px=config_base["obj_size_px"][1],
                 pad_to_square=False,
             )
-            syn_obj_name = metadata["syn_obj_name"][obj_class]
+            syn_obj_name = metadata.syn_obj_name[obj_class]
             syn_obj_path = os.path.join(
                 DEFAULT_SYN_OBJ_DIR, "synthetic", f"{syn_obj_name}.png"
             )
@@ -267,9 +267,8 @@ def get_mtsd_transforms(
         return
 
     # Compute relighting params from cropped object
-    # We don't know true keypoints for MTSD objects so the mask is
-    # simply scaled to match the object size  without any other
-    # geometric transformations
+    # We don't know true keypoints for MTSD objects so the mask is simply scaled
+    # to match the object size  without any other geometric transformations.
     obj_mask = img_util.resize_and_pad(
         obj=syn_obj_masks[obj_class],
         resize_size=(ymax - ymin, xmax - xmin),

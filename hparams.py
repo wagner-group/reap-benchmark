@@ -7,7 +7,13 @@ metadata. We try to use these parameters minimally.
 TODO(NewDataset): Use config file and dataset object to load and hold metadata.
 """
 
+from __future__ import annotations
+
+import os
+from abc import ABC
 from typing import Any, Dict
+
+HOME = os.path.expanduser("~")
 
 # Set paths
 PATH_MAPILLARY_ANNO = {
@@ -19,6 +25,7 @@ PATH_MAPILLARY_ANNO = {
 DEFAULT_DATA_PATHS = {
     "mtsd": "~/data/mtsd_v2_fully_annotated/",
     "mapillary": "~/data/mapillary_vistas/",
+    "realism": "~/data/reap-benchmark/reap_realism_test/",
 }
 DEFAULT_DATA_PATHS["reap"] = DEFAULT_DATA_PATHS["mapillary"]
 DEFAULT_DATA_PATHS["synthetic"] = DEFAULT_DATA_PATHS["mapillary"]
@@ -65,6 +72,7 @@ DATASETS = (
     "mtsd-100",
     "reap-100",
     "synthetic-100",
+    "realism",
 )
 
 # Traffic sign classes with colors
@@ -304,6 +312,7 @@ DATASET_METADATA["mapillary-no_color"]["syn_obj_name"] = DATASET_METADATA[
 DATASET_METADATA["reap"] = DATASET_METADATA["mapillary-no_color"]
 DATASET_METADATA["synthetic"] = DATASET_METADATA["mapillary-no_color"]
 DATASET_METADATA["mtsd-no_color"] = DATASET_METADATA["mapillary-no_color"]
+DATASET_METADATA["realism"] = DATASET_METADATA["mapillary-no_color"]
 
 # Get metadata for 100-class MTSD/REAP/Synthetic
 _MTSD100_SIZE_MM = {
@@ -329,6 +338,124 @@ DATASET_METADATA["mtsd-100"] = {
 DATASET_METADATA["mapillary-100"] = DATASET_METADATA["mtsd-100"]
 DATASET_METADATA["reap-100"] = DATASET_METADATA["mtsd-100"]
 DATASET_METADATA["synthetic-100"] = DATASET_METADATA["mtsd-100"]
+
+
+_reap_class_name = dict(enumerate(TS_NO_COLOR_LABEL_LIST))
+
+
+# TODO(enhance): Use class instead of dict for metadata
+
+
+class BaseMetadata(ABC):
+    """Metadata for a dataset."""
+
+    data_path: str
+    size_mm: dict[int, tuple[float, float]]
+    hw_ratio: dict[int, float]
+    shape: dict[int, str]
+    class_name: dict[int, str]
+    syn_obj_name: dict[int, str]
+    annotation_path: str
+    splits: list[str]
+
+
+class MtsdMetadata(BaseMetadata):
+    """Metadata for MTSD and similar datasets."""
+
+    data_path: str = f"{HOME}/data/mtsd_v2_fully_annotated/"
+    size_mm: dict[int, tuple[float, float]] = _MPL_NO_COLOR_SIZE_MM
+    hw_ratio: dict[int, float] = _MPL_NO_COLOR_RATIO
+    shape: dict[int, str] = _MPL_NO_COLOR_SHAPE
+    class_name: dict[int, str] = _reap_class_name
+    syn_obj_name: dict[int, str] = _reap_class_name
+    splits: list[str] = ["train", "val", "test"]
+
+
+class ReapMetadata(MtsdMetadata):
+    """Metadata for REAP and similar datasets."""
+
+    data_path: str = f"{HOME}/data/mapillary_vistas/"
+    annotation_path: str = "./reap_annotations.csv"
+    splits: list[str] = ["combined"]
+
+
+class Mtsd100Metadata(MtsdMetadata):
+    """Metadata for MTSD-100 and similar datasets."""
+
+    size_mm: dict[int, tuple[float, float]] = _MTSD100_SIZE_MM
+    hw_ratio: dict[int, float] = _MTSD100_SIZE_RATIO
+    shape: dict[int, str] = _MTSD100_SHAPE
+    class_name: dict[int, str] = dict(enumerate(MTSD100_LABELS))
+    syn_obj_name: dict[int, str] = dict(enumerate(MTSD100_TO_SHAPE.values()))
+
+
+class Reap100Metadata(Mtsd100Metadata):
+    """Metadata for REAP-100 and similar datasets."""
+
+    data_path: str = f"{HOME}/data/mapillary_vistas/"
+    annotation_path: str = "./reap_annotations.csv"
+    splits: list[str] = ["combined"]
+
+
+class RealismMetadata(MtsdMetadata):
+    """Metadata for MTSD and similar datasets."""
+
+    data_path: str = f"{HOME}/data/reap-benchmark/reap_realism_test/"
+    splits: list[str] = ["percentile0.2"]
+
+
+class MetaData:
+    """Metadata for all datasets."""
+
+    def __init__(self) -> None:
+        """Initialize metadata."""
+        self.metadata: dict[str, BaseMetadata] = {
+            "reap": ReapMetadata(),
+            "mtsd": MtsdMetadata(),
+            "reap-100": Reap100Metadata(),
+            "mtsd-100": Mtsd100Metadata(),
+            "realism": RealismMetadata(),
+        }
+        # TODO(enhance): Mapillary Vista is structued differently from REAP,
+        # but we don't really use it so we can just use REAP metadata for now.
+        self.metadata["mapillary"] = self.metadata["reap"]
+        self.metadata["synthetic"] = self.metadata["reap"]
+        self.metadata["mapillary-100"] = self.metadata["reap-100"]
+        self.metadata["synthetic-100"] = self.metadata["reap-100"]
+        self.base_dataset_names: list[str] = self._base_dataset_names()
+
+    def _base_dataset_names(self) -> list[str]:
+        """Get base dataset names.
+
+        Returns:
+            List of base dataset names.
+        """
+        dataset_names = [
+            name.split("-", maxsplit=1)[0] for name in self.metadata.keys()
+        ]
+        dataset_names = list(set(dataset_names))
+        return dataset_names
+
+    def get(self, dataset_name: str) -> BaseMetadata:
+        """Get metadata for a dataset.
+
+        Args:
+            dataset_name: Name of the dataset.
+
+        Raises:
+            ValueError: If dataset is not found.
+
+        Returns:
+            Metadata for the dataset.
+        """
+        if "-" in dataset_name and "-100" not in dataset_name:
+            dataset_name = dataset_name.split("-", maxsplit=1)[0]
+        if dataset_name not in self.metadata:
+            raise ValueError(f"Dataset {dataset_name} not found.")
+        return self.metadata[dataset_name]
+
+
+Metadata = MetaData()
 
 # =========================================================================== #
 

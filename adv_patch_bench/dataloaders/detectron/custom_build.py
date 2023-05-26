@@ -62,7 +62,7 @@ def build_detection_test_loader(
         data_loader = build_detection_test_loader(cfg, "my_test")
     """
     # Filter data by filenames
-    if split_file_names is not None:
+    if split_file_names:
         new_dataset = [
             d
             for d in dataset

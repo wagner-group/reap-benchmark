@@ -72,6 +72,7 @@ class DetectronEvaluator:
         self._dataloader = dataloader
         self._input_format: str = global_cfg.INPUT.FORMAT
         self._metadata = MetadataCatalog.get(self._dataset)
+        base_dataset = self._dataset.split("-", maxsplit=1)[0]
 
         interp: str = config_base["interp"]
         self._img_size: SizePx = SizePx(config_base["img_size"])
@@ -89,7 +90,7 @@ class DetectronEvaluator:
             "img_aug_prob_geo": config_base["img_aug_prob_geo"],
             "device": self._device,
             "obj_class": self._obj_class,
-            "mode": "synthetic" if self._synthetic else "reap",
+            "mode": base_dataset,
         }
 
         # Load annotation DataFrame. "Other" signs are discarded.
@@ -232,11 +233,9 @@ class DetectronEvaluator:
             if total_num_images >= self._num_eval:
                 break
 
-            filenames: list[str] = [
-                b["file_name"].split("/")[-1] for b in batch
-            ]
+            filenames = [pathlib.Path(b["file_name"]).stem for b in batch]
             image_ids: list[int] = [b["image_id"] for b in batch]
-            filenames = [name.split(".")[0] for name in filenames]
+            # filenames = [name.split(".")[0] for name in filenames]
 
             rimg: render_image.RenderImage = render_image.RenderImage(
                 samples=batch,

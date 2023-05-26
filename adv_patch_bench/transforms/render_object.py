@@ -124,7 +124,7 @@ class RenderObject:
         Returns:
             Object mask, source points for geometric transform.
         """
-        shape: str = self._metadata["shape"][self._obj_class]
+        shape: str = self._metadata.shape[self._obj_class]
         obj_mask, src = util.gen_sign_mask(
             shape=shape,
             hw_ratio=self._obj_size_px[0] / self._obj_size_px[1],
@@ -136,21 +136,3 @@ class RenderObject:
         obj_mask = img_util.coerce_rank(obj_mask, 4)
         src = np.array(src, dtype=np.float32)
         return obj_mask, src
-
-    # @abstractmethod
-    # def apply_object(
-    #     self,
-    #     image: ImageTensor,
-    #     target: Target,
-    # ) -> Tuple[ImageTensor, Target]:
-    #     """Abstract class. Should be implemeted to apply patch to image.
-
-    #     Args:
-    #         image: Image to apply patch (or any object) to.
-    #         target: Target labels that may be modified if needed.
-
-    #     Returns:
-    #         image: Image with transformed patch applied.
-    #         target: Modified target label.
-    #     """
-    #     return image, target
