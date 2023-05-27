@@ -670,8 +670,14 @@ def _update_conf_thres(
         if dataset in base_metadata:
             # For backward compatibility
             conf_thres = base_metadata[dataset]["conf_thres"]
-        else:
+        elif weights_path.name in base_metadata:
             conf_thres = base_metadata[weights_path.name][dataset]["conf_thres"]
+        else:
+            raise ValueError(
+                f"conf_thres associated with dataset {dataset} and model "
+                f"{weights_path} is not found in metadata.pkl! Please "
+                "set compute_conf_thres to True."
+            )
         if isinstance(conf_thres, np.ndarray):
             conf_thres = conf_thres.tolist()
         config_base["conf_thres"] = conf_thres
