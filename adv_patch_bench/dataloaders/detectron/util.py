@@ -23,6 +23,8 @@ from adv_patch_bench.dataloaders.detectron import (
     custom_sampler,
     mapillary,
     mtsd,
+    mtsd_dataset_mapper,
+    realism,
     reap,
     reap_dataset_mapper,
 )
@@ -76,6 +78,7 @@ def get_dataloader(
 ) -> tuple[torch.data.utils.DataLoader, set[str]]:
     """Get eval dataloader from base config."""
     dataset: str = config_base["dataset"]
+    base_dataset: str = parse_dataset_name(dataset)[0]
     split_file_path: str = config_base["split_file_path"]
     metadata = MetadataCatalog.get(dataset)
 
@@ -94,7 +97,7 @@ def get_dataloader(
             split_file_names = set(file.read().splitlines())
 
     # Filter only images with desired class when evaluating on REAP
-    if "reap" in dataset:
+    if base_dataset == "reap":
         img_ids = _get_img_ids(dataset, config_base["obj_class"])
         class_file_names = set(_get_filename_from_id(data_dicts, img_ids))
         split_file_names = split_file_names.intersection(class_file_names)
@@ -108,11 +111,21 @@ def get_dataloader(
         )
         sampler = custom_sampler.ShuffleInferenceSampler(num_samples)
 
+    if base_dataset in ("reap", "synthetic"):
+        mapper = reap_dataset_mapper.ReapDatasetMapper(
+            global_cfg, is_train=False, img_size=config_base["img_size"]
+        )
+    else:
+        mapper = mtsd_dataset_mapper.MtsdDatasetMapper(
+            global_cfg,
+            config_base,
+            is_train=False,
+            img_size=config_base["img_size"],
+        )
+
     dataloader = custom_build.build_detection_test_loader(
         data_dicts,
-        mapper=reap_dataset_mapper.ReapDatasetMapper(
-            global_cfg, is_train=False, img_size=config_base["img_size"]
-        ),
+        mapper=mapper,
         batch_size=config_base["batch_size"],
         num_workers=global_cfg.DATALOADER.NUM_WORKERS,
         pin_memory=True,
@@ -175,5 +188,7 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
             anno_df=anno_df,
             img_size=config_base["img_size"],
         )
+    elif base_dataset == "realism":
+        realism.register_realism(dataset_name=dataset)
     else:
         raise NotImplementedError(f"Dataset {base_dataset} is not supported!")

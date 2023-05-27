@@ -49,6 +49,15 @@ cd mish-cuda
 # mv external/CUDAApplyUtils.cuh csrc/
 python setup.py build install
 
+# Install detrex (required for DINO)
+git clone https://github.com/IDEA-Research/detrex.git
+cd detrex
+git submodule init
+git submodule update
+python -m pip install -e detectron2
+pip install -e .
+
+# Install yolof (required for YOLOF)
 git clone https://github.com/chensnathan/YOLOF.git
 cd YOLOF
 python setup.py develop

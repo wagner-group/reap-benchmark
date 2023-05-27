@@ -30,6 +30,13 @@ from adv_patch_bench.utils.types import (
 
 logger = logging.getLogger(__name__)
 
+_RENDER_OBJ_MODE = {
+    "reap": reap_object.ReapObject,
+    "mtsd": mtsd_object.MtsdObject,
+    "synthetic": syn_object.SynObject,
+    "realism": mtsd_object.MtsdObject,
+}
+
 
 class RenderImage:
     """Image wrapper for rendering adversarial patch and synthetic objects."""
@@ -64,35 +71,27 @@ class RenderImage:
         Raises:
             ValueError: Invalid img_mode.
         """
-        bg_class = global_cfg.other_catId
-        self._interp: str = interp
-        self._is_detectron: bool = "instances" in samples[0]
-
         if img_mode not in ("BGR", "RGB"):
             raise ValueError(
                 f"Invalid img_mode {img_mode}! Must either be BGR or RGB."
             )
+        if mode not in _RENDER_OBJ_MODE:
+            raise NotImplementedError(f"{mode} mode is not implemented!")
+
+        bg_class = global_cfg.other_catId
+        self._robj_fn = _RENDER_OBJ_MODE[mode]
+        self._interp: str = interp
+        self._is_detectron: bool = "instances" in samples[0]
         self.img_mode: str = img_mode
         self._mode: str = mode
         self.obj_classes: list[int] = []
         self.obj_ids: list[str] = []
-
-        if robj_kwargs is None:
-            robj_kwargs = {}
+        robj_kwargs = robj_kwargs or {}
 
         # Expect int image [0-255] of the same size
         images: list[ImageTensor] = []
-        self.tf_params: dict[str, torch.Tensor | Any] = {}
         obj_to_img = []
-        self._robj_fn = {
-            "reap": reap_object.ReapObject,
-            "mtsd": mtsd_object.MtsdObject,
-            "synthetic": syn_object.SynObject,
-        }[mode]
-
-        if mode not in ("reap", "mtsd", "synthetic"):
-            raise NotImplementedError(f"{mode} mode is not implemented!")
-
+        self.tf_params: dict[str, torch.Tensor | Any] = {}
         for i, sample in enumerate(samples):
             image: ImageTensor = sample["image"].float() / 255
             image = image.flip(0) if img_mode == "BGR" else image

@@ -18,7 +18,7 @@ from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
 from omegaconf import OmegaConf
 
-from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR, INTERPS
+from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR, INTERPS, Metadata
 
 _TRANSFORM_PARAMS: List[str] = [
     "interp",
@@ -596,7 +596,6 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
     allowed_interp = INTERPS
     allowed_attack_types = ("none", "load", "per-sign", "random", "debug")
     allowed_yolo_models = ("yolov5", "yolor")
-    allowed_datasets = ("reap", "synthetic", "mtsd", "mapillary")
     dataset: str = config_base["dataset"]
 
     if config_base["interp"] not in allowed_interp:
@@ -612,14 +611,15 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
         )
 
     # Verify dataset
-    if dataset.split("-")[0] not in allowed_datasets:
+    if dataset.split("-")[0] not in Metadata.base_dataset_names:
         raise ValueError(
-            f"dataset must be in {allowed_datasets}, but it is {dataset}!"
+            f"The base dataset name must be in {Metadata.base_dataset_names}, "
+            f"but it is {dataset}!"
         )
 
     # Verify obj_class arg
     obj_class = config_base["obj_class"]
-    max_cls = len(DATASET_METADATA[dataset]["class_name"]) - 1
+    max_cls = len(Metadata.get(dataset).class_name) - 1
     if not -1 <= obj_class <= max_cls:
         raise ValueError(
             f"Target object class {obj_class} is not between 0 and {max_cls}!"
@@ -667,6 +667,8 @@ def _update_conf_thres(
             )
         with metadata_dir.open("rb") as file:
             base_metadata = pickle.load(file)
+        # TODO(hack)
+        dataset = "reap" if "realism" in dataset else dataset
         if dataset in base_metadata:
             # For backward compatibility
             conf_thres = base_metadata[dataset]["conf_thres"]
@@ -748,7 +750,7 @@ def _update_split_file(
     if config_base["obj_class"] < 0:
         default_filename: str = "all.txt"
     else:
-        class_name: str = DATASET_METADATA[dataset]["class_name"][
+        class_name: str = Metadata.get(dataset).class_name[
             config_base["obj_class"]
         ]
         default_filename: str = f"{class_name}_{split}.txt"
@@ -786,7 +788,7 @@ def _update_syn_obj_path(config: Dict[str, Dict[str, Any]]) -> None:
     dataset = config_base["dataset"]
     obj_class = config_base["obj_class"]
     if obj_class >= 0:
-        class_name = DATASET_METADATA[dataset]["class_name"][obj_class]
+        class_name = Metadata.get(dataset).class_name[obj_class]
         config_base["syn_obj_path"] = os.path.join(
             DEFAULT_SYN_OBJ_DIR, dataset, f"{class_name}.png"
         )
@@ -815,13 +817,13 @@ def _update_syn_obj_size(config: Dict[str, Dict[str, Any]]) -> None:
     config_base = config["base"]
     # Get real object size of that class
     dataset = config_base["dataset"]
-    obj_dim_dict = DATASET_METADATA[dataset]
+    metadata = Metadata.get(dataset)
     obj_class = config_base["obj_class"]
 
     hw_ratio = 1.0
     if obj_class >= 0:
-        hw_ratio = obj_dim_dict["hw_ratio"][obj_class]
-        config_base["obj_size_mm"] = obj_dim_dict["size_mm"][obj_class]
+        hw_ratio = metadata.hw_ratio[obj_class]
+        config_base["obj_size_mm"] = metadata.size_mm[obj_class]
 
     if not config_base["synthetic"]:
         # For attack using real images, we still need to specify obj_size_px to
@@ -946,7 +948,7 @@ def _update_save_dir(
     obj_class: int = config_base["obj_class"]
     if not is_train:
         class_name = (
-            DATASET_METADATA[config_base["dataset"]]["class_name"][obj_class]
+            Metadata.get(config_base["dataset"]).class_name[obj_class]
             if obj_class >= 0
             else "all"
         )
@@ -983,7 +985,7 @@ def setup_detectron_cfg(
     config_base = config["base"]
     dataset: str = config_base["dataset"]
     split: str = config_base["dataset_split"]
-    num_classes = len(DATASET_METADATA[dataset]["class_name"])
+    num_classes = len(Metadata.get(dataset).class_name)
 
     # Set default path to load adversarial patch
     if not config_base["adv_patch_path"]:

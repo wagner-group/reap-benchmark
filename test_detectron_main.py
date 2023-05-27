@@ -23,7 +23,7 @@ import adv_patch_bench.utils.docker_bug_fixes  # pylint: disable=unused-import
 from adv_patch_bench.evaluators import detectron_evaluator
 from adv_patch_bench.models.custom_build import build_model
 from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
-from hparams import DATASET_METADATA
+from hparams import Metadata
 
 logger = logging.getLogger(__name__)
 # This is to ignore a warning from detectron2/structures/keypoints.py:29
@@ -252,6 +252,7 @@ def _dump_results(results: Dict[str, Any]) -> None:
     result_dir = config_base["result_dir"]
     debug = config_base["debug"]
     dataset = config_base["dataset"]
+    class_names = Metadata.get(config_base["dataset"]).class_name
     if debug:
         return
     # Keep only eval params that matter (uniquely identifies evaluation setting)
@@ -297,16 +298,14 @@ def _dump_results(results: Dict[str, Any]) -> None:
                 "conf_thres does not exist in metadata. Creating an empty "
                 "one..."
             )
-            metadata["conf_thres"] = [
-                None for _ in DATASET_METADATA[dataset]["class_name"]
-            ]
+            metadata["conf_thres"] = [None for _ in class_names]
 
         # Write new conf_thres
         conf_thres = results["bbox"]["conf_thres"]
         if isinstance(conf_thres, float):
             metadata["conf_thres"][config_base["obj_class"]] = conf_thres
         else:
-            num_classes = len(DATASET_METADATA[dataset]["class_name"])
+            num_classes = len(class_names)
             assert len(conf_thres) == num_classes, (
                 "conf_thres must either be a float or an array with the length "
                 f"num_classes, but got {conf_thres}!"
@@ -334,9 +333,7 @@ def _dump_results(results: Dict[str, Any]) -> None:
 def main() -> None:
     """Main function."""
     attack_config_path: str = config_base["attack_config_path"]
-    class_names: List[str] = DATASET_METADATA[config_base["dataset"]][
-        "class_name"
-    ]
+    class_names: List[str] = Metadata.get(config_base["dataset"]).class_name
 
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):
