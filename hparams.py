@@ -431,7 +431,7 @@ class MetaData:
             List of base dataset names.
         """
         dataset_names = [
-            name.split("-", maxsplit=1)[0] for name in self.metadata.keys()
+            name.split("-", maxsplit=1)[0] for name in self.metadata
         ]
         dataset_names = list(set(dataset_names))
         return dataset_names

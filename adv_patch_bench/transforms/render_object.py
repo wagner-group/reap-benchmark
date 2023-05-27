@@ -11,7 +11,7 @@ from detectron2.data import MetadataCatalog
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import util
 from adv_patch_bench.utils.types import MaskTensor, SizePx
-from hparams import INTERPS
+from hparams import INTERPS, Metadata
 
 
 class RenderObject:
@@ -52,19 +52,7 @@ class RenderObject:
                 known label from given dataset.
         """
         _ = kwargs  # Unused
-
-        # Check dataset
-        metadata = MetadataCatalog.get(dataset)
-        if metadata is None:
-            raise ValueError(
-                f"dataset {dataset} is unknown! New dataset must provide "
-                "metadata in hparams.py."
-            )
-        self._metadata = metadata.get("obj_dim_dict")
-        assert self._metadata is not None, (
-            "Attribute `obj_dim_dict` must be registered as metadata for "
-            f"{dataset} dataset!"
-        )
+        self._metadata = Metadata.get(dataset)
         self._obj_class: int = obj_class
 
         # Check interp
