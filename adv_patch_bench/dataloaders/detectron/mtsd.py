@@ -149,7 +149,7 @@ def get_mtsd_dict(
     dataset_dicts: List[DetectronSample] = []
     duplicate_file_names = set(duplicate_files_df["filename"].values)
 
-    for idx, json_file in enumerate(tqdm(json_files)):
+    for idx, json_file in enumerate(tqdm(json_files, mininterval=10)):
 
         filename: str = json_file.split("/")[-1].split(".")[0]
         # Skip samples not in this split

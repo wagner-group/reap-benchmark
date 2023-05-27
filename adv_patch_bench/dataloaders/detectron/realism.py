@@ -34,7 +34,9 @@ def get_data_dict(modifier: str) -> list[DetectronSample]:
     data_path = pathlib.Path(metadata.data_path) / modifier
     dataset_dicts: list[DetectronSample] = []
 
-    for idx, img_path in enumerate(tqdm(data_path.glob("images/*.jpg"))):
+    for idx, img_path in enumerate(
+        tqdm(data_path.glob("images/*.jpg"), mininterval=10)
+    ):
 
         label_name = img_path.stem + ".txt"
         label_path: pathlib.Path = data_path / "labels" / label_name
