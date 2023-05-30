@@ -144,10 +144,11 @@ class DetectronEvaluator:
             pathlib.Path(config_base["result_dir"]) / "vis"
         )
         self._vis_save_dir.mkdir(exist_ok=True)
+        self._vis_conf_thres: float = 0.1
         if config_base["vis_conf_thres"] is not None:
-            self._vis_conf_thres: float = config_base["vis_conf_thres"]
-        else:
-            self._vis_conf_thres: float = config_base["conf_thres"]
+            self._vis_conf_thres = config_base["vis_conf_thres"]
+        elif config_base["conf_thres"] is not None:
+            self._vis_conf_thres = config_base["conf_thres"][self._obj_class]
         self._vis_show_bbox: bool = config_base["vis_show_bbox"]
         self._vis_img_scale: float = 0.5
 

@@ -36,6 +36,7 @@ class SynObject(render_object.RenderObject):
         syn_translate: float | None = None,
         syn_3d_dist: float | None = None,
         syn_colorjitter: float | None = None,
+        syn_noise: float | None = None,
         **kwargs,
     ) -> None:
         """Initialize SynOject.
@@ -85,6 +86,7 @@ class SynObject(render_object.RenderObject):
             syn_3d_dist=syn_3d_dist,
             prob_colorjitter=1.0,
             syn_colorjitter=syn_colorjitter,
+            additive_uniform_noise=syn_noise,
             interp=self._interp,
         )
         (

@@ -136,7 +136,7 @@ class ReapObject(render_object.RenderObject):
         adv_patch.clamp_(0 + _EPS, 1 - _EPS)
 
         # Apply extra lighting augmentation on patch
-        adv_patch = aug_light(adv_patch)
+        # adv_patch = aug_light(adv_patch)
 
         # Combine patch_mask with adv_patch as alpha channel
         rgba_patch: BatchImageTensorRGBA = torch.cat(
@@ -184,10 +184,32 @@ class ReapObject(render_object.RenderObject):
             )
             logger.debug(str([t["file_name"].split("/")[-1] for t in targets]))
 
+        warped_mask: BatchMaskTensor = kornia_tf.warp_perspective(
+            obj_mask,
+            transform_mat,
+            images.shape[-2:],
+            mode="nearest",
+            padding_mode="zeros",
+        )
+        obj_to_img_mat = torch.zeros((num_objs, batch_size), device=images.device)
+        obj_to_img_mat[torch.arange(num_objs), obj_to_img] = 1
+        # warped_mask = warped_mask.sum(0, keepdim=True)
+        warped_mask = torch.einsum("oj,ochw->jchw", obj_to_img_mat, warped_mask)
+        warped_mask.clamp_(0, 1)
+
+        # Augment the sign: (1 - obj_mask) * image + obj_mask * images_aug
+        images.clamp_(0 + _EPS, 1 - _EPS)
+        images_aug = aug_light(images)
+        images_aug = warped_mask * images_aug  # Can't use inplace op here
+        images = (1 - warped_mask) * images  # Can't use inplace op here
+        images.add_(images_aug)
+        images.mul_(1 - alpha_mask)
+        final_img = images + alpha_mask * warped_patch
+
         # Place patch on object using alpha channel
-        final_img: BatchImageTensor = (
-            1 - alpha_mask
-        ) * images + alpha_mask * warped_patch
+        # final_img: BatchImageTensor = (
+        #     1 - alpha_mask
+        # ) * images + alpha_mask * warped_patch
 
         return final_img, targets
 

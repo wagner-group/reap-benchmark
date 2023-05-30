@@ -6,11 +6,10 @@ from typing import Any
 
 import numpy as np
 import torch
-from detectron2.data import MetadataCatalog
 
 import adv_patch_bench.utils.image as img_util
 from adv_patch_bench.transforms import util
-from adv_patch_bench.utils.types import MaskTensor, SizePx
+from adv_patch_bench.utils.types import MaskTensor, SizePx, TransformFn
 from hparams import INTERPS, Metadata
 
 
@@ -72,7 +71,9 @@ class RenderObject:
         self.src_points: np.ndarray = mask_src[1]
 
     @staticmethod
-    def get_augmentation(patch_aug_params, interp):
+    def get_augmentation(
+        patch_aug_params: dict[str, Any] | None, interp: str
+    ) -> tuple[TransformFn, TransformFn, TransformFn]:
         """Initialize augmentation for patch and object."""
         if patch_aug_params is None:
             patch_aug_params = {}
@@ -84,6 +85,7 @@ class RenderObject:
             syn_3d_dist=None,
             prob_colorjitter=patch_aug_params.get("aug_prob_colorjitter"),
             syn_colorjitter=patch_aug_params.get("aug_colorjitter"),
+            additive_uniform_noise=patch_aug_params.get("aug_noise"),
             interp=interp,
         )
         return transforms

@@ -59,7 +59,7 @@ base:
 
   # Visualization
   num_vis: 10
-  vis_conf_thresh: null  # Set to conf_thres if not specified
+  vis_conf_thres: null  # Set to conf_thres if not specified
   vis_show_bbox: True
 
 # Attack algorithm params
@@ -76,6 +76,7 @@ attack:
     aug_3d_dist: 0
     aug_prob_colorjitter: 0
     aug_colorjitter: 0
+    aug_noise: 0
     # Additional augmentation for background image
     img_aug_prob_geo: 0
     # Transform params used during attack can be different from ones used during

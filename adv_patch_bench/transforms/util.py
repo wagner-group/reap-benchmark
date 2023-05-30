@@ -8,20 +8,39 @@ import kornia
 import kornia.augmentation as K
 import numpy as np
 import torch
+from torch import nn
 
 import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.utils.types import (
-    BatchImageTensor,
-    ImageTensor,
-    TransformFn,
-)
+from adv_patch_bench.utils.types import BatchImageTensor, TransformFn
 
 _KeyPoints = NewType("_KeyPoints", List[Tuple[float, float]])
 
 
-def identity(inputs: ImageTensor | BatchImageTensor) -> BatchImageTensor:
-    """Identity transform function."""
-    return inputs
+class RandomNoise(nn.Module):
+    """Additive uniform noise."""
+
+    def __init__(self, p: float = 1.0, max_range: float = 0.15) -> None:
+        """Initialize RandomNoise.
+
+        Args:
+            p: Probability of applying this transform. Defaults to 1.0.
+            max_range: Maximum range of noise [0, 1]. Noise is in range
+                [-max_range, max_range]. Defaults to 0.15.
+        """
+        super().__init__()
+        self.prob: float = p
+        self.max_range: float = max_range
+
+    def forward(self, images: BatchImageTensor) -> BatchImageTensor:
+        """Add random noise to input tensor."""
+        if torch.rand(1) > self.prob:
+            return images
+        images = images + (torch.rand_like(images) - 0.5) * (2 * self.max_range)
+        images.clamp_(0, 1)
+        return images
+
+
+identity = nn.Identity()
 
 
 def _gen_rect_mask(
@@ -201,6 +220,7 @@ def get_transform_fn(
     syn_3d_dist: float | None = None,
     prob_colorjitter: float | None = None,
     syn_colorjitter: float | None = None,
+    additive_uniform_noise: float | None = None,
     interp: str = "bilinear",
 ) -> tuple[TransformFn, TransformFn, TransformFn]:
     """Initialize geometric (for object and mask) and lighting transforms.
@@ -225,8 +245,8 @@ def get_transform_fn(
         geometric for mask, and (iii) lighting for object.
     """
     # Geometric transform
-    geo_transform: TransformFn = identity
-    mask_transform: TransformFn = identity
+    geo_transform: TransformFn = nn.Identity()
+    mask_transform: TransformFn = nn.Identity()
 
     if prob_geo is not None and prob_geo > 0:
         if syn_3d_dist is not None and syn_3d_dist > 0:
@@ -252,7 +272,7 @@ def get_transform_fn(
         )
 
     # Lighting transform (color jitter)
-    light_transform: TransformFn = identity
+    light_transform: TransformFn = nn.Identity()
     if (
         prob_colorjitter is not None
         and prob_colorjitter > 0
@@ -266,6 +286,10 @@ def get_transform_fn(
             saturation=syn_colorjitter,
             hue=0.05,
             p=prob_colorjitter,
+        )
+    if additive_uniform_noise is not None and additive_uniform_noise > 0:
+        light_transform = nn.Sequential(
+            light_transform, RandomNoise(max_range=additive_uniform_noise)
         )
 
     return (

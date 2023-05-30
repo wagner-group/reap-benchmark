@@ -18,7 +18,7 @@ from detectron2.engine import default_argument_parser, default_setup
 from detectron2.utils import comm
 from omegaconf import OmegaConf
 
-from hparams import DATASET_METADATA, DEFAULT_SYN_OBJ_DIR, INTERPS, Metadata
+from hparams import DEFAULT_SYN_OBJ_DIR, INTERPS, Metadata
 
 _TRANSFORM_PARAMS: List[str] = [
     "interp",
@@ -507,10 +507,10 @@ def reap_args_parser(
     parser.add_argument(
         "--vis-conf-thres",
         type=int,
-        default=0.5,
+        default=None,
         help=(
             "Min. confidence threshold of predictions to draw bbox for during "
-            "visualization (default: 0.5)."
+            "visualization (default: None = set after conf_thres)."
         ),
     )
     parser.add_argument(
@@ -915,6 +915,10 @@ def _update_save_dir(
                 f"{config_atk['aug_colorjitter']}"
             )
             token_list.append(light)
+
+        aug_noise = config_atk["aug_noise"]
+        if aug_noise is not None and aug_noise > 0:
+            token_list.append(f"noise{aug_noise}")
 
         # Background image augmentation params
         img_aug_prob_geo: Optional[float] = config_atk["img_aug_prob_geo"]
