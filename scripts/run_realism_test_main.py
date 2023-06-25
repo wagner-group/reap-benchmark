@@ -74,14 +74,13 @@ def main(
 ):
     """Main function for running realism test."""
     # file directory where images are stored
-    data_dir = "~/data/reap-benchmark/reap_realism_test"
     # file_dir = "~/data/reap-benchmark/reap_realism_test/images_jpg/"
-    file_dir = f"{data_dir}/images/"
+    file_dir = f"{DATA_DIR}/images/"
     file_dir = os.path.expanduser(file_dir)
 
     # path to directory where patch files are stored
     patch_path = pathlib.Path(
-        f"{data_dir}/synthetic-load-64-15-1-0.4-0-0-pd64-bg50-augimg1-rp2_1e-05_0_1_1000_adam_0.01_False"
+        f"{DATA_DIR}/synthetic-load-64-15-1-0.4-0-0-pd64-bg50-augimg1-rp2_1e-05_0_1_1000_adam_0.01_False"
     )
     patch_path = patch_path.expanduser()
 
@@ -336,8 +335,8 @@ def main(
                 is_clean,
             )
             save_image(image_resized, f"tmp/{index:02d}_test.png")
-            if not is_clean:
-                save_image(torch_image, f"{data_dir}/{EXP_NAME}/real/{index:03d}.jpg")
+            # if not is_clean:
+            #     save_image(torch_image, f"{data_dir}/real/images/{index:03d}.jpg")
 
         if is_clean:
             relight_coeffs, syn_obj = compute_relight_params(
@@ -349,7 +348,8 @@ def main(
                 src,
                 tgt,
             )
-            relight_coeffs = relight_coeffs[None]
+            if isinstance(relight_coeffs, torch.Tensor):
+                relight_coeffs = relight_coeffs[None]
             print(f"relight_coeffs: {relight_coeffs}")
             if SAVE_IMG_DEBUG:
                 relighted_syn_obj = relight_transform(syn_obj, relight_coeffs)
@@ -432,7 +432,7 @@ def main(
             # save_image(crop_render, f"tmp/{index:02d}_crop_render.png")
             # save_image(crop_orig, f"tmp/{index:02d}_crop_orig.png")
             crop_both = torch.cat([crop_orig, crop_render], dim=3)
-            save_image(render_image, f"{data_dir}/{EXP_NAME}/render/{index:03d}.jpg")
+            save_image(render_image, f"{DATA_DIR}/{EXP_NAME}/images/{index:03d}.jpg")
             all_crops.append(crop_both)
 
         # calculate relighting error between transformed synthetic patch and real patch
@@ -485,6 +485,8 @@ def main(
 
 if __name__ == "__main__":
     # flag to control whether to save images for debugging
+    DATA_DIR = "~/data/reap-benchmark/reap_realism_test"
+    DATA_DIR = os.path.expanduser(DATA_DIR)
     SAVE_IMG_DEBUG = True
     results = {}
     GEO_METHOD = "perspective"  # "translate+scale", "affine", "perspective"
@@ -541,13 +543,25 @@ if __name__ == "__main__":
     #     GEO_METHOD, RELIGHT_METHOD, params
     # )
 
-    RELIGHT_METHOD = "percentile"
-    percentile = 0.2
-    params = {"percentile": percentile}
-    EXP_NAME = f"{RELIGHT_METHOD}_{percentile}"
-    os.makedirs(f"tmp/{EXP_NAME}/render/", exist_ok=True)
-    os.makedirs(f"tmp/{EXP_NAME}/real/", exist_ok=True)
+    # RELIGHT_METHOD = "percentile"
+    # percentile = 0.1
+    # params = {"percentile": percentile}
+    # EXP_NAME = f"{RELIGHT_METHOD}{percentile}"
+    #
+    RELIGHT_METHOD = "polynomial"
+    params = {"polynomial_degree": 1, "percentile": 0.2}
+    EXP_NAME = f"{RELIGHT_METHOD}{params['percentile']}d{params['polynomial_degree']}"
+    #
+    RELIGHT_METHOD = "color_transfer_lab-l"
+    params = {}
+    EXP_NAME = "ctlab"
+    #
+    # RELIGHT_METHOD = "none"
+    # params = {}
+    # EXP_NAME = "none"
 
+    os.makedirs(f"tmp/{EXP_NAME}/images/", exist_ok=True)
+    os.makedirs(f"{DATA_DIR}/{EXP_NAME}/images/", exist_ok=True)
     results[EXP_NAME] = main(
         GEO_METHOD, RELIGHT_METHOD, params, use_jpeg=False
     )

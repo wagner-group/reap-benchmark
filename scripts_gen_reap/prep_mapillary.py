@@ -17,17 +17,20 @@ from tqdm.auto import tqdm
 
 from adv_patch_bench.models import build_classifier
 from hparams import (
+    DEFAULT_DATA_PATHS,
     MIN_OBJ_AREA,
-    NUM_CLASSES,
     PATH_MAPILLARY_ANNO,
-    PATH_MAPILLARY_BASE,
     TS_COLOR_DICT,
     TS_COLOR_LABEL_LIST,
     TS_COLOR_OFFSET_DICT,
+    Metadata,
 )
 
+PATH_MAPILLARY_BASE = DEFAULT_DATA_PATHS["mapillary"]
+NUM_CLASSES = Metadata.get("mapillary").num_classes
 
-def set_default_args(parser):
+
+def _set_default_args(parser):
     # Don't change this and don't set it in command line
     parser.add_argument("--distributed", action="store_true")
     parser.add_argument("--arch", default="resnet50", type=str)
@@ -52,7 +55,7 @@ def set_default_args(parser):
     parser.add_argument("--gpu", default=None, type=int, help="GPU id to use.")
 
 
-def write_labels(
+def _write_labels(
     model,
     label,
     panoptic_per_image_id,
@@ -206,7 +209,8 @@ def write_labels(
             predicted_labels[i] = offset + color_idx
     num_samples = predicted_labels.size(0)
     print(
-        f"=> {num_fix}/{num_samples} samples were re-assigned a new and correct class."
+        f"=> {num_fix}/{num_samples} samples were re-assigned a new and correct"
+        " class."
     )
     print(
         f"=> {prob_wrong}/{num_samples} samples were re-assigned a new class "
@@ -238,18 +242,23 @@ def write_labels(
             text += f"{class_label:d} {x_center} {y_center} {obj_width} {obj_height} {obj_id}\n"
             xmin, ymin, xmax, ymax, img_width, img_height = abs_bbox[idx]
             abs_text += f"{class_label:d},{xmin},{ymin},{xmax},{ymax},{img_width},{img_height},{obj_id}\n"
-        if text != "":
-            with open(join(label_path, filename + ".txt"), "w") as f:
-                f.write(text)
-            with open(join(abs_label_path, filename + ".txt"), "w") as f:
-                f.write(abs_text)
+        if text:
+            with open(
+                join(label_path, filename + ".txt"), "w", encoding="utf-8"
+            ) as file:
+                file.write(text)
+            with open(
+                join(abs_label_path, filename + ".txt"), "w", encoding="utf-8"
+            ) as file:
+                file.write(abs_text)
 
 
 def main():
+    """Main function."""
     parser = argparse.ArgumentParser(
         description="Prepare Mapillary dataset", add_help=True
     )
-    set_default_args(parser)
+    _set_default_args(parser)
     parser.add_argument("--split", type=str, required=True, help="train or val")
     parser.add_argument(
         "--resume", type=str, required=True, help="Path to latest checkpoint"
@@ -296,7 +305,9 @@ def main():
 
     # Read in panoptic file
     panoptic_json_path = f"{data_dir}/v2.0/panoptic/panoptic_2020.json"
-    with open(expanduser(panoptic_json_path)) as panoptic_file:
+    with open(
+        expanduser(panoptic_json_path), "r", encoding="utf-8"
+    ) as panoptic_file:
         panoptic = json.load(panoptic_file)
 
     # Convert annotation infos to image_id indexed dictionary
@@ -309,7 +320,7 @@ def main():
     for category in panoptic["categories"]:
         panoptic_category_per_id[category["id"]] = category
 
-    write_labels(
+    _write_labels(
         model,
         label_to_classify,
         panoptic_per_image_id,

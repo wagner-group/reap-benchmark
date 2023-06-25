@@ -38,6 +38,7 @@ DEFAULT_PATH_DEBUG_PATCH = f"{DEFAULT_SYN_OBJ_DIR}/debug.png"
 
 # DEPRECATED: move to args in the future
 SAVE_DIR_YOLO = "./runs/val/"
+MIN_OBJ_AREA = 1600
 
 # Allowed interpolation methods
 INTERPS = ("nearest", "bilinear", "bicubic")
@@ -401,7 +402,7 @@ class RealismMetadata(MtsdMetadata):
     """Metadata for MTSD and similar datasets."""
 
     data_path: str = f"{HOME}/data/reap-benchmark/reap_realism_test/"
-    splits: list[str] = ["percentile0.2"]
+    splits: list[str] = ["real", "none", "percentile0.2"]
 
 
 class MetaData:

@@ -8,7 +8,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from hparams import DATASET_METADATA
+from hparams import DATASET_METADATA, Metadata
 
 BIG_NUM = 1e9
 _LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS = None, None, None
@@ -244,11 +244,9 @@ def _compute_ap_recall(
         score_idx = np.where(scores >= conf_thres)[0]
         if len(score_idx) > 0:
             score_idx = score_idx[-1]
-        else:
-            score_idx = 0
-
+    
     return {
-        "precision": pr[score_idx],
+        "precision": pr[score_idx] if score_idx is not None else 0.0,
         "recall": rc[score_idx],
         "AP": np.mean(i_pr),
         "interpolated precision": i_pr,
@@ -349,7 +347,8 @@ def main():
                 metrics = results["bbox"]
                 attack_type = results["attack_type"]
                 if _LABEL_LIST is None:
-                    _LABEL_LIST = list(DATASET_METADATA[dataset]["class_name"])
+                    # _LABEL_LIST = list(DATASET_METADATA[dataset]["class_name"])
+                    _LABEL_LIST = list(Metadata.get(dataset).class_name)
                     _NUM_CLASSES = len(_LABEL_LIST) - 1
                     _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
 
@@ -649,8 +648,8 @@ def main():
     df = df.drop(columns=["attack_type"])
     # df = df.reindex(columns=["id", "FNR", "ASR", "AP", "Precision", "Recall"])
     df = df.reindex(columns=["id", "FNR", "ASR", "AP"])
-    idx = ["all" in name and "allw" not in name for name in df["id"]]
-    df = df[idx]
+    # idx = ["all" in name and "allw" not in name for name in df["id"]]
+    # df = df[idx]
     print(df.to_csv(float_format="%0.2f", index=False))
     # print("Repeated results:", repeated_results)
 

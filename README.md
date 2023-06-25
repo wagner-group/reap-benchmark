@@ -87,7 +87,7 @@ pip install alfred-py
 ```bash
 # Prepare MTSD dataset
 # Dataset should be extracted to ~/data/mtsd_v2_fully_annotated
-python prep_mtsd_for_yolo.py
+python scripts_train_detector/prep_mtsd_for_yolo.py
 python prep_mtsd_for_detectron.py
 # FIXME: change yolo_data
 LABEL_NAME=labels_no_color
