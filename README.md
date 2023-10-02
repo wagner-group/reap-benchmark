@@ -4,6 +4,8 @@ Nabeel Hingun\* (UC Berkeley), Chawin Sitawarin\* (UC Berkeley), Jerry Li (Micro
 
 [ICCV'23](https://openaccess.thecvf.com/content/ICCV2023/html/Hingun_REAP_A_Large-Scale_Realistic_Adversarial_Patch_Benchmark_ICCV_2023_paper.html), [ArXiv](https://arxiv.org/abs/2212.05680)
 
+![reap_vs_others](banner.png)
+
 ## Abstract
 
 Machine learning models are known to be susceptible to adversarial perturbation.
@@ -16,8 +18,6 @@ Built on top of the Mapillary Vistas dataset, our benchmark contains over 14,000
 Each sign is augmented with a pair of geometric and lighting transformations, which can be used to apply a digitally generated patch realistically onto the sign.
 Using our benchmark, we perform the first large-scale assessments of adversarial patch attacks under realistic conditions.
 Our experiments suggest that adversarial patch attacks may present a smaller threat than previously believed and that the success rate of an attack on simpler digital simulations is not predictive of its actual effectiveness in practice.
-
-TODO: Sample images
 
 ## Package Dependencies
 
@@ -73,15 +73,24 @@ pip install alfred-py
 
 - If there is any problem with `detectron2` installation (e.g., CUDA or `pytorch` version mismatch), see this [documentation](https://detectron2.readthedocs.io/en/latest/tutorials/install.html).
 
-## Dataset
-
-REAP dataset is distributed along with this repository using `git lfs`.
-This includes REAP-Shape and the synthetic datasets.
-`reap.tar.gz` is about 1.5GB in size, and the uncompressed size is about 15GB.
+Clone this repository and install it. Make sure that [git-lfs](https://git-lfs.com/) is installed.
 
 ```bash
-cd data
-tar -xvf reap.tar.gz
+git lfs install
+git clone https://github.com/wagner-group/reap-benchmark.git
+```
+
+## Dataset and Weights
+
+The weights are automatically downloaded when the repo was cloned (using `git lfs`) and are placed in `./weights/` directory.
+
+REAP dataset can be downloaded from [Kaggle](https://www.kaggle.com/datasets/csitawarin/reap-benchmark/).
+This includes REAP, REAP-Shape, and the synthetic datasets.
+There is also a CLI tool for downloading the dataset from Kaggle ([link](https://www.kaggle.com/docs/api#interacting-with-datasets), [link](https://www.endtoend.ai/tutorial/how-to-download-kaggle-datasets-on-ubuntu/)).
+
+```bash
+mv archive data/reap
+cd data/reap/no_color/combined && ln -s ../../100/combined/images
 ```
 
 Scripts for recreating REAP benchmark from Mapillary Vistas and MTSD can be found in `scripts_gen_reap` directory, but they are outdated.
@@ -161,15 +170,6 @@ There are signs that may appear in an image but do not have an annotation. There
 3. The sign is too small, and so it are filtered out before our annotation process since its transformation parameters would be unreliable. This type of signs likely has to be manually annotated with extra care.
 
 All of these can be fixed by adding or modifying an entry in `reap_annotations.csv`, but case 2 also requires adding the missing segmentation label to Mapillary Vistas labels.
-
-## File Structure
-
-- `scripts`: Example scripts for running experiments.
-- `scripts_gen_reap`: Scripts for generating REAP dataset. Most are deprecated and only kept for reference.
-  - `collect_traffic_signs.py`: Crops and saves traffic signs from each dataset for classification tasks.
-  - `prep_mtsd_for_classification.py`: Prepare MTSD dataset training a classifier to get pseudo-labels on Mapillary Vistas.
-  - `prep_mapillary.py`: Prepare Mapillary Vistas dataset for the original REAP benchmark (color, no_color versions).
-  - `prep_mapillary_100.py`: Prepare 100-class Mapillary Vistas dataset (REAP-100) based on the original color/no_color version.
 
 ## License
 

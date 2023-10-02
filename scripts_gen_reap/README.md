@@ -6,6 +6,10 @@ This instruction is outdated.
 
 Coming soon!
 
+- `collect_traffic_signs.py`: Crops and saves traffic signs from each dataset for classification tasks.
+- `prep_mtsd_for_classification.py`: Prepare MTSD dataset training a classifier to get pseudo-labels on Mapillary Vistas.
+- `prep_mapillary.py`: Prepare Mapillary Vistas dataset for the original REAP benchmark (color, no_color versions).
+- `prep_mapillary_100.py`: Prepare 100-class Mapillary Vistas dataset (REAP-100) based on the original color/no_color version.
 - `mtsd_label_metadata.csv` is a mapping between the original MTSD classes to classes in REAP. It contains shapes and sizes for each MTSD class.
 
 ## Mapillary Vistas
