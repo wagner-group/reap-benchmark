@@ -59,7 +59,7 @@ base.attack_type='none'
 base.num_vis=$NUM_VIS
 "
         # Test a model on clean data
-        $PYTHON test_detectron_main.py \
+        $PYTHON test_main.py \
             -e configs/cfg_reap_base.yaml --options "$CLEAN_OPTS"
     fi
 
@@ -102,10 +102,10 @@ attack.dpatch.step_size=0.01
 attack.dpatch.iou_thres=0.01
 "
     # Generate adversarial patch
-    $PYTHON gen_patch_detectron_main.py \
+    $PYTHON gen_adv_main.py \
         -e configs/cfg_reap_base.yaml --options "$ADV_OPTS"
     # Test a model on clean data
-    $PYTHON test_detectron_main.py \
+    $PYTHON test_main.py \
         -e configs/cfg_reap_base.yaml --options "$ADV_OPTS"
     fi
     echo "**************************** FINISHED CLASS $i ****************************"

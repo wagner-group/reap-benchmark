@@ -46,7 +46,7 @@ class MtsdDatasetMapper(reap_dataset_mapper.ReapDatasetMapper):
         """
         super().__init__(cfg, **kwargs)
         metadata = Metadata.get(config_base["dataset"])
-        class_names = metadata.class_name
+        class_names = metadata.class_names
         hw_ratio_dict = metadata.hw_ratio
         shape_dict = metadata.shape
 

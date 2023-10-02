@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 _RENDER_OBJ_MODE = {
     "reap": reap_object.ReapObject,
     "mtsd": mtsd_object.MtsdObject,
+    "reap_shape": reap_object.ReapObject,
+    "mtsd_shape": mtsd_object.MtsdObject,
     "synthetic": syn_object.SynObject,
     "realism": mtsd_object.MtsdObject,
 }

@@ -15,47 +15,28 @@ base:
   # Sample dimension (height, width); comma-separated
   padded_imgsz: '1536,2048'  # '1536,2048'
   batch_size: 1
-  # Path to annotation file
-  tgt_csv_filepath: 'reap_annotations.csv'
   # Custom experiment name (null for auto-generated)
   name: null
   obj_class: 0  # Class of object to eval/attack
   patch_size: '1_10x10_bottom'  # e.g., '2_10x20'
   num_eval: null  # Number of samples to use for eval; Set to null to use all.
-  # Path to txt file containing file names to use either for generating patch or
-  # for testing.
-  split_file_path: './splits/'
   interp: 'bilinear'  # Interpolation mode: 'nearest', 'bilinear', 'bicubic'
   save_images: True
   annotated_signs_only: True
-  attack_type: 'load'
+  attack_type: 'none'
   # IoU threshold for matching predicted and grond-truth bounding boxes
   iou_thres: 0.5
   verbosity: 1
 
-  # REAP benchmark params
-  reap_geo_method: 'perspective'  # Transform mode for patch during eval
-  reap_relight_method: 'percentile'  # 'polynomial', 'percentile', 'color_transfer'
-  reap_relight_polynomial_degree: 1  # Linear
-  reap_relight_percentile: 0.2
-
-  # Synthetic benchmark params
-  syn_obj_width_px: 64
-  syn_rotate: 15  # Rotation degree: [-syn_rotate, syn_rotate]
-  syn_scale: 1  # Scale: [1 / syn_scale, syn_scale]
-  syn_translate: 0.4
-  syn_colorjitter: 0
-  syn_3d_dist: 0
   # Additional augmentation for background image; Can only be used with
   # synthetic data right now.
   img_aug_prob_geo: 0
-  
+
   # Path to model weight
   model_name: 'faster_rcnn'  # For naming purpose only
   weights: './detectron_output/faster_rcnn_R_50_FPN_mtsd_no_color_2/model_best.pth'
   conf_thres: null  # Confidence score threshold to consider detection
-  compute_conf_thres: False  # Compute conf_thres based on max F1 score
-  syn_desired_fnr: null  # Desired false negative rate for synthetic data
+  compute_conf_thres: True  # Compute conf_thres based on max F1 score
   use_per_class_conf_thres: True
 
   # Visualization
@@ -68,7 +49,7 @@ attack:
   common:
     attack_name: 'rp2'  # 'rp2', 'dpatch'
     patch_dim: 64
-    num_bg: 5  # Number of backgrounds attacker uses to generate patch
+    num_bg: 50  # Number of backgrounds attacker uses to generate patch
     # Additional augmentation for patch
     aug_prob_geo: 0
     aug_rotate: 15

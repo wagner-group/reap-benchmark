@@ -35,6 +35,7 @@ from adv_patch_bench.utils.types import (
     SizePx,
     Target,
 )
+from hparams import Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class DetectronEvaluator:
         self._dataloader = dataloader
         self._input_format: str = global_cfg.INPUT.FORMAT
         self._metadata = MetadataCatalog.get(self._dataset)
-        base_dataset = self._dataset.split("-", maxsplit=1)[0]
+        base_dataset = Metadata.parse_dataset_name(self._dataset).name
 
         interp: str = config_base["interp"]
         self._img_size: SizePx = SizePx(config_base["img_size"])
@@ -95,7 +96,7 @@ class DetectronEvaluator:
 
         # Load annotation DataFrame. "Other" signs are discarded.
         self._anno_df: pd.DataFrame = reap_util.load_annotation_df(
-            config_base["tgt_csv_filepath"]
+            Metadata.get(self._dataset).annotation_path,
         )
         self._annotated_signs_only: bool = config_base["annotated_signs_only"]
 
@@ -236,7 +237,6 @@ class DetectronEvaluator:
 
             filenames = [pathlib.Path(b["file_name"]).stem for b in batch]
             image_ids: list[int] = [b["image_id"] for b in batch]
-            # filenames = [name.split(".")[0] for name in filenames]
 
             rimg: render_image.RenderImage = render_image.RenderImage(
                 samples=batch,

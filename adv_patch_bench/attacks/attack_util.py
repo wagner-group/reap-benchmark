@@ -5,7 +5,6 @@ from __future__ import annotations
 import pickle
 from typing import Any
 
-import detectron2
 import torch
 import torchvision
 
@@ -29,7 +28,7 @@ from adv_patch_bench.utils.types import (
     SizeMM,
     SizePx,
 )
-from hparams import DEFAULT_PATH_DEBUG_PATCH
+from hparams import DEFAULT_PATH_DEBUG_PATCH, Metadata
 
 _ATTACK_DICT = {
     "none": no_attack.NoAttackModule,
@@ -167,10 +166,9 @@ def prep_adv_patch_all_classes(
     obj_width_px: int = 64,
 ) -> tuple[list[BatchImageTensor | None], list[BatchMaskTensor | None]]:
     """Prepare adversarial patches and masks for all classes."""
-    metadata = detectron2.data.MetadataCatalog.get(dataset)
-    obj_dim_dict = metadata.get("obj_dim_dict")
-    size_mm_dict = obj_dim_dict.get("size_mm")
-    hw_ratio_dict = obj_dim_dict.get("hw_ratio")
+    metadata = Metadata.get(dataset)
+    size_mm_dict = metadata.size_mm
+    hw_ratio_dict = metadata.hw_ratio
     adv_patches, patch_masks = [], []
 
     for i, hw_ratio in hw_ratio_dict.items():

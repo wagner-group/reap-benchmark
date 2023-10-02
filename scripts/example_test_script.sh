@@ -50,7 +50,7 @@ for ((i = 0; i < 1; i++)); do
     base.num_eval=$NUM_EVAL
     base.syn_desired_fnr=$SYN_FNR
     "
-    CUDA_VISIBLE_DEVICES=$GPU $PYTHON test_detectron_main.py \
+    CUDA_VISIBLE_DEVICES=$GPU $PYTHON test_main.py \
         -e configs/cfg_reap_base.yaml --options "$TEST_CLEAN_OPTS"
 
     if [ $RUN_ATTACK == 1 ]; then
@@ -85,9 +85,9 @@ for ((i = 0; i < 1; i++)); do
         attack.dpatch.step_size=0.1
         attack.dpatch.iou_thres=0.01
         "
-        CUDA_VISIBLE_DEVICES=$GPU $PYTHON gen_patch_detectron_main.py \
+        CUDA_VISIBLE_DEVICES=$GPU $PYTHON gen_adv_main.py \
             -e configs/cfg_reap_base.yaml --options "$TEST_OPTS"
-        CUDA_VISIBLE_DEVICES=$GPU $PYTHON test_detectron_main.py \
+        CUDA_VISIBLE_DEVICES=$GPU $PYTHON test_main.py \
             -e configs/cfg_reap_base.yaml --options "$TEST_OPTS"
     fi
 done
@@ -108,7 +108,7 @@ exit 0
 # base.verbose=False
 # base.name=$MODEL_ID
 # "
-# CUDA_VISIBLE_DEVICES=$GPU $PYTHON test_detectron_main.py \
+# CUDA_VISIBLE_DEVICES=$GPU $PYTHON test_main.py \
 #     -e configs/cfg_reap_base.yaml --options "$TEST_CLEAN_OPTS"
 
 

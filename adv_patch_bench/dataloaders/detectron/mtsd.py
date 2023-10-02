@@ -13,7 +13,6 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from tqdm.auto import tqdm
 
-from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.tqdm_logger import TqdmLoggingHandler
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import (
@@ -23,6 +22,7 @@ from hparams import (
     PATH_DUPLICATE_FILES,
     TS_COLOR_DICT,
     TS_COLOR_OFFSET_DICT,
+    Metadata,
 )
 
 _ALLOWED_SPLITS = ("train", "test", "val")
@@ -221,15 +221,8 @@ def register_mtsd(
         dataset_name: Dataset name along with modifiers. Defaults to "mtsd".
     """
     data_path = os.path.join(base_path, "mtsd_v2_fully_annotated")
-    (
-        _,
-        _,
-        use_orig_labels,
-        ignore_bg_class,
-        skip_bg_only,
-        _,
-        split,
-    ) = parse_dataset_name(dataset_name)
+    dataset_id = Metadata.parse_dataset_name(dataset_name)
+    split = dataset_id.split
     if split is not None:
         dataset_name = "-".join(dataset_name.split("-")[:-1])
     class_names: list[str] = list(
@@ -239,11 +232,11 @@ def register_mtsd(
     bg_class: int = len(class_names) - 1
 
     label_map: pd.DataFrame = mtsd_anno["mtsd_label_to_class_index"]
-    if use_orig_labels:
+    if dataset_id.use_orig_labels:
         thing_classes = label_map["sign"].tolist()
     else:
         thing_classes = class_names
-        if ignore_bg_class:
+        if dataset_id.ignore_bg_class:
             thing_classes = thing_classes[:-1]
 
     metadata = {
@@ -252,7 +245,6 @@ def register_mtsd(
         "keypoint_flip_map": [
             (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
         ],
-        "obj_dim_dict": DATASET_METADATA[dataset_name],
         "bg_class": bg_class,
     }
     # Register dataset without split to keep metadata
@@ -267,8 +259,8 @@ def register_mtsd(
                 split=s,
                 data_path=data_path,
                 bg_class=bg_class,
-                ignore_bg_class=ignore_bg_class,
-                skip_bg_only=skip_bg_only,
+                ignore_bg_class=dataset_id.ignore_bg_class,
+                skip_bg_only=dataset_id.skip_bg_only,
                 **mtsd_anno,
             ),
         )

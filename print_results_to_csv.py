@@ -8,187 +8,14 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from hparams import DATASET_METADATA, Metadata
+from hparams import Metadata
 
-BIG_NUM = 1e9
-_LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS = None, None, None
-_NUM_IOU_THRES = 10
 BASE_PATH = "./results/"
-# CONF_THRES = 0.634  # FIXME
-# CONF_THRES_1 = [0.949,0.950,0.898,0.906,0.769,0.959,0.732,0.538,0.837,0.862,0.823,0.0]
-CONF_THRES_2 = [
-    0.949,
-    0.950,
-    0.898,
-    0.906,
-    0.769,
-    0.959,
-    0.732,
-    0.538,
-    0.837,
-    0.862,
-    0.823,
-    0.0,
-]
-SYN_CONF_THRES_2 = [
-    0.996,
-    0.99,
-    0.091,
-    0.968,
-    0.565,
-    0.985,
-    0.937,
-    0.808,
-    0.848,
-    0.981,
-    0.973,
-    0.0,
-]
-CONF_THRES_3 = [
-    0.871,
-    0.878,
-    0.991,
-    0.619,
-    0.929,
-    0.770,
-    0.976,
-    0.688,
-    0.943,
-    0.715,
-    0.964,
-    0.0,
-]
-SYN_CONF_THRES_3 = [
-    0.907,
-    0.990,
-    0.994,
-    0.358,
-    0.975,
-    0.948,
-    0.998,
-    0.980,
-    0.984,
-    0.988,
-    0.972,
-    0.0,
-]
-CONF_THRES_4 = [
-    0.896,
-    0.944,
-    0.957,
-    0.901,
-    0.796,
-    0.870,
-    0.743,
-    0.687,
-    0.929,
-    0.991,
-    0.981,
-    0.0,
-]
-SYN_CONF_THRES_4 = [
-    0.874,
-    0.959,
-    0.961,
-    0.369,
-    0.636,
-    0.993,
-    0.993,
-    0.995,
-    0.893,
-    0.999,
-    0.955,
-    0.0,
-]
-CONF_THRES_5 = [
-    0.594,
-    0.519,
-    0.631,
-    0.573,
-    0.512,
-    0.638,
-    0.182,
-    0.422,
-    0.419,
-    0.727,
-    0.699,
-    0.0,
-]
-SYN_CONF_THRES_5 = [
-    0.844,
-    0.791,
-    0.234,
-    0.741,
-    0.193,
-    0.864,
-    0.733,
-    0.826,
-    0.724,
-    0.867,
-    0.857,
-    0.0,
-]
-CONF_THRES_6 = [
-    0.405,
-    0.382,
-    0.692,
-    0.327,
-    0.266,
-    0.503,
-    0.245,
-    0.499,
-    0.365,
-    0.606,
-    0.509,
-    0.0,
-]
-SYN_CONF_THRES_6 = [
-    0.776,
-    0.673,
-    0.738,
-    0.465,
-    0.148,
-    0.742,
-    0.488,
-    0.647,
-    0.603,
-    0.817,
-    0.817,
-    0.0,
-]
-CONF_THRES_7 = [
-    0.485,
-    0.293,
-    0.394,
-    0.323,
-    0.331,
-    0.481,
-    0.299,
-    0.267,
-    0.148,
-    0.398,
-    0.451,
-    0.0,
-]
-SYN_CONF_THRES_7 = [
-    0.423,
-    0.036,
-    0.152,
-    0.147,
-    0.052,
-    0.436,
-    0.367,
-    0.221,
-    0.173,
-    0.264,
-    0.786,
-    0.0,
-]
-# CONF_THRES_8 = [0.485,0.293,0.394,0.323,0.331,0.481,0.299,0.267,0.148,0.398,0.451,0.0]  # TODO
-# SYN_CONF_THRES_8 = []
-iou_idx = 0  # 0.5
-
-_TRANSFORM_PARAMS: List[str] = [
+BIG_NUM = 1e9
+LABEL_LIST, NUM_CLASSES, NUM_SIGNS_PER_CLASS = None, None, None
+NUM_IOU_THRES = 10
+IOU_IDX = 0  # corresponds to IOU of 0.5
+TRANSFORM_PARAMS: List[str] = [
     "interp",
     "reap_geo_method",
     "reap_relight_method",
@@ -244,7 +71,7 @@ def _compute_ap_recall(
         score_idx = np.where(scores >= conf_thres)[0]
         if len(score_idx) > 0:
             score_idx = score_idx[-1]
-    
+
     return {
         "precision": pr[score_idx] if score_idx is not None else 0.0,
         "recall": rc[score_idx],
@@ -258,19 +85,21 @@ def _compute_ap_recall(
 
 
 def _average(print_df_rows, base_sid, all_class_sid, metric_name):
-    metrics = np.zeros(_NUM_CLASSES) + BIG_NUM
-    for i in range(_NUM_CLASSES):
+    metrics = np.zeros(NUM_CLASSES) + BIG_NUM
+    for i in range(NUM_CLASSES):
         sid = f"{base_sid} | {i:02d}"
         if sid not in print_df_rows:
             continue
         metrics[i] = print_df_rows[f"{base_sid} | {i:02d}"][metric_name]
-    print_df_rows[all_class_sid][metric_name] = np.mean(metrics[metrics < BIG_NUM])
+    print_df_rows[all_class_sid][metric_name] = np.mean(
+        metrics[metrics < BIG_NUM]
+    )
     return metrics
 
 
 def main():
     """Main function."""
-    global _LABEL_LIST, _NUM_CLASSES, _NUM_SIGNS_PER_CLASS
+    global LABEL_LIST, NUM_CLASSES, NUM_SIGNS_PER_CLASS
 
     exp_type = args.exp_type
     clean_exp_name = args.clean_exp_name
@@ -282,24 +111,6 @@ def main():
         exp_paths.extend(list(clean_exp_path.iterdir()))
     if attack_exp_path.is_dir():
         exp_paths.extend(list(attack_exp_path.iterdir()))
-
-    model_id = int(clean_exp_name.split("model")[1])
-    is_syn = "synthetic" in clean_exp_name
-    conf_id = f"{model_id}-{is_syn}"
-    conf_thres = {
-        "2-False": CONF_THRES_2,
-        "2-True": SYN_CONF_THRES_2,
-        "3-False": CONF_THRES_3,
-        "3-True": SYN_CONF_THRES_3,
-        "4-False": CONF_THRES_4,
-        "4-True": SYN_CONF_THRES_4,
-        "5-False": CONF_THRES_5,
-        "5-True": SYN_CONF_THRES_5,
-        "6-False": CONF_THRES_6,
-        "6-True": SYN_CONF_THRES_6,
-        "7-False": CONF_THRES_7,
-        "7-True": SYN_CONF_THRES_7,
-    }.get(conf_id)
 
     df_rows = {}
     gt_scores = [{}, {}]
@@ -346,21 +157,19 @@ def main():
                 obj_class = results["obj_class"]
                 metrics = results["bbox"]
                 attack_type = results["attack_type"]
-                if _LABEL_LIST is None:
+                if LABEL_LIST is None:
                     # _LABEL_LIST = list(DATASET_METADATA[dataset]["class_name"])
-                    _LABEL_LIST = list(Metadata.get(dataset).class_name)
-                    _NUM_CLASSES = len(_LABEL_LIST) - 1
-                    _NUM_SIGNS_PER_CLASS = np.zeros(_NUM_CLASSES, dtype=np.int64)
+                    LABEL_LIST = list(Metadata.get(dataset).class_names)
+                    NUM_CLASSES = len(LABEL_LIST) - 1
+                    NUM_SIGNS_PER_CLASS = np.zeros(NUM_CLASSES, dtype=np.int64)
 
-                if conf_thres is None:
-                    # Get conf_thres from metadata
-                    weights = results["weights"].split("/")[-1]
-                    metadata_path = "/".join(results["weights"].split("/")[:-1])
-                    # dataset = "syn" if is_syn else "reap"
-                    with open(metadata_path + "/metadata.pkl", "rb") as file:
-                        metadata = pickle.load(file)
-                    conf_thres = metadata[weights][dataset]["conf_thres"]
-
+                # Get conf_thres from metadata
+                weights = results["weights"].split("/")[-1]
+                metadata_path = "/".join(results["weights"].split("/")[:-1])
+                # dataset = "syn" if is_syn else "reap"
+                with open(metadata_path + "/metadata.pkl", "rb") as file:
+                    metadata = pickle.load(file)
+                conf_thres = metadata[weights][dataset]["conf_thres"]
                 if conf_thres[obj_class] is None:
                     continue
 
@@ -370,18 +179,7 @@ def main():
                 # obj_class_name = result_path.split("/")[-3]
                 hashes = result_name.split("_")[1:]
                 eval_hash = hashes[0].split("eval")[1]
-                # EDIT
                 eval_hash = results["weights"].split("/")[-1]
-                # if eval_hash == "model_0034999.pth":
-                #     eval_hash = "model_best.pth"
-                # eval_hash = "dummy"
-                # if eval_hash == "cd78fbc2":
-                #     eval_hash = "1e47efdb"
-                # atk_hash = hashes[1].split("atk")[1]
-                # if len(hashes) < 3:
-                #     split_hash = "null"
-                # else:
-                #     split_hash = hashes[2].split("split")[1].split(".pkl")[0]
 
                 # Experiment setting identifier for matching clean and attack
                 if obj_class < 0:
@@ -401,7 +199,7 @@ def main():
                         * metrics["syn_matches"]
                     }
                     token_list = []
-                    for param in _TRANSFORM_PARAMS:
+                    for param in TRANSFORM_PARAMS:
                         if "syn" in param:
                             token_list.append(str(results[param]))
                     base_sid = f"syn | {attack_type} | " + "_".join(token_list)
@@ -414,29 +212,25 @@ def main():
                         continue
                     cls_scores = metrics["gtScores"]
                     tf_mode = results.get("reap_geo_method", "perspective")
-                    # EDIT
                     rl_mode = results["reap_relight_method"]
-                    # rl_mode = "polynomial_hsv-sv"
-                    # rl_mode = "polynomial_lab-l"
-                    # rl_mode = "color_transfer_hsv-sv"
                     base_sid = f"reap | {attack_type} | {tf_mode} | {rl_mode}"
                 base_sid += f" | {eval_hash}"
 
                 if base_sid not in tp_scores:
-                    tp_scores[base_sid] = {t: [] for t in range(_NUM_IOU_THRES)}
-                    fp_scores[base_sid] = {t: [] for t in range(_NUM_IOU_THRES)}
+                    tp_scores[base_sid] = {t: [] for t in range(NUM_IOU_THRES)}
+                    fp_scores[base_sid] = {t: [] for t in range(NUM_IOU_THRES)}
 
                 scores = cls_scores[obj_class]
                 num_gts = scores.shape[1]
-                _NUM_SIGNS_PER_CLASS[obj_class] = num_gts
+                NUM_SIGNS_PER_CLASS[obj_class] = num_gts
                 sid = f"{base_sid} | {obj_class:02d}"
                 if sid in scores_dict:
                     repeated_results.append(result_path)
                     continue
                 scores_dict[sid] = scores
 
-                tp = np.sum(scores[iou_idx] >= conf_thres[obj_class])
-                class_name = _LABEL_LIST[obj_class]
+                tp = np.sum(scores[IOU_IDX] >= conf_thres[obj_class])
+                class_name = LABEL_LIST[obj_class]
                 tpr = tp / num_gts
                 metrics[f"FNR-{class_name}"] = 1 - tpr
 
@@ -449,8 +243,8 @@ def main():
                 if not synthetic:
                     # Collect AP, precision, and recall
                     scores_full = results["bbox"]["scores_full"][obj_class]
-                    scores_tp = scores_full[iou_idx][0]
-                    scores_fp = scores_full[iou_idx][1]
+                    scores_tp = scores_full[IOU_IDX][0]
+                    scores_fp = scores_full[IOU_IDX][1]
                     scores = np.concatenate([scores_tp, scores_fp], axis=0)
                     matches = np.zeros_like(scores, dtype=bool)
                     num_matched = len(scores_tp)
@@ -465,7 +259,7 @@ def main():
                     print_df_rows[sid]["Precision"] = outputs["precision"] * 100
                     print_df_rows[sid]["Recall"] = outputs["recall"] * 100
                     print_df_rows[sid]["AP"] = results["bbox"]["AP"]
-                    for t in range(_NUM_IOU_THRES):
+                    for t in range(NUM_IOU_THRES):
                         tp_scores[base_sid][t].extend(scores_full[t][0])
                         fp_scores[base_sid][t].extend(scores_full[t][1])
 
@@ -508,7 +302,7 @@ def main():
             _average(print_df_rows, base_sid, all_class_sid, "AP")
         fnrs = _average(print_df_rows, base_sid, all_class_sid, "FNR")
         print_df_rows[allw_class_sid]["FNR"] = np.sum(
-            fnrs * _NUM_SIGNS_PER_CLASS / np.sum(_NUM_SIGNS_PER_CLASS)
+            fnrs * NUM_SIGNS_PER_CLASS / np.sum(NUM_SIGNS_PER_CLASS)
         )
 
     # Iterate through all attack experiments
@@ -522,8 +316,8 @@ def main():
             continue
 
         clean_scores = gt_scores[0][clean_sid]
-        clean_detected = clean_scores[iou_idx] >= conf_thres[k]
-        adv_detected = adv_scores[iou_idx] >= conf_thres[k]
+        clean_detected = clean_scores[IOU_IDX] >= conf_thres[k]
+        adv_detected = adv_scores[IOU_IDX] >= conf_thres[k]
         total = clean_scores.shape[1]
 
         num_succeed = np.sum(~adv_detected & clean_detected)
@@ -547,7 +341,7 @@ def main():
             results_all_classes[sid_no_class]["fnr"][k] = fnr
             results_all_classes[sid_no_class]["ap"][k] = ap
         else:
-            asrs = np.zeros(_NUM_CLASSES) + BIG_NUM
+            asrs = np.zeros(NUM_CLASSES) + BIG_NUM
             asrs[k] = attack_success_rate
             fnrs = np.zeros_like(asrs) + BIG_NUM
             fnrs[k] = fnr
@@ -590,10 +384,10 @@ def main():
         # Weighted average by number of real sign distribution
         allw_class_sid = f"{sid} | allw"
         print_df_rows[allw_class_sid]["ASR"] = np.sum(
-            asrs * _NUM_SIGNS_PER_CLASS / np.sum(_NUM_SIGNS_PER_CLASS)
+            asrs * NUM_SIGNS_PER_CLASS / np.sum(NUM_SIGNS_PER_CLASS)
         )
         print_df_rows[allw_class_sid]["FNR"] = np.sum(
-            fnrs * _NUM_SIGNS_PER_CLASS / np.sum(_NUM_SIGNS_PER_CLASS)
+            fnrs * NUM_SIGNS_PER_CLASS / np.sum(NUM_SIGNS_PER_CLASS)
         )
 
         if "reap" in sid:
@@ -601,9 +395,9 @@ def main():
             mAP = np.mean(result["ap"][result["ap"] < BIG_NUM])
             print_df_rows[all_class_sid]["AP"] = mAP
 
-            aps = np.zeros(_NUM_IOU_THRES)
+            aps = np.zeros(NUM_IOU_THRES)
             num_dts = None
-            for t in range(_NUM_IOU_THRES):
+            for t in range(NUM_IOU_THRES):
                 matched_len = len(tp_scores[sid][t])
                 unmatched_len = len(fp_scores[sid][t])
                 if num_dts is not None:
@@ -615,7 +409,9 @@ def main():
                 scores[matched_len:] = fp_scores[sid][t]
                 matches[:matched_len] = 1
                 aps[t] = _compute_ap_recall(scores, matches, total)["AP"]
-            print_df_rows[allw_class_sid]["AP"] = np.mean(aps[aps < BIG_NUM]) * 100
+            print_df_rows[allw_class_sid]["AP"] = (
+                np.mean(aps[aps < BIG_NUM]) * 100
+            )
 
         print(
             f"{sid}: combined {asr:.2f} ({num_succeed}/{num_clean.sum()}), "
@@ -624,9 +420,9 @@ def main():
 
     for sid, tp_score in tp_scores.items():
         if "reap" in sid and "none" in sid:
-            aps = np.zeros(_NUM_IOU_THRES)
+            aps = np.zeros(NUM_IOU_THRES)
             num_dts = None
-            for t in range(_NUM_IOU_THRES):
+            for t in range(NUM_IOU_THRES):
                 matched_len = len(tp_score[t])
                 unmatched_len = len(fp_scores[sid][t])
                 if num_dts is not None:
@@ -638,7 +434,7 @@ def main():
                 scores[matched_len:] = fp_scores[sid][t]
                 matches[:matched_len] = 1
                 aps[t] = _compute_ap_recall(
-                    scores, matches, _NUM_SIGNS_PER_CLASS.sum()
+                    scores, matches, NUM_SIGNS_PER_CLASS.sum()
                 )["AP"]
             print_df_rows[sid + " | allw"]["AP"] = np.mean(aps) * 100
 

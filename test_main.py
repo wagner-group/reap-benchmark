@@ -22,7 +22,8 @@ import adv_patch_bench.dataloaders.detectron.util as data_util
 import adv_patch_bench.utils.docker_bug_fixes  # pylint: disable=unused-import
 from adv_patch_bench.evaluators import detectron_evaluator
 from adv_patch_bench.models.custom_build import build_model
-from adv_patch_bench.utils.argparse import reap_args_parser, setup_detectron_cfg
+from adv_patch_bench.utils.argparse import reap_args_parser
+from adv_patch_bench.utils.config import setup_detectron_cfg
 from hparams import Metadata
 
 logger = logging.getLogger(__name__)
@@ -252,7 +253,7 @@ def _dump_results(results: Dict[str, Any]) -> None:
     result_dir = config_base["result_dir"]
     debug = config_base["debug"]
     dataset = config_base["dataset"]
-    class_names = Metadata.get(config_base["dataset"]).class_name
+    class_names = Metadata.get(config_base["dataset"]).class_names
     if debug:
         return
     # Keep only eval params that matter (uniquely identifies evaluation setting)
@@ -333,7 +334,7 @@ def _dump_results(results: Dict[str, Any]) -> None:
 def main() -> None:
     """Main function."""
     attack_config_path: str = config_base["attack_config_path"]
-    class_names: List[str] = Metadata.get(config_base["dataset"]).class_name
+    class_names: List[str] = Metadata.get(config_base["dataset"]).class_names
 
     # Load adversarial patch and config
     if os.path.isfile(attack_config_path):

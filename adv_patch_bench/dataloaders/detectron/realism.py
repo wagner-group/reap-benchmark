@@ -9,7 +9,6 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
 from tqdm.auto import tqdm
 
-from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.tqdm_logger import TqdmLoggingHandler
 from adv_patch_bench.utils.types import DetectronSample
 from hparams import Metadata
@@ -77,10 +76,9 @@ def register_realism(dataset_name: str = "realism") -> None:
         dataset_name: Dataset name along with modifiers. Defaults to "realism".
     """
     metadata = Metadata.get("realism")
-    _, _, _, ignore_bg_class, _, _, _ = parse_dataset_name(dataset_name)
-    bg_class: int = len(metadata.class_name) - 1
-    thing_classes = metadata.class_name
-    if ignore_bg_class:
+    bg_class: int = len(metadata.class_names) - 1
+    thing_classes = metadata.class_names
+    if Metadata.parse_dataset_name(dataset_name).ignore_bg_class:
         thing_classes = thing_classes[:-1]
 
     d2_metadata = {

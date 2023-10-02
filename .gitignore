@@ -147,3 +147,5 @@ tmp*
 reap_realism_test
 mish_cuda.py
 figures/
+data/reap/
+*.tar.gz

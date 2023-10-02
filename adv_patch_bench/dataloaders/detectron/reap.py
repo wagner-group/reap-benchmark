@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 
 import pandas as pd
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
 from adv_patch_bench.dataloaders.detectron import mapillary
-from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import DATASET_METADATA
+from hparams import Metadata
 
 _NUM_KEYPOINTS = 4
 
@@ -43,7 +41,6 @@ def get_reap_dict(
 
 
 def register_reap_syn(
-    base_path: str = "~/data/",
     dataset_name: str = "reap",
     anno_df: pd.DataFrame | None = None,
     img_size: SizePx | None = None,
@@ -51,7 +48,6 @@ def register_reap_syn(
     """Register REAP dataset in Detectron2.
 
     Args:
-        base_path: Base path to dataset. Defaults to "./data/".
         dataset_name: Full dataset name. Defaults to "reap".
         anno_df: Annotation DataFrame. If specified, only samples present in
             anno_df will be sampled.
@@ -60,23 +56,12 @@ def register_reap_syn(
             DatasetMapper is not called properly, bbox and keypoints may be
             wrong. Defaults to None.
     """
-    class_names: list[str] = list(
-        DATASET_METADATA[dataset_name]["class_name"].values()
-    )
+    metadata = Metadata.get(dataset_name)
+    dataset_id = Metadata.parse_dataset_name(dataset_name)
+    class_names: list[str] = list(metadata.class_names.values())
     # Get index of background or "other" class
     bg_class: int = len(class_names) - 1
-    base_path = os.path.expanduser(base_path)
-    base_dataset, use_color, _, nobg, _, num_classes, _ = parse_dataset_name(
-        dataset_name
-    )
-    assert base_dataset in ("reap", "synthetic"), (
-        f"dataset_name must start with 'reap' or 'synthetic' ({base_dataset})!"
-    )
-    if num_classes is not None:
-        modifier = str(num_classes)
-    else:
-        modifier = "color" if use_color else "no_color"
-    data_path: str = os.path.join(base_path, "mapillary_vistas", modifier)
+    data_path = metadata.data_path
     logger.info("Registering REAP dataset at %s", data_path)
 
     DatasetCatalog.register(
@@ -86,13 +71,12 @@ def register_reap_syn(
             bg_class=bg_class,
             anno_df=anno_df,
             img_size=img_size,
-            ignore_bg_class=nobg,
+            ignore_bg_class=dataset_id.ignore_bg_class,
         ),
     )
     MetadataCatalog.get(dataset_name).set(
         thing_classes=class_names,
         keypoint_names=[f"p{i}" for i in range(_NUM_KEYPOINTS)],
         keypoint_flip_map=[(f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)],
-        obj_dim_dict=DATASET_METADATA[dataset_name],
         bg_class=bg_class,
     )

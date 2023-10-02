@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 import adv_patch_bench.dataloaders.detectron.util as data_util
 import adv_patch_bench.utils.argparse as args_util
+import adv_patch_bench.utils.config as config_util
 import adv_patch_bench.utils.docker_bug_fixes  # pylint: disable=unused-import
 from adv_patch_bench.attacks import attack_util, base_attack
 from adv_patch_bench.models.custom_build import build_model
@@ -229,7 +230,7 @@ if __name__ == "__main__":
         is_detectron=True, is_gen_patch=True, is_train=False
     )
     # Verify some args
-    cfg = args_util.setup_detectron_cfg(config)
+    cfg = config_util.setup_detectron_cfg(config)
     config_base: dict[str, Any] = config["base"]
     seed: int = config_base["seed"]
     cudnn.benchmark = False

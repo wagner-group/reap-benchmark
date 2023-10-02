@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import pathlib
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 from detectron2.data import DatasetCatalog, MetadataCatalog
@@ -13,12 +12,10 @@ from detectron2.structures import BoxMode
 from tqdm.auto import tqdm
 
 import adv_patch_bench.utils.image as img_util
-from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.tqdm_logger import TqdmLoggingHandler
 from adv_patch_bench.utils.types import DetectronSample, SizePx
-from hparams import DATASET_METADATA, RELIGHT_METHODS
+from hparams import RELIGHT_METHODS, Metadata
 
-_ALLOWED_SPLITS = ("train", "test", "combined")
 _NUM_KEYPOINTS = 4
 
 logger = logging.getLogger(__name__)
@@ -38,8 +35,8 @@ def get_mapillary_dict(
 
     Args:
         split: Dataset split to consider.
-        base_path: Base path to dataset.
-        bg_class_id: Background class index.
+        data_path: Base path to dataset.
+        bg_class: Background class index.
         ignore_bg_class: Whether to exclude background objects from labels.
             Defaults to False. ignore_bg_class should not be True when running
             evaluation because this means background objects will not have a
@@ -54,18 +51,14 @@ def get_mapillary_dict(
         ValueError: split is not among _ALLOWED_SPLITS.
 
     Returns:
-        List of Mapillary Vistas samples in Detectron2 format.
+        list of Mapillary Vistas samples in Detectron2 format.
     """
     _ = kwargs  # Unused
     logger.info("Getting %s Mapillary Vistas data at %s", split, data_path)
-    if split not in _ALLOWED_SPLITS:
-        raise ValueError(
-            f"split must be among {_ALLOWED_SPLITS}, but it is {split}!"
-        )
     if img_size is not None:
         new_height, new_width = img_size
 
-    mapillary_split: Dict[str, str] = {
+    mapillary_split: dict[str, str] = {
         "train": "training",
         "test": "validation",
         "combined": "combined",
@@ -78,11 +71,11 @@ def get_mapillary_dict(
     img_path: pathlib.Path = bpath / mapillary_split / "images"
 
     dataset_dicts = []
-    label_files: List[str] = [
+    label_files: list[str] = [
         str(f) for f in label_path.iterdir() if f.is_file()
     ]
     label_files = sorted(label_files)
-    img_df: Optional[pd.DataFrame] = None
+    img_df: pd.DataFrame | None = None
 
     for idx, label_file in enumerate(tqdm(label_files, mininterval=10)):
 
@@ -92,7 +85,7 @@ def get_mapillary_dict(
             img_df = anno_df[anno_df["filename"] == jpg_filename]
 
         with open(label_file, "r", encoding="utf-8") as file:
-            labels: List[str] = file.readlines()
+            labels: list[str] = file.readlines()
             labels = [a.strip() for a in labels]
 
         width: float = float(labels[0].split(",")[5])
@@ -115,7 +108,7 @@ def get_mapillary_dict(
             )
 
         # Populate record or sample with its objects
-        objs: List[Dict[str, Any]] = []
+        objs: list[dict[str, Any]] = []
         for orig_obj in labels:
             class_id, xmin, ymin, xmax, ymax, _, _, obj_id = orig_obj.split(",")
             xmin, ymin, xmax, ymax = [
@@ -151,7 +144,7 @@ def get_mapillary_dict(
             )
 
             # Annotation for each object
-            obj: Dict[str, Any] = {
+            obj: dict[str, Any] = {
                 "bbox": [xmin, ymin, xmax, ymax],
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "category_id": class_id,
@@ -213,7 +206,6 @@ def get_mapillary_dict(
 
 
 def register_mapillary(
-    base_path: str = "~/data/",
     dataset_name: str = "mapillary",
     anno_df: pd.DataFrame | None = None,
     img_size: SizePx | None = None,
@@ -221,7 +213,6 @@ def register_mapillary(
     """Register Mapillary Vistas dataset on Detectron2.
 
     Args:
-        base_path: Base path to dataset. Defaults to "~/data/".
         dataset_name: Full name of the dataset with modifiers (e.g.,
             mapillary-color-train). Defaults to "mapillary".
         anno_df: Annotation DataFrame. If specified, only samples present in
@@ -231,26 +222,20 @@ def register_mapillary(
             DatasetMapper is not called properly, bbox and keypoints may be
             wrong. Defaults to None.
     """
-    _, _, _, ignore_bg_class, _, _, split = parse_dataset_name(dataset_name)
-    dataset_tokens = dataset_name.split("-")
-    if split is not None:
-        # Remove split from dataset name
-        dataset_name = "-".join(dataset_tokens[:-1])
-    # Get only the modifier and not the base dataset name
-    modifier = dataset_name.split("-", maxsplit=1)[1]
-    data_path = os.path.join(base_path, "mapillary_vistas", modifier)
+    metadata = Metadata.get(dataset_name)
+    data_path = metadata.data_path
+    dataset_id = Metadata.parse_dataset_name(dataset_name)
+    ignore_bg_class = dataset_id.ignore_bg_class
     logger.info("Registering Mapillary Vistas dataset at %s", data_path)
 
-    class_names: List[str] = list(
-        DATASET_METADATA[dataset_name]["class_name"].values()
-    )
+    class_names: list[str] = list(metadata.class_names.values())
     bg_class: int = len(class_names) - 1
-    thing_classes: List[str] = class_names
+    thing_classes: list[str] = class_names
     if ignore_bg_class:
         thing_classes = thing_classes[:-1]
 
-    for split in _ALLOWED_SPLITS:
-        dataset_with_split: str = f"{dataset_name}-{split}"
+    for split in metadata.splits:
+        dataset_with_split: str = f"{dataset_id.name}-{split}"
         DatasetCatalog.register(
             dataset_with_split,
             lambda s=split: get_mapillary_dict(
@@ -268,6 +253,5 @@ def register_mapillary(
             keypoint_flip_map=[
                 (f"p{i}", f"p{i}") for i in range(_NUM_KEYPOINTS)
             ],
-            obj_dim_dict=DATASET_METADATA[dataset_name],
             bg_class=bg_class,
         )

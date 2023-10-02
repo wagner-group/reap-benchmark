@@ -55,7 +55,7 @@ def main():
     anno_path = join(path, "annotations")
 
     bg_idx = None
-    for i, class_name in Metadata.get(dataset).class_name.items():
+    for i, class_name in Metadata.get(dataset).class_names.items():
         if class_name == "other":
             bg_idx = i
             break

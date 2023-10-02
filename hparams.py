@@ -10,11 +10,12 @@ TODO(NewDataset): Use config file and dataset object to load and hold metadata.
 from __future__ import annotations
 
 import os
-from abc import ABC
+from dataclasses import dataclass
 from typing import Any, Dict
 
 HOME = os.path.expanduser("~")
 
+# DEPRECATED: Remove in future. Only used in prep script now.
 # Set paths
 PATH_MAPILLARY_ANNO = {
     "train": "./reap_annotations.csv",
@@ -341,64 +342,75 @@ DATASET_METADATA["reap-100"] = DATASET_METADATA["mtsd-100"]
 DATASET_METADATA["synthetic-100"] = DATASET_METADATA["mtsd-100"]
 
 
-_reap_class_name = dict(enumerate(TS_NO_COLOR_LABEL_LIST))
+_reap_class_names = dict(enumerate(TS_NO_COLOR_LABEL_LIST))
 
 
-# TODO(enhance): Use class instead of dict for metadata
+@dataclass
+class DatasetIdentifier:
+    """Dataset identifier."""
+
+    name: str
+    use_shape: bool = False
+    use_color: bool = False
+    use_orig_labels: bool = False
+    ignore_bg_class: bool = False
+    skip_bg_only: bool = False
+    num_classes: int = None
+    split: str = None
 
 
-class BaseMetadata(ABC):
+class BaseMetadata:
     """Metadata for a dataset."""
 
     data_path: str
     size_mm: dict[int, tuple[float, float]]
     hw_ratio: dict[int, float]
     shape: dict[int, str]
-    class_name: dict[int, str]
+    class_names: dict[int, str]
     syn_obj_name: dict[int, str]
     annotation_path: str
     splits: list[str]
 
 
-class MtsdMetadata(BaseMetadata):
+class MtsdShapeMetadata(BaseMetadata):
     """Metadata for MTSD and similar datasets."""
 
     data_path: str = f"{HOME}/data/mtsd_v2_fully_annotated/"
     size_mm: dict[int, tuple[float, float]] = _MPL_NO_COLOR_SIZE_MM
     hw_ratio: dict[int, float] = _MPL_NO_COLOR_RATIO
     shape: dict[int, str] = _MPL_NO_COLOR_SHAPE
-    class_name: dict[int, str] = _reap_class_name
-    syn_obj_name: dict[int, str] = _reap_class_name
+    class_names: dict[int, str] = _reap_class_names
+    syn_obj_name: dict[int, str] = _reap_class_names
     splits: list[str] = ["train", "val", "test"]
 
 
-class ReapMetadata(MtsdMetadata):
+class ReapShapeMetadata(MtsdShapeMetadata):
     """Metadata for REAP and similar datasets."""
 
-    data_path: str = f"{HOME}/data/mapillary_vistas/"
-    annotation_path: str = "./reap_annotations.csv"
+    data_path: str = "./data/reap/no_color/"
+    annotation_path: str = "./data/reap_annotations.csv"
     splits: list[str] = ["combined"]
 
 
-class Mtsd100Metadata(MtsdMetadata):
+class Mtsd100Metadata(MtsdShapeMetadata):
     """Metadata for MTSD-100 and similar datasets."""
 
     size_mm: dict[int, tuple[float, float]] = _MTSD100_SIZE_MM
     hw_ratio: dict[int, float] = _MTSD100_SIZE_RATIO
     shape: dict[int, str] = _MTSD100_SHAPE
-    class_name: dict[int, str] = dict(enumerate(MTSD100_LABELS))
+    class_names: dict[int, str] = dict(enumerate(MTSD100_LABELS))
     syn_obj_name: dict[int, str] = dict(enumerate(MTSD100_TO_SHAPE.values()))
 
 
 class Reap100Metadata(Mtsd100Metadata):
     """Metadata for REAP-100 and similar datasets."""
 
-    data_path: str = f"{HOME}/data/mapillary_vistas/"
-    annotation_path: str = "./reap_annotations.csv"
+    data_path: str = "./data/reap/100/"
+    annotation_path: str = "./data/reap_annotations.csv"
     splits: list[str] = ["combined"]
 
 
-class RealismMetadata(MtsdMetadata):
+class RealismMetadata(MtsdShapeMetadata):
     """Metadata for MTSD and similar datasets."""
 
     data_path: str = f"{HOME}/data/reap-benchmark/reap_realism_test/"
@@ -411,18 +423,17 @@ class MetaData:
     def __init__(self) -> None:
         """Initialize metadata."""
         self.metadata: dict[str, BaseMetadata] = {
-            "reap": ReapMetadata(),
-            "mtsd": MtsdMetadata(),
-            "reap-100": Reap100Metadata(),
-            "mtsd-100": Mtsd100Metadata(),
+            "reap_shape": ReapShapeMetadata(),
+            "mtsd_shape": MtsdShapeMetadata(),
+            "reap": Reap100Metadata(),
+            "mtsd": Mtsd100Metadata(),
             "realism": RealismMetadata(),
         }
+        self.metadata["synthetic"] = self.metadata["reap_shape"]
         # TODO(enhance): Mapillary Vista is structued differently from REAP,
         # but we don't really use it so we can just use REAP metadata for now.
         self.metadata["mapillary"] = self.metadata["reap"]
-        self.metadata["synthetic"] = self.metadata["reap"]
-        self.metadata["mapillary-100"] = self.metadata["reap-100"]
-        self.metadata["synthetic-100"] = self.metadata["reap-100"]
+        self.metadata["mapillary_shape"] = self.metadata["reap_shape"]
         self.base_dataset_names: list[str] = self._base_dataset_names()
 
     def _base_dataset_names(self) -> list[str]:
@@ -449,11 +460,61 @@ class MetaData:
         Returns:
             Metadata for the dataset.
         """
-        if "-" in dataset_name and "-100" not in dataset_name:
-            dataset_name = dataset_name.split("-", maxsplit=1)[0]
-        if dataset_name not in self.metadata:
-            raise ValueError(f"Dataset {dataset_name} not found.")
-        return self.metadata[dataset_name]
+        dataset_id = self.parse_dataset_name(dataset_name)
+        base_dataset = dataset_id.name
+        if base_dataset not in self.metadata:
+            raise ValueError(f"Dataset {base_dataset} not found.")
+        return self.metadata[base_dataset]
+
+    def parse_dataset_name(self, dataset_name: str) -> list[str, bool, int]:
+        """Parse dataset name to get base dataset name and modifiers."""
+        base_dataset = dataset_name.split("-")[0]
+        dataset_modifiers: list[str] = []
+        if "-" in dataset_name:
+            dataset_modifiers = dataset_name.split("-")[1:]
+
+        if "reap" in base_dataset or "synthetic" in base_dataset:
+            use_color = False
+            use_orig_labels = False
+            skip_bg_only = base_dataset == "reap"
+        else:
+            # Whether sign color is used for labels. Defaults to False
+            use_color = "color" in dataset_modifiers
+            # Whether to use original MTSD labels instead of REAP annotations
+            use_orig_labels = "orig" in dataset_modifiers
+            # Whether to skip images with no object of interest
+            skip_bg_only = "skipbg" in dataset_modifiers
+
+        # Whether to ignore background class (last class index) and not include it
+        # in dataset dict and targets
+        ignore_bg_class = "nobg" in dataset_modifiers
+
+        # Get num classes like mtsd-100, reap-100, etc.
+        num_classes = None
+        if "100" in dataset_modifiers:
+            num_classes = 100
+
+        # Get split
+        split = None
+        for split_name in ("train", "val", "test", "combined"):
+            if split_name in dataset_modifiers:
+                split = split_name
+                break
+
+        use_shape = "shape" in dataset_modifiers
+        # if use_shape:
+        #     base_dataset += "_shape"
+
+        return DatasetIdentifier(
+            name=base_dataset,
+            use_shape=use_shape,
+            use_color=use_color,
+            use_orig_labels=use_orig_labels,
+            ignore_bg_class=ignore_bg_class,
+            skip_bg_only=skip_bg_only,
+            num_classes=num_classes,
+            split=split,
+        )
 
 
 Metadata = MetaData()

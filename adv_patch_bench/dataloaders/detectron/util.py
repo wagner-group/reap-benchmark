@@ -28,8 +28,8 @@ from adv_patch_bench.dataloaders.detectron import (
     reap,
     reap_dataset_mapper,
 )
-from adv_patch_bench.utils.argparse import parse_dataset_name
 from adv_patch_bench.utils.types import DetectronSample
+from hparams import Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -78,15 +78,13 @@ def get_dataloader(
 ) -> tuple[torch.data.utils.DataLoader, set[str]]:
     """Get eval dataloader from base config."""
     dataset: str = config_base["dataset"]
-    base_dataset: str = parse_dataset_name(dataset)[0]
+    base_dataset: str = Metadata.parse_dataset_name(dataset).name
     split_file_path: str = config_base["split_file_path"]
     metadata = MetadataCatalog.get(dataset)
 
     # First, get list of file names to evaluate on
     if not hasattr(metadata, "data_dict"):
-        data_dicts: list[DetectronSample] = DatasetCatalog.get(
-            config_base["dataset"]
-        )
+        data_dicts: list[DetectronSample] = DatasetCatalog.get(dataset)
         metadata.set(data_dict=data_dicts)
     else:
         data_dicts = metadata.data_dict
@@ -97,7 +95,7 @@ def get_dataloader(
             split_file_names = set(file.read().splitlines())
 
     # Filter only images with desired class when evaluating on REAP
-    if base_dataset == "reap":
+    if "reap" in base_dataset:
         img_ids = _get_img_ids(dataset, config_base["obj_class"])
         class_file_names = set(_get_filename_from_id(data_dicts, img_ids))
         split_file_names = split_file_names.intersection(class_file_names)
@@ -111,7 +109,7 @@ def get_dataloader(
         )
         sampler = custom_sampler.ShuffleInferenceSampler(num_samples)
 
-    if base_dataset in ("reap", "synthetic"):
+    if any(d in base_dataset for d in ("reap", "synthetic")):
         mapper = reap_dataset_mapper.ReapDatasetMapper(
             global_cfg, is_train=False, img_size=config_base["img_size"]
         )
@@ -161,29 +159,27 @@ def register_dataset(config_base: Dict[str, Any]) -> None:
         config_base: Dictionary of eval config.
     """
     dataset: str = config_base["dataset"]
-    base_dataset: str = parse_dataset_name(dataset)[0]
-    # Get data path
-    base_data_path: str = os.path.expanduser(config_base["data_dir"])
+    base_dataset: str = Metadata.parse_dataset_name(dataset).name
 
     # Load annotation if specified
     anno_df: Optional[pd.DataFrame] = None
     if config_base.get("annotated_signs_only", False):
-        anno_df = reap_util.load_annotation_df(config_base["tgt_csv_filepath"])
+        anno_df = reap_util.load_annotation_df(
+            Metadata.get(dataset).annotation_path
+        )
 
     logger.info("Registering %s dataset...", base_dataset)
     if any(name in base_dataset for name in ("reap", "synthetic")):
         # Our synthetic benchmark is also based on samples in REAP
         reap.register_reap_syn(
-            base_path=base_data_path,
             dataset_name=dataset,
             anno_df=anno_df,
             img_size=config_base["img_size"],
         )
     elif base_dataset == "mtsd":
-        mtsd.register_mtsd(base_path=base_data_path, dataset_name=dataset)
+        mtsd.register_mtsd(dataset_name=dataset)
     elif base_dataset == "mapillary":
         mapillary.register_mapillary(
-            base_path=base_data_path,
             dataset_name=dataset,
             anno_df=anno_df,
             img_size=config_base["img_size"],

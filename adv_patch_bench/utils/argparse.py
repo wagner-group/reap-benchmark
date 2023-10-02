@@ -10,13 +10,9 @@ import pathlib
 import pickle
 from typing import Any, Dict, List, Optional
 
-import detectron2
 import numpy as np
 import yaml
-from detectron2.config import CfgNode, LazyConfig
-from detectron2.engine import default_argument_parser, default_setup
-from detectron2.utils import comm
-from omegaconf import OmegaConf
+from detectron2.engine import default_argument_parser
 
 from hparams import DEFAULT_SYN_OBJ_DIR, INTERPS, Metadata
 
@@ -34,18 +30,6 @@ _TRANSFORM_PARAMS: List[str] = [
     "syn_3d_dist",
 ]
 logger = logging.getLogger(__name__)
-
-
-def _cfgnode_to_dict(cfg_node: CfgNode, cfg_dict: dict[str, Any] | None = None):
-    if cfg_dict is None:
-        cfg_dict = {}
-    for k, v in cfg_node.items():
-        if isinstance(v, CfgNode):
-            cfg_dict[k] = {}
-            _cfgnode_to_dict(v, cfg_dict=cfg_dict[k])
-        else:
-            cfg_dict[k] = v
-    return cfg_dict
 
 
 def reap_args_parser(
@@ -350,7 +334,8 @@ def reap_args_parser(
     parser.add_argument(
         "--options",
         type=str,
-        default="",
+        nargs="+",
+        default=[],
         help=(
             "Custom attack options; will overwrite config file. Use '.' to "
             'impose hierarchy and space to separate options, e.g., -o "'
@@ -537,7 +522,7 @@ def reap_args_parser(
         config = {"base": args, "attack": {}}
 
     # Update attack config through command line args
-    for opt in args["options"].split():
+    for opt in args["options"]:
         tokens: List[str] = opt.split("=")
         if len(tokens) != 2:
             raise ValueError(
@@ -562,7 +547,7 @@ def reap_args_parser(
             parent[param] = val
 
     assert "base" in config and "attack" in config
-    _update_dataset_name(config, is_train)
+    _update_dataset_name(config)
     _verify_base_config(config["base"], is_detectron)
 
     # Update config and fill with auto-generated params
@@ -619,7 +604,7 @@ def _verify_base_config(config_base: Dict[str, Any], is_detectron: bool):
 
     # Verify obj_class arg
     obj_class = config_base["obj_class"]
-    max_cls = len(Metadata.get(dataset).class_name) - 1
+    max_cls = len(Metadata.get(dataset).class_names) - 1
     if not -1 <= obj_class <= max_cls:
         raise ValueError(
             f"Target object class {obj_class} is not between 0 and {max_cls}!"
@@ -685,9 +670,7 @@ def _update_conf_thres(
         config_base["conf_thres"] = conf_thres
 
 
-def _update_dataset_name(
-    config: Dict[str, Dict[str, Any]], is_train: bool = False
-) -> None:
+def _update_dataset_name(config: Dict[str, Dict[str, Any]]) -> None:
     """Update dataset and dataset_split in config_base.
 
     Expect dataset to have 1-3 tokens separated by "-" (hyphen). The first token
@@ -699,37 +682,31 @@ def _update_dataset_name(
     config_base: Dict[str, Any] = config["base"]
     dataset: str = config_base["dataset"]
     # <BASE_DATASET>-<MODIFIER>-<SPLIT>: e.g., mtsd-no_color-train
-    _, use_color, _, _, _, _, split = parse_dataset_name(dataset)
-    dataset_no_split = dataset
-    if split is not None:
-        dataset_no_split = "-".join(dataset.split("-")[:-1])
+    dataset_id = Metadata.parse_dataset_name(dataset)
+    base_dataset = dataset_id.name
 
     if any(name in dataset for name in ("reap", "synthetic")):
-        config_base["use_color"] = False
         config_base["synthetic"] = "synthetic" in dataset
         # REAP benchmark only uses annotated signs. Synthetic data use both.
         config_base["annotated_signs_only"] = not config_base["synthetic"]
-        split = "combined"
     else:
-        if split not in ("train", "val", "test", "combined"):
-            split = "train" if is_train else "test"
         config_base["synthetic"] = False
-        config_base["use_color"] = use_color
-    config_base["dataset"] = dataset_no_split
-    config_base["dataset_split"] = split
-
+        base_dataset += f"-{dataset_id.split}"
+    config_base["use_color"] = dataset_id.use_color
+    config_base["dataset_split"] = dataset_id.split
+    config_base["dataset"] = base_dataset
     if config_base["train_dataset"] is None:
-        config_base["train_dataset"] = f"{dataset_no_split}_train"
+        config_base["train_dataset"] = f"{base_dataset}_train"
 
 
 def _update_split_file(
     config: Dict[str, Dict[str, Any]], is_gen_patch: bool
 ) -> None:
     config_base = config["base"]
-    split_file_path: Optional[str] = config_base["split_file_path"]
+    split_file_path: str = config_base["split_file_path"]
     dataset: str = config_base["dataset"]
     num_bg: int = config["attack"]["common"]["num_bg"]
-    if split_file_path is None:
+    if not split_file_path or split_file_path is None:
         logger.info("split_file_path is not specified.")
         return
 
@@ -750,7 +727,7 @@ def _update_split_file(
     if config_base["obj_class"] < 0:
         default_filename: str = "all.txt"
     else:
-        class_name: str = Metadata.get(dataset).class_name[
+        class_name: str = Metadata.get(dataset).class_names[
             config_base["obj_class"]
         ]
         default_filename: str = f"{class_name}_{split}.txt"
@@ -788,7 +765,7 @@ def _update_syn_obj_path(config: Dict[str, Dict[str, Any]]) -> None:
     dataset = config_base["dataset"]
     obj_class = config_base["obj_class"]
     if obj_class >= 0:
-        class_name = Metadata.get(dataset).class_name[obj_class]
+        class_name = Metadata.get(dataset).class_names[obj_class]
         config_base["syn_obj_path"] = os.path.join(
             DEFAULT_SYN_OBJ_DIR, dataset, f"{class_name}.png"
         )
@@ -952,7 +929,7 @@ def _update_save_dir(
     obj_class: int = config_base["obj_class"]
     if not is_train:
         class_name = (
-            Metadata.get(config_base["dataset"]).class_name[obj_class]
+            Metadata.get(config_base["dataset"]).class_names[obj_class]
             if obj_class >= 0
             else "all"
         )
@@ -967,6 +944,8 @@ def _update_attack_transforms(config: Dict[str, Dict[str, Any]]) -> None:
     config_base: Dict[str, Any] = config["base"]
     config_atk: Dict[str, Any] = config["attack"]["common"]
     for param in _TRANSFORM_PARAMS:
+        if param not in config_base:
+            continue
         if param not in config_atk or config_atk[param] is None:
             config_atk[param] = config_base[param]
 
@@ -979,161 +958,3 @@ def _update_result_dir(config: Dict[str, Dict[str, Any]]) -> None:
     result_dir = os.path.join(config_base["save_dir"], result_dir)
     os.makedirs(result_dir, exist_ok=True)
     config_base["result_dir"] = result_dir
-
-
-def setup_detectron_cfg(
-    config: Dict[str, Dict[str, Any]],
-    is_train: bool = False,
-) -> detectron2.config.CfgNode:
-    """Create configs and perform basic setups."""
-    config_base = config["base"]
-    dataset: str = config_base["dataset"]
-    split: str = config_base["dataset_split"]
-    num_classes = len(Metadata.get(dataset).class_name)
-
-    # Set default path to load adversarial patch
-    if not config_base["adv_patch_path"]:
-        config_base["adv_patch_path"] = os.path.join(
-            config_base["save_dir"], "adv_patch.pkl"
-        )
-
-    if "detrex" in config_base["model_name"]:
-        d2_cfg = detectron2.config.get_cfg()
-        # detrex uses python config instead of yaml
-        cfg = LazyConfig.load(config_base["config_file"])
-        cfg = LazyConfig.apply_overrides(cfg, config_base["opts"])
-        d2_cfg = _cfgnode_to_dict(d2_cfg)
-        cfg = OmegaConf.merge(d2_cfg, cfg)
-        cfg.MODEL.META_ARCHITECTURE = "detrex"
-        # detrex sets input format differently (default is "RGB")
-        cfg.INPUT.FORMAT = cfg.model.input_format
-    else:
-        if "yolof" in config_base["model_name"]:
-            # TODO(enhancement): Combine get_cfg with a wrapper.
-            from yolof.config import get_cfg
-
-            cfg = get_cfg()
-        elif "yolov7" in config_base["model_name"]:
-            # We import here to avoid backbone being registered twice
-            from yolov7.config import add_yolo_config
-
-            cfg = detectron2.config.get_cfg()
-            add_yolo_config(cfg)
-        else:
-            cfg = detectron2.config.get_cfg()
-        cfg.merge_from_file(config_base["config_file"])
-        cfg.merge_from_list(config_base["opts"])
-
-    # Copy dataset from args
-    cfg.DATASETS.TEST = (f"{dataset}_{'val' if is_train else split}",)
-    cfg.DATASETS.TRAIN = (config_base["train_dataset"],)
-    cfg.SOLVER.IMS_PER_BATCH = config_base["batch_size"]
-    if not is_train:
-        # Turn off augmentation for testing. Otherwise, leave it to config file.
-        cfg.INPUT.CROP.ENABLED = False
-    cfg.DATALOADER.NUM_WORKERS = config_base["workers"]
-    cfg.eval_mode = config_base["eval_mode"]
-    cfg.obj_class = config_base["obj_class"]
-    # Assume that "other" class is always last
-    cfg.other_catId = num_classes - 1
-    config_base["other_sign_class"] = cfg.other_catId
-    # cfg.conf_thres = config_base["conf_thres"]
-
-    # Set detectron image size from argument
-    # Let img_size be (1536, 2048). This tries to set the smaller side of the
-    # image to 2048, but the longer side cannot exceed 2048. The result of this
-    # is that every image has its longer side (could be width or height) 2048.
-    cfg.INPUT.MAX_SIZE_TEST = max(config_base["img_size"])
-    cfg.INPUT.MIN_SIZE_TEST = cfg.INPUT.MAX_SIZE_TEST
-
-    # Model config
-    cfg.OUTPUT_DIR = config_base["save_dir"]
-    cfg.SEED = config_base["seed"]
-    weight_path = config_base["weights"]
-    if isinstance(config_base["weights"], list):
-        weight_path = weight_path[0]
-    cfg.MODEL.WEIGHTS = weight_path
-
-    # Replace SynBN with BN when running on one GPU
-    _find_and_set_bn(cfg)
-
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
-    if "YOLOF" in cfg.MODEL:
-        cfg.MODEL.YOLOF.DECODER.NUM_CLASSES = num_classes
-    elif "YOLO" in cfg.MODEL:
-        cfg.MODEL.YOLO.CLASSES = num_classes
-    elif "detrex" in config_base["model_name"]:
-        cfg.model.num_classes = num_classes
-        cfg.model.criterion.num_classes = num_classes
-
-    if isinstance(cfg, CfgNode):
-        cfg.freeze()
-    # Set cfg as global variable so we can avoid passing cfg around
-    detectron2.config.set_global_cfg(cfg)
-    config_base.pop("config_file")  # Remove to avoid logging
-    if "yolov7" in config_base["model_name"]:
-        from yolov7.utils.d2overrides import default_setup as y7_default_setup
-
-        y7_default_setup(cfg, argparse.Namespace(**config_base))
-    else:
-        default_setup(cfg, argparse.Namespace(**config_base))
-
-    return cfg
-
-
-def parse_dataset_name(dataset_name: str) -> list[str, bool, int]:
-    """Parse dataset name to get base dataset name and modifiers."""
-    base_dataset = dataset_name.split("-")[0]
-    dataset_modifiers: list[str] = []
-    if "-" in dataset_name:
-        dataset_modifiers = dataset_name.split("-")[1:]
-
-    if base_dataset not in ("synthetic", "reap"):
-        # Whether sign color is used for labels. Defaults to False
-        use_color = "color" in dataset_modifiers
-        # Whether to use original MTSD labels instead of REAP annotations
-        use_orig_labels = "orig" in dataset_modifiers
-        # Whether to skip images with no object of interest
-        skip_bg_only = "skipbg" in dataset_modifiers
-    else:
-        use_color = False
-        use_orig_labels = False
-        skip_bg_only = base_dataset == "reap"
-
-    # Whether to ignore background class (last class index) and not include it
-    # in dataset dict and targets
-    ignore_bg_class = "nobg" in dataset_modifiers
-
-    # Get num classes like mtsd-100, reap-100, etc.
-    num_classes = None
-    if "100" in dataset_modifiers:
-        num_classes = 100
-
-    # Get split
-    split = None
-    for split_name in ("train", "val", "test", "combined"):
-        if split_name in dataset_modifiers:
-            split = split_name
-            break
-
-    return (
-        base_dataset,
-        use_color,
-        use_orig_labels,
-        ignore_bg_class,
-        skip_bg_only,
-        num_classes,
-        split,
-    )
-
-
-def _find_and_set_bn(cfg_node):
-    """Replace SyncBN with BN in config if not in distributed mode."""
-    if comm.get_world_size() > 1:
-        return
-    if not isinstance(cfg_node, detectron2.config.CfgNode):
-        return
-    for key, value in cfg_node.items():
-        if isinstance(value, str):
-            cfg_node[key] = value.replace("SyncBN", "BN")
-        _find_and_set_bn(value)

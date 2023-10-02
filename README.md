@@ -2,6 +2,8 @@
 
 Nabeel Hingun\* (UC Berkeley), Chawin Sitawarin\* (UC Berkeley), Jerry Li (Microsoft), David Wagner (UC Berkeley)
 
+[ICCV'23](https://openaccess.thecvf.com/content/ICCV2023/html/Hingun_REAP_A_Large-Scale_Realistic_Adversarial_Patch_Benchmark_ICCV_2023_paper.html), [ArXiv](https://arxiv.org/abs/2212.05680)
+
 ## Abstract
 
 Machine learning models are known to be susceptible to adversarial perturbation.
@@ -71,143 +73,47 @@ pip install alfred-py
 
 - If there is any problem with `detectron2` installation (e.g., CUDA or `pytorch` version mismatch), see this [documentation](https://detectron2.readthedocs.io/en/latest/tutorials/install.html).
 
-## Dataset Preparation
+## Dataset
 
-### MTSD
-
-- [MTSD](https://www.mapillary.com/dataset/trafficsign) is used for training the traffic sign detection models and the classifier used to create REAP.
-- Have not found a way to automatically download the dataset.
-- `prep_mtsd_for_yolo.py`: Prepare MTSD dataset for YOLOv5.
-- YOLO expects samples and labels in `BASE_DIR/images/` and `BASE_DIR/labels/`, respectively. See [link](https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data#13-organize-directories) for more detail.
-- Training set: MTSD training. Symlink to `~/data/yolo_data/(images or labels)/train`.
-- Validation set: MTSD validation Symlink to `~/data/yolo_data/(images or labels)/val`.
-- If you run into `Argument list too long` error, try to raise limit of argument stack size by `ulimit -S -s 100000000`. [link](https://unix.stackexchange.com/a/401797)
-<!-- - Test set: Combine Vistas training and validation. Symlink to `~/data/yolo_data/(images or labels)/test`. -->
+REAP dataset is distributed along with this repository using `git lfs`.
+This includes REAP-Shape and the synthetic datasets.
+`reap.tar.gz` is about 1.5GB in size, and the uncompressed size is about 15GB.
 
 ```bash
-# Prepare MTSD dataset
-# Dataset should be extracted to ~/data/mtsd_v2_fully_annotated
-python scripts_train_detector/prep_mtsd_for_yolo.py
-python prep_mtsd_for_detectron.py
-# FIXME: change yolo_data
-LABEL_NAME=labels_no_color
-cd ~/data/ && mkdir yolo_data && mkdir yolo_data/images yolo_data/labels
-
-cd ~/data/yolo_data/images/
-ln -s ~/data/mtsd_v2_fully_annotated/images/train train
-ln -s ~/data/mtsd_v2_fully_annotated/images/val val
-cd ~/data/yolo_data/labels/
-ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/train train
-ln -s ~/data/mtsd_v2_fully_annotated/$LABEL_NAME/val val
+cd data
+tar -xvf reap.tar.gz
 ```
 
-### Mapillary Vistas
-
-- `prep_mapillary.py`: Prepare Vistas dataset for YOLOv5 using a pre-trained classifier to determine classes of the signs. May require substantial memory to run. Insufficient memory can lead to the script getting killed with no error message.
-
-The original dataset should have the following structure:
-
-```text
-mapillary_vistas/
-|-- testing
-|   `-- images
-|-- training
-|   |-- images
-|   |-- masks
-|   `-- v2.0
-|       |-- instances
-|       |-- labels
-|       |-- panoptic
-|       `-- polygons
-`-- validation
-    |-- images
-    |-- masks
-    `-- v2.0
-        |-- instances
-        |-- labels
-        |-- panoptic
-        `-- polygons
-```
-
-After running all the preparation scripts, the dataset should have the following structure:
-
-```text
-mapillary_vistas/
-|-- no_color
-|   `-- combined
-|       |-- images
-|       `-- labels
-|-- testing
-|   `-- images
-|-- training
-|   |-- images
-|   |-- labels_no_color
-|   |-- masks
-|   `-- v2.0
-|       |-- instances
-|       |-- labels
-|       |-- panoptic
-|       `-- polygons
-`-- validation
-    |-- images
-    |-- labels_no_color
-    |-- masks
-    `-- v2.0
-        |-- instances
-        |-- labels
-        |-- panoptic
-        `-- polygons
-```
-
-```bash
-MODIFIER="no_color"
-
-# Dataset should be extracted to ~/data/mapillary_vistas (use symlink if needed)
-python prep_mapillary.py --split train --resume PATH_TO_CLASSIFIER
-python prep_mapillary.py --split val --resume PATH_TO_CLASSIFIER
-
-# Combined train and val partition into "combined"
-BASE_DIR=~/data/mapillary_vistas
-cd $BASE_DIR && mkdir $MODIFIER && cd $MODIFIER
-mkdir combined && cd combined && mkdir images labels
-ln -s $BASE_DIR/training/images/* images/
-ln -s $BASE_DIR/validation/images/* images/
-ln -s $BASE_DIR/training/labels_$MODIFIER/* labels/
-ln -s $BASE_DIR/validation/labels_$MODIFIER/* labels/
-```
+Scripts for recreating REAP benchmark from Mapillary Vistas and MTSD can be found in `scripts_gen_reap` directory, but they are outdated.
 
 ## Usage
 
 ### Examples
 
-- `scripts/example_train.sh`: Example training script including both normal and adversarial training.
-- `scripts/example_eval.sh`: Example evaluation script including with and without adversarial patches (per-class, per-instance).
-
 ```bash
-cp scripts/example_eval.sh my_eval_script.sh
-# Make changes to my_eval_script.sh as needed
-vi my_eval_script.sh
-...
-# Run script
-bash my_eval_script.sh
+bash scripts/example_test_reap.sh
 ```
 
-### Use REAP benchmark for evaluation
+Running evaluation on clean data:
 
-- `reap_annotations.csv` is the REAP annotation file.
-- `configs` contains attack config files and detectron (Faster R-CNN) config files.
+- `scripts/example_test_reap.sh`: run evaluation on the REAP benchmark without any adversarial patch on one class only.
+- `scripts/example_test_reap_shape.sh`: same as `scripts/example_test_reap.sh` but for REAP-Shape.
+- `scripts/example_test_synthetic.sh`: run evaluation on the synthetic benchmark without any adversarial patch on one class only.
 
-<!-- ## Other Tips -->
+Running attack:
 
-- To run on annotated signs only (consistent with results in the paper), use flag `--annotated-signs-only`. For Detectron2, the dataset cache has to be deleted before this option to really take effect.
+- `scripts/example_atk_reap.sh`: generate an adversarial patch for one class, and evaluate it on the REAP benchmark.
+- `scripts/example_atk_reap_shape.sh`: same as `scripts/example_atk_reap.sh` but for REAP-Shape.
 
-### Recreate REAP from Mapillary Vistas and MTSD
+Training models:
 
-Coming soon!
+- `scripts/example_train.sh`: (NOT TESTED) example training script including both normal and adversarial training.
 
-- `mtsd_label_metadata.csv` is a mapping between the original MTSD classes to classes in REAP. It contains shapes and sizes for each MTSD class.
+Utility:
 
-#### Computing Relighting Params
+- `print_results_to_csv.py`: gather results and print them in CSV format.
+
+### Computing Relighting Params
 
 **Realism Test.** Run script to test out different relighting methods on the printed signs and patches.
 
@@ -215,21 +121,38 @@ Coming soon!
 python run_realism_test.py
 ```
 
-After deciding on the relighting method, set variables in `gen_relight_coeffs_main.py` and run the script to generate the relighting coeffs for this method and then write to `reap_annotations.csv`.
+After deciding on the relighting method, set variables in `gen_relight_coeffs_main.py` and run the script to generate the relighting transform's parameters for a given relighting method and then write to `reap_annotations.csv`.
 
 ```bash
-# Script for running gen_relight_coeffs_main.py
 bash scripts/gen_relight_coeffs.sh
 ```
 
+## File Structure
+
+### Main Python Files
+
+- `test_main.py`: main script for running all experiments; run evaluation either with or without adversarial patch.
+- `gen_adv_main.py`: generate adversarial patch.
+
+### Configs
+
+- `configs` contains all config files for both the models and the experiments.
+- `configs/cfg_reap_base.yaml`: base config for evaluating on REAP benchmark. Used as base config for running all experiments on `reap`, `reap_shape`, and `synthetic`.
+- Config file is specified by `-e` argument in `test_main.py` and `gen_adv_main.py`, e.g., `python test_main.py -e configs/cfg_reap_base.yaml ...`.
+- Config parameters are overwritten by command line arguments and custom options, e.g., `python test_main.py -e configs/cfg_reap_base.yaml --options base.dataset=reap_shape ...` See `scripts/example_test_reap.sh` for more examples.
+
+### Others
+
+- `data/reap_annotations.csv` is the REAP annotation file.
+
 ## TODOs
 
-- `NewDataset`: Changes required to make an addition of new dataset possible.
-- `AnnoObj`: Changes from keeping annotation in `pd.DataFrame` to a new object.
-- `YOLO`: Implement new changes to YOLO code.
-- `enhancement`: Minor documentation or readability improvement.
-  - Change interpolation (`interp`) type to `Enum` instead of `str`.
-- `feature`: New features that would benefit future attack and defense experiments.
+- [ ] `NewDataset`: Changes required to make an addition of new dataset possible.
+- [ ] `AnnoObj`: Changes from keeping annotation in `pd.DataFrame` to a new object.
+- [ ] `YOLO`: Implement new changes to YOLO code.
+- [ ] `enhancement`: Minor documentation or readability improvement.
+  - [ ] Change interpolation (`interp`) type to `Enum` instead of `str`.
+- [ ] `feature`: New features that would benefit future attack and defense experiments.
 
 There are signs that may appear in an image but do not have an annotation. There are multiple reasons this happens:
 
@@ -258,4 +181,4 @@ This software and/or data was deposited in the BAIR Open Research Commons reposi
 
 ## Contact
 
-If you have any question or suggestion, please feel free to open an issue on this repository or directly contact Chawin Sitawarin (chawins AT berkeley DOT edu) or Nabeel Hingun (nabeel126 AT berkeley DOT edu).
+If you have any question or suggestion, please feel free to open an issue on this repository or directly contact Chawin Sitawarin ([chawins@berkeley.edu](chawins@berkeley.edu)) or Nabeel Hingun ([nabeel126@berkeley.edu](nabeel126@berkeley.edu)).
