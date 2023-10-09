@@ -82,15 +82,18 @@ git clone https://github.com/wagner-group/reap-benchmark.git
 
 ## Dataset and Weights
 
-The weights are automatically downloaded when the repo was cloned (using `git lfs`) and are placed in `./weights/` directory.
-
-REAP dataset can be downloaded from [Kaggle](https://www.kaggle.com/datasets/csitawarin/reap-benchmark/).
-This includes REAP, REAP-Shape, and the synthetic datasets.
+REAP dataset as well as example weights can be downloaded from [Kaggle](https://www.kaggle.com/datasets/csitawarin/reap-benchmark/).
+This includes REAP (`100`), REAP-Shape (`no_color`), and the synthetic datasets.
 There is also a CLI tool for downloading the dataset from Kaggle ([link](https://www.kaggle.com/docs/api#interacting-with-datasets), [link](https://www.endtoend.ai/tutorial/how-to-download-kaggle-datasets-on-ubuntu/)).
 
 ```bash
-mv archive data/reap
-cd data/reap/no_color/combined && ln -s ../../100/combined/images
+# Start at the base dir of this repo, and after decompressing the zip file, ...
+mv archive/100 ./data/reap && mv archive/no_color ./data/reap
+# Link images from REAP-Shape to REAP because they are the same
+cd ./data/reap/no_color/combined && ln -s ../../100/combined/images
+# Go back to base dir and move weights to the right location
+cd ../../../..
+mv archive/weights ./
 ```
 
 Scripts for recreating REAP benchmark from Mapillary Vistas and MTSD can be found in `scripts_gen_reap` directory, but they are outdated.
